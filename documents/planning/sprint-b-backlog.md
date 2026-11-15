@@ -30,7 +30,7 @@ DISC-02 (competitors) may replace a candidate if it offers greater value for dec
 | Field | Value |
 |---|---|
 | Correspondence with official sprint | To be confirmed in DEC-03 |
-| Dates and duration | To be confirmed |
+| Dates and duration | Board iteration and milestone: 1 November to 5 December 2026 (35 days); official correspondence still to be confirmed in DEC-03 |
 | Individual availability / absences | To be filled in |
 | Total estimate and contingency | To be calculated by the team |
 | Items actually selected | None |
@@ -39,11 +39,11 @@ DISC-02 (competitors) may replace a candidate if it offers greater value for dec
 
 ## Board publication on 2026-11-15
 
-On 2026-11-15, day 15 of the Sprint B iteration (1 November to 5 December 2026), Ricardo published the Sprint B work breakdown on the board. It has 48 new issues: EN-02 and its six sub-tasks, DevOps stories US-16 to US-23, and the layer sub-tasks of the Sprint B stories. Allocation and the later revisions are in the [backlog README](../backlog/README.md#sprint-b-sub-issues-and-allocation). The Sprint B burndown therefore shows a step in scope on 2026-11-15. This is added scope, not a data error.
+On 2026-11-15, day 15 of the Sprint B iteration (1 November to 5 December 2026), Ricardo published the Sprint B work breakdown on the board. It has 48 new issues (#68–#115): EN-02 and its six sub-tasks, DevOps stories US-16 to US-23, and the layer sub-tasks of the Sprint B stories. Allocation and the later revisions are in the [backlog README](../backlog/README.md#sprint-b-sub-issues-and-allocation). The Sprint B burndown will show a step in scope once the 2026-11-15 snapshot is collected. This is added scope, not a data error.
 
 The table above was not filled in at that point. Team capacity, availability and a confirmed selection that fits capacity are still **not recorded**, and DEC-03 is unchanged. The new items start in Backlog, without estimates on EN-02 or the DevOps stories, until the team records the DoR check.
 
-Risks accepted on 2026-11-15 (Ricardo, after the board review). The full report-to-closure MVP stays in Sprint B. Owners stay as allocated even though the load is uneven: Ricardo 11 Sprint B sub-tasks, Pedro 9, Martim 8, Afonso 6, Sandro 3. The schedule depends on EN-02 starting this week. Revisit both at the next sprint review. If EN-02 slips, descope from the end of the journey first (US-09, then US-08).
+Risks accepted on 2026-11-15 (Ricardo, after the board review). The full report-to-closure MVP stays in Sprint B. Owners stay as allocated even though the load is uneven: counting only the Sprint B sub-tasks published on 2026-11-15, Ricardo has 11, Pedro 9, Martim 6, Afonso 6 and Sandro 3. Martim also owns the Sprint B stories US-16 and US-18 and the carried-over #12. The schedule depends on EN-02 starting this week. Revisit both at the next sprint review. If EN-02 slips, descope from the end of the journey first (US-09, then US-08).
 
 ## DoR gate
 
