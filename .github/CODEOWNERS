@@ -4,3 +4,4 @@
 **/Dockerfile   @IsepMartimOliveira
 /infra/         @IsepMartimOliveira
 /scripts/       @IsepMartimOliveira
+/.gitleaksignore @IsepMartimOliveira
