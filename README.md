@@ -27,6 +27,19 @@ The [Test GitHub notifications workflow](.github/workflows/test-notifications.ym
 
 GitHub notification delivery also depends on the account's repository watch and notification settings.
 
+## CI pipeline and local checks
+
+Pull requests run `.github/workflows/ci.yml` (shared checks in `checks.yml`); pushes to `main` run `main.yml`. Details and status: [CI/CD strategy](documents/devops/CICD.md#implementation-status) and the [settings the owner must apply](documents/devops/pipeline-settings-checklist.md).
+
+**Service layout the pipeline expects (until EN-02-02, #78, fixes one):** every service has its own `Dockerfile`; its directory is the build context and gives the service and image name (`services/issue/Dockerfile` becomes `ghcr.io/<owner>/<repo>-issue`). Next to the `Dockerfile`, `pom.xml` means Maven, `requirements*.txt` or `pyproject.toml` means pytest, and `package.json` means npm and Vitest. Protobuf contracts live in `contracts/proto`. Discovery is `scripts/ci/discover_services.py`; nothing is hard-coded.
+
+**Secrets scan before commit** (once per clone):
+
+```bash
+pip install pre-commit   # or: pipx install pre-commit
+pre-commit install
+```
+
 ## Proposed product
 
 **Report → review triage → select contractor → approve request → obtain acceptance → confirm booking → execute → close.**
