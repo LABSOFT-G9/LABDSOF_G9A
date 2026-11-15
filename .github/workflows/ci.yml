@@ -1,0 +1,44 @@
+name: CI
+
+# Pull-request checks (CICD.md §3, §8). Nothing is pushed or deployed here.
+# The checks themselves live in checks.yml, shared with main.yml.
+#
+# There is deliberately NO `paths:` filter. The ruleset will require the single
+# check `ci-required`; a workflow skipped by a path filter never reports it, and
+# a docs-only PR would wait forever. Jobs for services that do not exist are
+# skipped inside checks.yml instead.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    permissions:
+      contents: read
+      security-events: write # CodeQL results
+      actions: read
+    uses: ./.github/workflows/checks.yml
+
+  # One stable check name for the branch ruleset, whatever the matrix size.
+  # A skipped job (no service yet) is fine; failed or cancelled is not.
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the checks to have passed
+        env:
+          RESULT: ${{ needs.checks.result }}
+        run: |
+          echo "checks: $RESULT"
+          [ "$RESULT" = "success" ]
