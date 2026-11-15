@@ -580,6 +580,8 @@ If there is only one DevOps person, "prevent self-review" would block them from 
 
 > Phase 3. Decide earlier if the single-owner limits (11.4) start blocking the team.
 
+A new organization holding a separate infrastructure repository is proposed in [DEC-12](../planning/decisions-and-feedback.md#dec-12-proposal--infrastructure-repository-2026-11-15); see [INFRA-REPO.md](INFRA-REPO.md) for what would move and the linking options.
+
 Creating a **free organization** and transferring the repository (Settings → Danger Zone → Transfer) removes those limits. Rulesets are available for public repositories on the Free plan for organizations too. You get:
 
 - **Teams** (`developers`, `tech-leads`, `devops`), so rulesets, CODEOWNERS and environments point to a team instead of individual usernames
