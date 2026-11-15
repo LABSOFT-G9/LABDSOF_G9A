@@ -45,6 +45,21 @@ The table above was not filled in at that point. Team capacity, availability and
 
 Risks accepted on 2026-11-15 (Ricardo, after the board review). The full report-to-closure MVP stays in Sprint B. Owners stay as allocated even though the load is uneven: counting only the Sprint B sub-tasks published on 2026-11-15, Ricardo has 11, Pedro 9, Martim 6, Afonso 6 and Sandro 3. Martim also owns the Sprint B stories US-16 and US-18 and the carried-over #12. The schedule depends on EN-02 starting this week. Revisit both at the next sprint review. If EN-02 slips, descope from the end of the journey first (US-09, then US-08).
 
+## DevOps stories shared on 2026-11-15
+
+Ricardo shared this list in the planning session of 2026-11-15. It is the source of issues #69–#76 and is recorded here as shared, without further detail. The sprint column uses the list's own S2/S3 labels. On the board, S2 work is in the Sprint B milestone and S3 work in Sprint C, as the release plan does for the MVP. The official correspondence is still to be confirmed in DEC-03.
+
+| ID | Story | Sprint in the list |
+|---|---|---|
+| US-16 | Set up GHCR: naming, tags, permissions, pull credential and retention | S2 |
+| US-17 | Set up the infrastructure in AWS: dev first, then prod | S2 for dev, S3 for prod |
+| US-18 | Build the pipeline to dev: CI checks, signed image, push, deploy and ZAP | S2 |
+| US-19 | Build the pipeline to prod: protected tag, approval, rollback | S3 |
+| US-20 | See health and get alerted, including degraded mode | S2–S3 |
+| US-21 | Back up and restore data | S3 |
+| US-22 | Control access and secrets | S2–S3 |
+| US-23 | Build golden base images | S3 |
+
 ## DoR gate
 
 - [ ] Team agreement and capacity known.

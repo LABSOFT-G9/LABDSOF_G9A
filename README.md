@@ -77,8 +77,8 @@ File numbering matches the assignment deliverables; document 08 links to the ADR
 | [Issues, labels and milestones](documents/governance/issue-management.md) | Local conventions; remote configuration pending |
 | [CI/CD strategy](documents/devops/CICD.md) | Proposal; nothing configured |
 | [Sprint 1 plan](documents/planning/sprint-1-plan.md) | Phases, dependencies and exit criteria |
-| [Epic and Sprint 1 task issue drafts](documents/backlog/README.md) | 5 epics, 4 parent tasks and 15 delivery tasks; proposed allocations; all 24 drafts published as GitHub issues (checked 2026-10-29; see the [mapping](documents/backlog/README.md#published-issue-mapping)); no new sprint commitments |
-| [Sprint B backlog](documents/planning/sprint-b-backlog.md) | Candidates; no Ready commitments |
+| [Epic and Sprint 1 task issue drafts](documents/backlog/README.md) | 5 epics, 4 parent tasks and 15 delivery tasks; proposed allocations; all 24 drafts published as GitHub issues (checked 2026-10-29; see the [mapping](documents/backlog/README.md#published-issue-mapping)); Sprint B work breakdown (48 issues, #68–#115) published on 2026-11-15, see the [allocation](documents/backlog/README.md#sprint-b-sub-issues-and-allocation) |
+| [Sprint B backlog](documents/planning/sprint-b-backlog.md) | Board publication of 2026-11-15 and accepted risks recorded; capacity and confirmed selection still not recorded (DEC-03) |
 | [Decisions and feedback](documents/planning/decisions-and-feedback.md) | Evaluator clarification and team decisions recorded; other questions remain open |
 | [Story](.github/ISSUE_TEMPLATE/user-story.md), [epic](.github/ISSUE_TEMPLATE/epic.md), [task/spike](.github/ISSUE_TEMPLATE/task.md), [bug](.github/ISSUE_TEMPLATE/bug.md) | Local GitHub templates; labels/milestones to select after setup |
 | [Pull request](.github/pull_request_template.md) | Local template |
