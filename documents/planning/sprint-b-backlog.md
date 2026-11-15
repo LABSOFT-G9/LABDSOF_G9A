@@ -43,6 +43,8 @@ On 2026-11-15, day 15 of the Sprint B iteration (1 November to 5 December 2026),
 
 The table above was not filled in at that point. Team capacity, availability and a confirmed selection that fits capacity are still **not recorded**, and DEC-03 is unchanged. The new items start in Backlog, without estimates on EN-02 or the DevOps stories, until the team records the DoR check.
 
+Risks accepted on 2026-11-15 (Ricardo, after the board review). The full report-to-closure MVP stays in Sprint B. Owners stay as allocated even though the load is uneven: Ricardo 11 Sprint B sub-tasks, Pedro 9, Martim 8, Afonso 6, Sandro 3. The schedule depends on EN-02 starting this week. Revisit both at the next sprint review. If EN-02 slips, descope from the end of the journey first (US-09, then US-08).
+
 ## DoR gate
 
 - [ ] Team agreement and capacity known.
