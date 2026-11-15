@@ -18,6 +18,7 @@ A provisional baseline enables consistent documents; it does not mean approval. 
 | DEC-08 | Baselines and targets | Administrative effort as primary metric; provisional technical targets | QA, BA/PO, AI | Before formal evaluation | To be calibrated |
 | DEC-09 | Methodology, board and Git | Adapted Scrum, GitHub Projects or Jira, short-lived branches and reviewed PRs | Team | Phase 1 | To be ratified/configured |
 | DEC-10 | Approval and confirmation | Administrator approves request; contractor accepts; calendar/manual booking confirmation; contractor reports completion; administrator closes ([vision §4.3](../04-product-vision.md#43-distinct-steps-dec-10)) | BA/PO, administrators and contractors | Before US-07–US-09 | Step definitions proposed on 2026-10-19; transition, cancellation and concurrency rules proposed in EN-01-02 on 2026-10-19; validation with administrators and contractors pending |
+| DEC-12 | Infrastructure repository and organisation | Host configuration, provisioning and runbooks in a separate infrastructure repository owned by a new GitHub organization; application code, images and the application host's Compose file stay here. Linking options for DevOps to choose ([proposal](../devops/INFRA-REPO.md); [record](#dec-12-proposal--infrastructure-repository-2026-11-15)) | Martim (DevOps, owner), Ricardo (Tech Lead), Pedro (PM) | Before the first infrastructure file is written (EN-02) | Proposed by Pedro on 2026-11-15; DevOps decision pending; nothing created |
 
 ### DEC-07 research preparation (DISC-01-01)
 
@@ -69,6 +70,18 @@ Recorded 2026-10-29 as proposals. Nothing below is applied to the repository or 
 - Build once and release by tag; promotion retags the tested image, no rebuild. Proposed, not configured.
 - GHCR images with a cosign signature and SBOM. Proposed, not configured.
 - CodeQL for SAST. Proposed, not configured.
+
+### DEC-12 proposal — infrastructure repository (2026-11-15)
+
+Recorded 2026-11-15 as a proposal by Pedro (PM). The organization and the infrastructure repository do not exist; nothing is applied to GitHub.
+
+- **Proposal:** a separate infrastructure repository, owned by a new GitHub organization, for the database and backup hosts that ADR-004 places outside the application host's Compose project, host provisioning and runbooks. Application code, Dockerfiles, the application host's `compose.yaml`, contracts and the Keycloak realm file stay in this repository (suggestion).
+- **Change:** [ADR-002](../adr/ADR-002-technology-stack.md) proposes a monorepo with `infra/`; if DEC-12 is accepted, that row is revised. ADR-002 stays Proposed.
+- **Linking:** left to DevOps (Martim). Options in [INFRA-REPO.md §4](../devops/INFRA-REPO.md#4-linking-options-devops-decides): cross-links and one board (suggested baseline), deploy by `repository_dispatch` with the image digest, reusable workflows; a submodule is not suggested.
+- **Before transferring this repository:** the personal Project 9 and the metrics collector (`workflow-scripts/snapshot.js` hard-codes the user and project number), GHCR paths, links and `gh` commands need updating ([INFRA-REPO.md §6](../devops/INFRA-REPO.md#6-impacts-to-resolve-before-transferring-labdsof_g9a)).
+- **Open:** organization name and owners, visibility of the infrastructure repository, linking option, provisioning tool, place of golden images.
+- **Affected documents:** [INFRA-REPO.md](../devops/INFRA-REPO.md) (new), [ADR-002](../adr/ADR-002-technology-stack.md), [CI/CD §11.5](../devops/CICD.md#115-when-to-move-to-an-organization).
+
 ### Domain and contract proposals — EN-01-02
 
 - **Recorded:** 2026-10-19 by Afonso (BA/PO) for [#14](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/14). Proposed reviewer: Ricardo. These are design proposals, not accepted decisions and not stakeholder validation.
