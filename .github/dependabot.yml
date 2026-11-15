@@ -8,7 +8,7 @@
 #   - package-ecosystem: docker           # directory: each Dockerfile folder
 #
 # Each block copies the schedule and grouping below. Pull requests go through
-# ci.yml like any other change.
+# pr.yml like any other change.
 version: 2
 updates:
   - package-ecosystem: github-actions

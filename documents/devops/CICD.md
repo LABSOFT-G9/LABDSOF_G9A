@@ -8,27 +8,30 @@ Related: [observability and degraded operation](OBSERVABILITY.md) and disaster r
 
 ## Implementation status
 
-Added by US-18 (PR pending; `Refs #71`, `Refs #69`). The files exist in the repository; none of them has run on GitHub yet and no GitHub setting is applied. Workflow runs are claimed only when observed on the PR.
+Added by US-18 (PR #116; `Refs #71`, `Refs #69`). The files exist in the repository; no GitHub setting is applied. Workflow runs are claimed only when observed on GitHub: the pull-request checks have run on PR #116; `dev.yml`, `deploy.yml` and `prod.yml` have never run.
 
 | Item | File | State |
 |---|---|---|
-| PR checks (gitleaks, build and test per service, `buf`, CodeQL, hadolint, image build without scan, `ci-required`) | `ci.yml`, `repo-checks.yml`, `_service.yml`, `notification.yml` (all in `.github/workflows/`) | Written; only the notification service exists, a service is added by a new `<service>.yml` plus one job in `ci.yml` and `main.yml`; `buf` does nothing until `contracts/proto` exists |
-| Push to `main`: gitleaks, build and test, CodeQL (hadolint, `buf` and the image build ran on the PR), then single-arch (amd64) build, push `sha-<sha>`, Trivy, attestation, cosign | `main.yml`, `_service.yml` | Written |
-| Dev deploy and ZAP baseline | `main.yml` (`deploy-dev`, `dast`) | Written, skipped until the variable `DEV_DEPLOY_ENABLED` is `true` (needs the host, #83) |
-| Deploy script | `scripts/deploy.py` | Placeholder: validates arguments, refuses `latest`, exits non-zero |
-| Dependabot, CODEOWNERS, pre-commit gitleaks | `.github/dependabot.yml`, `.github/CODEOWNERS`, `.pre-commit-config.yaml` | Written |
-| Settings (rulesets, environments, Actions defaults) | [pipeline-settings-checklist.md](pipeline-settings-checklist.md) | Not applied; only the repository owner can |
-| `release.yml`, golden images, GHCR cleanup | none | Not implemented (US-19, Phase 3) |
+| The service list (name, folder, language) | `.github/services.json` | The only list. Adding a service = a folder with a `Dockerfile` plus one line here |
+| Build and test per language (Maven, pytest, npm/Vitest) | `.github/actions/build-test/action.yml` | Shared by `pr.yml` and `dev.yml` |
+| Pull request: gitleaks, CodeQL, `buf`, then per service build and test, hadolint, image build (not scanned, not pushed), `ci-required` | `.github/workflows/pr.yml` | Written; `buf` does nothing until `contracts/proto` exists |
+| Merge to `main`: gitleaks, CodeQL, per service build and test, then amd64 build, push `sha-<sha>`, Trivy, attestation, cosign; deploy to dev; ZAP baseline | `.github/workflows/dev.yml` | Written, never run. The deploy only verifies signatures until `DEPLOY_ENABLED` is `true` on the `dev` environment; DAST runs only after a real deploy |
+| Deploy one environment (validate tag, retag on release, verify signatures, deploy, smoke check); also started by hand to redeploy or roll back | `.github/workflows/deploy.yml` | Written, never run. The deploy step is a placeholder that fails on purpose until a host exists (US-17) |
+| Release by tag `v*`: verify, approval, retag without rebuilding, deploy, GitHub Release | `.github/workflows/prod.yml` | Written, never run. Refuses to run unless the `dev.yml` run for the commit passed with its DAST job, so dev deploy must work before the first release |
+| Dependabot, CODEOWNERS, pre-commit gitleaks, gitleaks allowlist | `.github/dependabot.yml`, `.github/CODEOWNERS`, `.pre-commit-config.yaml`, `.gitleaksignore` | Written |
+| Settings (rulesets, environments, variables, Actions defaults) | [pipeline-settings-checklist.md](pipeline-settings-checklist.md) | Not applied; only the repository owner can |
+| Golden images, GHCR cleanup | none | Not implemented (Phase 3) |
 
-Where the implementation differs from the skeleton in §8:
+Where the implementation differs from this document:
 
-- One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the skeleton's list omits `calendar-sim`).
-- One workflow per service (`notification.yml` and so on) calling the shared `_service.yml`, with the service list written out in `ci.yml` and `main.yml`; there is no `Makefile` and no discovery script.
-- Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers), a build for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64, so adding arm64 later means QEMU or native runners, EN01-U9).
-- Pull requests are heavier than `main` in the lint and image-build steps, and lighter in the scan: the Trivy scan runs only after the push in `main.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise).
-- `ci.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
+- File names: `pr.yml`, `dev.yml` and `prod.yml` replace `ci.yml`, `main.yml` and `release.yml` used in the sections below; `deploy.yml` replaces `scripts/deploy.sh`.
+- One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
+- Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers). Images are built for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64; adding arm64 later means QEMU or native runners, EN01-U9).
+- Pull requests do not scan the image; Trivy scans the pushed image in `dev.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise). hadolint and `buf` run on PRs only.
+- `pr.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
 - gitleaks runs from its container image, not `gitleaks-action`, which needs a licence for organisation-owned repositories.
-- Signing identity: the signing job is in `_service.yml`, so `release.yml` and `deploy-dev` must verify `.../.github/workflows/_service.yml@refs/heads/main` (expected from how GitHub OIDC works; to be confirmed on the first signed image). Renaming that file or moving it, for example to the future infra repository, changes the identity.
+- Signing identity: the signing job is in `dev.yml`, so `deploy.yml` verifies `.../.github/workflows/dev.yml@refs/heads/main` (expected from how GitHub OIDC works; to be confirmed on the first signed image). Renaming `dev.yml` or moving the job, for example to the future infra repository, changes the identity.
+- One switch per environment: the variable `DEPLOY_ENABLED` on the `dev` and `production` environments, and the URL in `APP_URL` on each.
 - ADR-004 still describes `feature/* → dev → main` (from PR #40); this document and the workflows use `main` only. The ADR is not edited here.
 
 ## Rollout phases

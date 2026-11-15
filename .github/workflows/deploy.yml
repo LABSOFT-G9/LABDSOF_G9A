@@ -1,0 +1,158 @@
+name: Deploy
+
+# Deploys the already published and signed images to one environment.
+# Called by dev.yml (dev) and prod.yml (production), or started by hand
+# (Actions -> Deploy -> Run workflow) to redeploy or roll back a tag
+# (CICD.md §7). Production always waits for the `production` approval.
+#
+# 1. validate the tag   2. (release only) retag sha-<commit> as the version
+# 3. verify every signature   4. deploy   5. smoke check
+#
+# Steps 4-5 run only when the environment variable DEPLOY_ENABLED is "true"
+# (set on the `dev` / `production` environment). Until a host exists
+# (US-17-01, #83) leave it unset: the run then verifies and stops. The deploy
+# step itself is still a placeholder that fails on purpose.
+#
+# Services come from .github/services.json. Pins: full commit SHAs resolved
+# with `gh api` on 2026-11-15.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "dev or production"
+        type: string
+        required: true
+      tag:
+        description: "sha-<commit> (dev) or a version such as v1.4.0 (production)"
+        type: string
+        required: true
+      promote_sha:
+        description: "Release only: retag sha-<this commit> as the version first"
+        type: string
+        default: ""
+    outputs:
+      deployed:
+        description: "true if the deploy really happened"
+        value: ${{ jobs.deploy.outputs.deployed }}
+      url:
+        description: "The environment's APP_URL"
+        value: ${{ jobs.deploy.outputs.url }}
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment"
+        type: choice
+        options: [dev, production]
+        required: true
+      tag:
+        description: "Image tag: sha-<commit> or a version such as 1.4.0"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.tag }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }} # `production` has required reviewers
+    permissions:
+      contents: read
+      packages: write # only the release retag writes; callers must grant it
+    outputs:
+      deployed: ${{ steps.result.outputs.deployed }}
+      url: ${{ steps.result.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/services.json
+          sparse-checkout-cone-mode: false
+
+      - name: Validate the request
+        id: req
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="${INPUT_TAG#v}" # release tag v1.4.0 -> image tag 1.4.0
+          case "$ENVIRONMENT" in dev|production) ;; *) echo "::error::Unknown environment '$ENVIRONMENT'"; exit 1;; esac
+          [ "$TAG" != latest ] || { echo "::error::Refusing to deploy 'latest'"; exit 1; }
+          [[ "$TAG" =~ ^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] \
+            || { echo "::error::Tag '$TAG' is neither sha-<commit> nor a version like 1.4.0"; exit 1; }
+          if [ "$ENVIRONMENT" = production ] && [[ "$TAG" == sha-* ]]; then
+            echo "::error::Production only runs released versions"; exit 1
+          fi
+          echo "tag=$TAG" >>"$GITHUB_OUTPUT"
+          echo "services=$(jq -r '[.[].name] | join(" ")' .github/services.json)" >>"$GITHUB_OUTPUT"
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same digest under a new tag, so the signature still applies.
+      - name: Retag the dev image as the version (no rebuild)
+        if: inputs.promote_sha != ''
+        env:
+          TAG: ${{ steps.req.outputs.tag }}
+          SERVICES: ${{ steps.req.outputs.services }}
+          PROMOTE_SHA: ${{ inputs.promote_sha }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          for name in $SERVICES; do
+            image="ghcr.io/${repo}-${name}"
+            docker buildx imagetools create -t "${image}:${TAG}" "${image}:sha-${PROMOTE_SHA}"
+          done
+
+      # Identity = the workflow file that signs (dev.yml, see its header).
+      - name: Verify the signature of every image
+        env:
+          TAG: ${{ steps.req.outputs.tag }}
+          SERVICES: ${{ steps.req.outputs.services }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          for name in $SERVICES; do
+            cosign verify "ghcr.io/${repo}-${name}:${TAG}" \
+              --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/dev.yml@refs/heads/main" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+          done
+          echo "All signatures valid for ${TAG}"
+
+      # PLACEHOLDER until US-17-01 (#83). Replace with the real mechanism (for
+      # example SSH or a cloud call) using this environment's secrets.
+      - name: Deploy
+        if: vars.DEPLOY_ENABLED == 'true'
+        env:
+          TAG: ${{ steps.req.outputs.tag }}
+        run: |
+          echo "Would run: BMC_TAG=${TAG} docker compose pull && BMC_TAG=${TAG} docker compose up -d"
+          echo "::error::Deploy target not configured (US-17); nothing was deployed"
+          exit 1
+
+      # Readiness endpoints are internal (ADR-004); check the public entry point.
+      - name: Smoke check
+        if: vars.DEPLOY_ENABLED == 'true' && vars.APP_URL != ''
+        env:
+          URL: ${{ vars.APP_URL }}
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors --max-time 20 "${URL}/" >/dev/null
+
+      - name: Result
+        id: result
+        env:
+          ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          URL: ${{ vars.APP_URL }}
+        run: |
+          if [ "$ENABLED" = true ]; then deployed=true; else deployed=false; echo "DEPLOY_ENABLED is not true: verified only, nothing deployed."; fi
+          echo "deployed=$deployed" >>"$GITHUB_OUTPUT"
+          echo "url=$URL" >>"$GITHUB_OUTPUT"

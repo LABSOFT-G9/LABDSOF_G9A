@@ -1,0 +1,213 @@
+name: Dev
+
+# Merge to main = deploy to dev (CICD.md §3):
+#   repo-wide:   secrets scan, CodeQL (keeps the Security tab baseline for PRs)
+#   per service: build and test, then build, push, scan, attest and sign
+#   deploy-dev:  deploy.yml (verifies signatures; deploys only when the `dev`
+#                environment variable DEPLOY_ENABLED is true)
+#   dast:        ZAP baseline, only if the deploy really happened
+# hadolint, buf and the unscanned image build already ran on the PR.
+#
+# SIGNING IDENTITY: the `publish` job below signs, so cosign's certificate
+# identity is https://github.com/<owner>/<repo>/.github/workflows/dev.yml@refs/heads/main
+# (expected from how GitHub OIDC works; confirm on the first signed image).
+# deploy.yml verifies exactly that. Renaming this file or moving the publish
+# job changes the identity: update deploy.yml in the same PR.
+#
+# Never pushes `latest`; prod never rebuilds (prod.yml retags these images).
+# Pins: full commit SHAs resolved with `gh api` on 2026-11-15.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev
+  cancel-in-progress: false # never cancel a publish half-way
+
+jobs:
+  services:
+    name: Load services
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      list: ${{ steps.load.outputs.list }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/services.json
+          sparse-checkout-cone-mode: false
+      - id: load
+        run: echo "list=$(jq -c . .github/services.json)" >>"$GITHUB_OUTPUT"
+
+  secrets-scan:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Same pinned gitleaks image as pr.yml. False positives: .gitleaksignore.
+      - run: |
+          docker run --rm -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /repo --redact --verbose --exit-code 1
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+
+  build-test:
+    name: Build and test (${{ matrix.service.name }})
+    needs: services
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.services.outputs.list) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-test
+        with:
+          dir: ${{ matrix.service.dir }}
+          language: ${{ matrix.service.language }}
+
+  publish:
+    name: Publish (${{ matrix.service.name }})
+    needs: [services, build-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing and attestation (GitHub OIDC)
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.services.outputs.list) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One image per service: ghcr.io/<owner>/<repo>-<service>, lowercase
+      # (CICD.md §6). The only tag is sha-<sha>.
+      - name: Compute image name
+        id: image
+        env:
+          SERVICE: ${{ matrix.service.name }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          echo "name=ghcr.io/${repo}-${SERVICE}" >>"$GITHUB_OUTPUT"
+
+      # Single architecture (linux/amd64) by team decision. To add arm64, add
+      # docker/setup-qemu-action and set platforms: linux/amd64,linux/arm64.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (amd64)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.service.dir }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          sbom: true
+          provenance: mode=max
+
+      # A failure stops the job before signing, so a vulnerable image is never
+      # signed and deploy.yml refuses it.
+      - name: Container scan of the pushed digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0; tags on this action were force-pushed in 2026, so the commit is pinned
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Sign the image (keyless)
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  deploy-dev:
+    name: Deploy to dev
+    needs: [publish, secrets-scan, codeql]
+    permissions:
+      contents: read
+      packages: write # deploy.yml asks for it (release retag); dev never retags
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+      tag: sha-${{ github.sha }}
+
+  dast:
+    name: DAST (ZAP baseline)
+    needs: deploy-dev
+    if: needs.deploy-dev.outputs.deployed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Passive baseline against the dev URL only. `-I` stops warnings from
+      # failing the scan; the next step fails the run on High alerts.
+      # ZAP image ghcr.io/zaproxy/zaproxy 2.17.0, digest read 2026-11-15.
+      - uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: ${{ needs.deploy-dev.outputs.url }}
+          docker_name: ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
+          cmd_options: -I
+          allow_issue_writing: false
+          artifact_name: zap-baseline
+      - name: Fail on high-risk alerts
+        run: |
+          high=$(jq '[.site[]?.alerts[]? | select(.riskcode == "3")] | length' report_json.json)
+          echo "High-risk alerts: ${high}"
+          [ "${high}" -eq 0 ]
