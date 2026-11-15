@@ -37,6 +37,12 @@ DISC-02 (competitors) may replace a candidate if it offers greater value for dec
 | Final agreed objective | Pending |
 | Planning date/participants | Pending |
 
+## Board publication on 2026-11-15
+
+On 2026-11-15, day 15 of the Sprint B iteration (1 November to 5 December 2026), Ricardo published the Sprint B work breakdown on the board. It has 48 new issues: EN-02 and its six sub-tasks, DevOps stories US-16 to US-23, and the layer sub-tasks of the Sprint B stories. Allocation and the later revisions are in the [backlog README](../backlog/README.md#sprint-b-sub-issues-and-allocation). The Sprint B burndown therefore shows a step in scope on 2026-11-15. This is added scope, not a data error.
+
+The table above was not filled in at that point. Team capacity, availability and a confirmed selection that fits capacity are still **not recorded**, and DEC-03 is unchanged. The new items start in Backlog, without estimates on EN-02 or the DevOps stories, until the team records the DoR check.
+
 ## DoR gate
 
 - [ ] Team agreement and capacity known.

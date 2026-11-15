@@ -28,6 +28,8 @@ Dates refer to recorded decisions or merged documentation, not software deployme
 | **Optional backlog** | No fixed delivery date | US-05: duplicate suggestions; US-11: basic costs; US-12: richer ranking (Should); US-13: real calendar (Could). | Team decision: select after core delivery and evaluation fit capacity. These may enter Sprint C without displacing its required outcomes. |
 | **Outside this release** | Not scheduled | Payments, marketplace, photographs, native apps, IoT/prediction and the other [Won't exclusions](../05-product-backlog.md#5-wont-in-this-baseline--alternatives). | Team decision: preserve the coordination MVP boundary. |
 
+Board mapping, 2026-11-15: EN-03 has no issue of its own. Its CI/CD, observability and test-harness scope is tracked as US-18/19, US-20 and EN-02-06, and Sprint C hardening as US-19, US-21 and US-23 (see the [backlog README](../backlog/README.md#sprint-b-sub-issues-and-allocation)). EN-04 has no issue yet. US-15 moved to the Sprint C milestone, where it closes; its data preparation stays in Sprint B as US-15-01.
+
 Milestone descriptions and dates were checked on 2026-11-01: [Sprint B](https://github.com/Phenriquerafael/LABDSOF_G9A/milestone/2) is “Minimal Viable Product”; [Sprint C](https://github.com/Phenriquerafael/LABDSOF_G9A/milestone/3) is “Minimal Viable Incrementation”. Release contents above are planned scope, not completed functionality. Actual software releases are identified by a tag and release notes with included stories, verification and limitations.
 
 ## Delivery sequence and estimates
