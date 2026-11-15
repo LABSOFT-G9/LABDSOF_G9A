@@ -29,9 +29,9 @@ GitHub notification delivery also depends on the account's repository watch and 
 
 ## CI pipeline and local checks
 
-Pull requests run `.github/workflows/ci.yml` (shared checks in `checks.yml`); pushes to `main` run `main.yml`. Details and status: [CI/CD strategy](documents/devops/CICD.md#implementation-status) and the [settings the owner must apply](documents/devops/pipeline-settings-checklist.md).
+Pull requests run `.github/workflows/ci.yml` (repo-wide checks in `repo-checks.yml`, one workflow per service such as `notification.yml`, shared steps in `_service.yml`); pushes to `main` run `main.yml`. Details and status: [CI/CD strategy](documents/devops/CICD.md#implementation-status) and the [settings the owner must apply](documents/devops/pipeline-settings-checklist.md).
 
-**Service layout the pipeline expects (until EN-02-02, #78, fixes one):** every service has its own `Dockerfile`; its directory is the build context and gives the service and image name (`services/issue/Dockerfile` becomes `ghcr.io/<owner>/<repo>-issue`). Next to the `Dockerfile`, `pom.xml` means Maven, `requirements*.txt` or `pyproject.toml` means pytest, and `package.json` means npm and Vitest. Protobuf contracts live in `contracts/proto`. Discovery is `scripts/ci/discover_services.py`; nothing is hard-coded.
+**Adding a service** (layout still to be fixed by EN-02-02, #78): put it in its own folder with a `Dockerfile` (for example `services/notification/`), copy `.github/workflows/notification.yml`, set its name, folder and language (`maven`, `python` or `node`), and add one job for it to `ci.yml` and `main.yml` and its name to `SERVICES` in `deploy-dev`. The image is `ghcr.io/<owner>/<repo>-<name>`, lowercase. Protobuf contracts live in `contracts/proto`.
 
 **Secrets scan before commit** (once per clone):
 

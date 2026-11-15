@@ -16,7 +16,7 @@ Settings that only the repository owner (Pedro) can apply by hand, from [CICD.md
 | 8 | Environment `production` | Required reviewers (Martim, Ricardo); `v*` tags only; no admin bypass (needed by US-19) | not applied |
 | 9 | Code security → Secret scanning and push protection | Enabled | not applied |
 | 10 | Code security → Dependabot alerts and version updates | Enabled (`.github/dependabot.yml` is in the repository) | not applied |
-| 11 | Code scanning (CodeQL) | Results uploaded by `checks.yml` appear under Security → Code scanning after the first run on a repository that has code; confirm that default setup is **not** also enabled, to avoid two analyses | not applied |
+| 11 | Code scanning (CodeQL) | Results uploaded by `repo-checks.yml` appear under Security → Code scanning after the first run on a repository that has code; confirm that default setup is **not** also enabled, to avoid two analyses | not applied |
 | 12 | GHCR package visibility and access, after the first push | Check each `<repo>-<service>` package: visibility, and Manage Actions access for this repository (`packages: write`) | not applied |
 | 13 | Collaborators | Write access for the team | not applied |
 | 14 | Branches | No `dev` branch exists; no ruleset or environment refers to one | not applied |

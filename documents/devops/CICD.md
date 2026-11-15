@@ -12,8 +12,8 @@ Added by US-18 (PR pending; `Refs #71`, `Refs #69`). The files exist in the repo
 
 | Item | File | State |
 |---|---|---|
-| PR checks (gitleaks, build and test per service, `buf`, CodeQL, hadolint, image build + Trivy, `ci-required`) | `.github/workflows/ci.yml`, `.github/workflows/checks.yml` | Written; jobs for services, languages or `contracts/proto` that do not exist yet are skipped |
-| Push to `main`: same checks, multi-arch build, push `sha-<sha>`, Trivy, attestation, cosign | `.github/workflows/main.yml` | Written; publish jobs wait for the first `Dockerfile` |
+| PR checks (gitleaks, build and test per service, `buf`, CodeQL, hadolint, image build without scan, `ci-required`) | `ci.yml`, `repo-checks.yml`, `_service.yml`, `notification.yml` (all in `.github/workflows/`) | Written; only the notification service exists, a service is added by a new `<service>.yml` plus one job in `ci.yml` and `main.yml`; `buf` does nothing until `contracts/proto` exists |
+| Push to `main`: gitleaks, build and test, CodeQL (hadolint, `buf` and the image build ran on the PR), then single-arch (amd64) build, push `sha-<sha>`, Trivy, attestation, cosign | `main.yml`, `_service.yml` | Written |
 | Dev deploy and ZAP baseline | `main.yml` (`deploy-dev`, `dast`) | Written, skipped until the variable `DEV_DEPLOY_ENABLED` is `true` (needs the host, #83) |
 | Deploy script | `scripts/deploy.py` | Placeholder: validates arguments, refuses `latest`, exits non-zero |
 | Dependabot, CODEOWNERS, pre-commit gitleaks | `.github/dependabot.yml`, `.github/CODEOWNERS`, `.pre-commit-config.yaml` | Written |
@@ -23,11 +23,12 @@ Added by US-18 (PR pending; `Refs #71`, `Refs #69`). The files exist in the repo
 Where the implementation differs from the skeleton in §8:
 
 - One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the skeleton's list omits `calendar-sim`).
-- Services are discovered by `Dockerfile`; there is no `Makefile`.
-- Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers), multi-arch build (QEMU emulation; native runners remain open, EN01-U9).
+- One workflow per service (`notification.yml` and so on) calling the shared `_service.yml`, with the service list written out in `ci.yml` and `main.yml`; there is no `Makefile` and no discovery script.
+- Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers), a build for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64, so adding arm64 later means QEMU or native runners, EN01-U9).
+- Pull requests are heavier than `main` in the lint and image-build steps, and lighter in the scan: the Trivy scan runs only after the push in `main.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise).
 - `ci.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
 - gitleaks runs from its container image, not `gitleaks-action`, which needs a licence for organisation-owned repositories.
-- Signing identity: `release.yml` will verify `.../.github/workflows/main.yml@refs/heads/main`. Moving the signing job to a reusable workflow, for example in the future infra repository, changes that identity.
+- Signing identity: the signing job is in `_service.yml`, so `release.yml` and `deploy-dev` must verify `.../.github/workflows/_service.yml@refs/heads/main` (expected from how GitHub OIDC works; to be confirmed on the first signed image). Renaming that file or moving it, for example to the future infra repository, changes the identity.
 - ADR-004 still describes `feature/* → dev → main` (from PR #40); this document and the workflows use `main` only. The ADR is not edited here.
 
 ## Rollout phases
