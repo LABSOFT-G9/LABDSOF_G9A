@@ -70,10 +70,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: The version is not released yet
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
           version="${GITHUB_REF_NAME#v}"
           for name in $(jq -r '.[].name' .github/services.json); do
-            if docker buildx imagetools inspect "ghcr.io/${repo}-${name}:${version}" >/dev/null 2>&1; then
+            if docker buildx imagetools inspect "ghcr.io/${owner}/labdsof-${name}:${version}" >/dev/null 2>&1; then
               echo "::error::${name}:${version} already exists; released versions are never overwritten"
               exit 1
             fi

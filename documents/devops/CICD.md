@@ -15,7 +15,7 @@ Added by US-18 (PR #116; `Refs #71`, `Refs #69`). The files exist in the reposit
 | The service list (name, folder, language) | `.github/services.json` | The only list. Adding a service = a folder with a `Dockerfile` plus one line here |
 | Build and test per language (Maven, pytest, npm/Vitest) | `.github/actions/build-test/action.yml` | Shared by `pr.yml` and `dev.yml` |
 | Pull request: gitleaks, CodeQL, `buf`, then per service build and test, hadolint, image build (not scanned, not pushed), `ci-required` | `.github/workflows/pr.yml` | Written; `buf` does nothing until `contracts/proto` exists |
-| Merge to `main`: gitleaks, CodeQL, per service build and test, then amd64 build, push `sha-<sha>`, Trivy, attestation, cosign; deploy to dev; ZAP baseline | `.github/workflows/dev.yml` | Written, never run. The deploy only verifies signatures until `DEPLOY_ENABLED` is `true` on the `dev` environment; DAST runs only after a real deploy |
+| Merge to `main`: gitleaks, CodeQL, per service build and test, then amd64 build, push `dev-<sha>`, Trivy, attestation, cosign; deploy to dev; ZAP baseline | `.github/workflows/dev.yml` | Written, never run. The deploy only verifies signatures until `DEPLOY_ENABLED` is `true` on the `dev` environment; DAST runs only after a real deploy |
 | Deploy one environment (validate tag, retag on release, verify signatures, deploy, smoke check); also started by hand to redeploy or roll back | `.github/workflows/deploy.yml` | Written, never run. The deploy step is a placeholder that fails on purpose until a host exists (US-17) |
 | Release by tag `v*`: verify, approval, retag without rebuilding, deploy, GitHub Release | `.github/workflows/prod.yml` | Written, never run. Refuses to run unless the `dev.yml` run for the commit passed with its DAST job, so dev deploy must work before the first release |
 | Dependabot, CODEOWNERS, pre-commit gitleaks, gitleaks allowlist | `.github/dependabot.yml`, `.github/CODEOWNERS`, `.pre-commit-config.yaml`, `.gitleaksignore` | Written |
@@ -25,10 +25,12 @@ Added by US-18 (PR #116; `Refs #71`, `Refs #69`). The files exist in the reposit
 Where the implementation differs from this document:
 
 - File names: `pr.yml`, `dev.yml` and `prod.yml` replace `ci.yml`, `main.yml` and `release.yml` used in the sections below; `deploy.yml` replaces `scripts/deploy.sh`.
-- One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
+- One image per service, `ghcr.io/<owner>/labdsof-<service>`, all lowercase (§6), for example `ghcr.io/labsoft-g9/labdsof-notification`; the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
 - Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers). Images are built for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64; adding arm64 later means QEMU or native runners, EN01-U9).
 - Pull requests do not scan the image; Trivy scans the pushed image in `dev.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise). hadolint and `buf` run on PRs only.
 - `pr.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
+- Dev images are tagged `dev-<sha>` (immutable, the one deployed) and `dev` (moves to the latest scanned and signed dev image), so a dev build is recognisable from its tag. The environment is in the tag, not the image name: a release retags the same digest in the same repository, which keeps the cosign signature valid; a separate `-dev` image repository would need the signature copied as well.
+- Trivy fails the build only on CRITICAL or HIGH findings that have a fix (`ignore-unfixed`). Runtime images apply OS security updates at build time (`apt-get upgrade`, `apk upgrade`), and the Python image removes pip after installing dependencies.
 - gitleaks runs from its container image, not `gitleaks-action`, which needs a licence for organisation-owned repositories.
 - Signing identity: the signing job is in `dev.yml`, so `deploy.yml` verifies `.../.github/workflows/dev.yml@refs/heads/main` (expected from how GitHub OIDC works; to be confirmed on the first signed image). Renaming `dev.yml` or moving the job, for example to the future infra repository, changes the identity.
 - One switch per environment: the variable `DEPLOY_ENABLED` on the `dev` and `production` environments, and the URL in `APP_URL` on each.
@@ -74,7 +76,7 @@ Flow of code: `feature/*` → PR → `main` (auto-deploys to dev) → tag `vX.Y.
 1. **Open a draft PR** for the work, from a branch made off `main` (`git switch -c feature/<name>`).
 2. **Develop locally:** run the app and tests on your machine, ideally with the same Dockerfile. Pre-commit hooks run the secrets scan and linters before each commit.
 3. **Mark the PR ready and merge it into `main`** after one approval. PR checks run on every push (`ci.yml`).
-4. **The merge deploys to dev.** `main.yml` builds, scans, signs and pushes `sha-<sha>`, deploys it to dev and runs DAST against it.
+4. **The merge deploys to dev.** `main.yml` builds, scans, signs and pushes `dev-<sha>`, deploys it to dev and runs DAST against it.
 5. **Release:** when `main` is ready, tag `vX.Y.Z` on that commit. `release.yml` retags the tested image and deploys it to prod after approval.
 
 To fix a bad release, merge the fix into `main` and tag a new patch version.
@@ -94,7 +96,7 @@ With one branch, the commit that runs on dev is the commit you tag, and a bad re
 | Trigger | Build | Tests + SAST + SCA + secrets | Push image to GHCR | Container scan + SBOM + sign | Deploy | DAST |
 |---|---|---|---|---|---|---|
 | Pull request to `main` | yes | yes | no | scan only (image not pushed) | no | no |
-| Push to `main` | yes | yes | yes (`sha-<sha>`) | yes | **auto to dev** | yes |
+| Push to `main` | yes | yes | yes (`dev-<sha>`) | yes | **auto to dev** | yes |
 | Tag `v*` on `main` | no (promote) | verify + check DAST | retag (`vX.Y.Z`) | verify signature | **prod** (after approval) | no (uses the DAST result of the `main` run) |
 
 ![Pipeline overview for pull requests, main and release tags](images/pipeline-overview.png)
@@ -185,12 +187,12 @@ Suggested policy:
 
 All images live in GitHub Container Registry: `ghcr.io/<org>/<app>`.
 
-One image per service (`<repo>-issue`, `<repo>-dispatch`, …). A tag promotes every service image built from that commit.
+One image per service (`labdsof-issue`, `labdsof-dispatch`, …). A tag promotes every service image built from that commit.
 
 | Event | Tags pushed | Notes |
 |---|---|---|
-| Merge to `main` | `sha-<sha>` | Deployed to dev, and the release candidate |
-| Tag `v1.4.0` | `1.4.0` | **Retag** of the `sha-<sha>` image, never a rebuild. Short tags (`1.4`, `1`) are not pushed, because they move between releases |
+| Merge to `main` | `dev-<sha>` | Deployed to dev, and the release candidate |
+| Tag `v1.4.0` | `1.4.0` | **Retag** of the `dev-<sha>` image, never a rebuild. Short tags (`1.4`, `1`) are not pushed, because they move between releases |
 
 Avoid deploying `latest`. Deploy by **version tag or digest**. Image cleanup is covered in [section 10](#10-ghcr-cleanup-retention).
 
@@ -248,7 +250,7 @@ Suggested workflow files. Before using them:
 ```
 .github/workflows/
 ├── ci.yml             # pull requests to main: build, test, SAST, SCA, scan (no push)
-├── main.yml           # push to main: build, push sha-<sha>, sign, deploy dev, DAST
+├── main.yml           # push to main: build, push dev-<sha>, sign, deploy dev, DAST
 ├── release.yml        # tag v*: verify, check DAST, retag, deploy prod, GitHub Release
 └── ghcr-cleanup.yml   # weekly: prune old images (dry run first, see section 10)
 ```
@@ -296,9 +298,9 @@ jobs:
 Steps, in order:
 
 1. Build and test (same commands as `ci.yml`).
-2. Build the image and push it as `ghcr.io/<org>/<app>:sha-<sha>`.
+2. Build the image and push it as `ghcr.io/<org>/<app>:dev-<sha>`.
 3. Run the container scan, generate the SBOM, and sign the image with cosign.
-4. Deploy `sha-<sha>` to the `dev` environment (`environment: dev`).
+4. Deploy `dev-<sha>` to the `dev` environment (`environment: dev`).
 5. Run DAST against the dev URL. This is a job in the same workflow, so a failed scan fails the run.
 
 A successful `main.yml` run for a commit is what `release.yml` checks before it promotes that commit.
@@ -346,7 +348,7 @@ jobs:
 
       - name: Verify signature of the tested image
         run: |
-          cosign verify ghcr.io/${{ github.repository }}:sha-${{ github.sha }} \
+          cosign verify ghcr.io/${{ github.repository }}:dev-${{ github.sha }} \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/main.yml@refs/heads/main" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
@@ -368,7 +370,7 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           docker buildx imagetools create --prefer-index=false \
             -t ghcr.io/${{ github.repository }}:${VERSION} \
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}:dev-${{ github.sha }}
 
       - name: Deploy to prod
         run: ./scripts/deploy.sh prod ${GITHUB_REF_NAME#v}
@@ -456,7 +458,7 @@ Without cleanup, every merge to `main` adds an image. The goal is to keep the re
 | What | Policy | Why |
 |---|---|---|
 | Release tags (`1.4.0`, `1.4`, `1`) and the image they point to | **Keep forever** | Rollback and audit |
-| `sha-<sha>` images built on `main` | **Keep for now** | A released image is the same image as its `sha-<sha>` tag, so they share one package version. A tag-based prune could delete a release. Revisit once the retention action can skip versions that carry a version tag. |
+| `dev-<sha>` images built on `main` | **Keep for now** | A released image is the same image as its `dev-<sha>` tag, so they share one package version. A tag-based prune could delete a release. Revisit once the retention action can skip versions that carry a version tag. |
 | Cosign signatures and attestations (tags such as `sha256-<digest>.sig`) | **Never touch** | Needed to verify released images |
 | Untagged versions | **Never delete by hand** | Often the per-platform children or attestations of a tagged image |
 
@@ -494,7 +496,7 @@ jobs:
           account: LABSOFT-G9                    # the organization that owns the packages
           token: ${{ secrets.GHCR_CLEANUP_PAT }}
           image-names: "<app>"                   # the package name, without the ghcr.io/<owner>/ prefix
-          image-tags: "sha-*"                    # WARNING: also matches released versions; keep dry-run until section 10.1 is resolved
+          image-tags: "dev-*"                    # WARNING: also matches released versions; keep dry-run until section 10.1 is resolved
           tag-selection: tagged
           cut-off: 30d
           keep-n-most-recent: 10
@@ -601,7 +603,7 @@ Keep this limited to sensitive paths. A `*` entry would force an approval from t
 
 ### 11.5 Names that depend on the organization
 
-- Image paths: `ghcr.io/labsoft-g9/labdsof_g9a-<service>`, derived from `${GITHUB_REPOSITORY}`.
+- Image paths: `ghcr.io/labsoft-g9/labdsof-<service>`; the owner comes from `${GITHUB_REPOSITORY_OWNER}`, the `labdsof-` prefix is fixed in `dev.yml`, `deploy.yml` and `prod.yml`.
 - Cosign identity: `https://github.com/LABSOFT-G9/LABDSOF_G9A/.github/workflows/dev.yml@refs/heads/main`, also derived from `${GITHUB_REPOSITORY}`.
 - Project board: the organization project [LABSOFT-G9 #1](https://github.com/orgs/LABSOFT-G9/projects/1).
 
@@ -615,7 +617,7 @@ Keep this limited to sensitive paths. A `*` entry would force an approval from t
 - [ ] GitHub Environments: `dev` (deployment branch `main`, no approval), `production` (required reviewers, `v*` only)
 - [ ] Secret scanning and push protection enabled
 - [ ] Dependabot / Renovate enabled (dependencies, Docker digests, Actions)
-- [ ] GHCR package visibility and access configured, retention policy excludes version tags and `sha-*` (section 10)
+- [ ] GHCR package visibility and access configured, retention policy excludes version tags and `dev-*` (section 10)
 - [ ] Golden image repo with scheduled rebuild workflow
 - [ ] Workflow permissions default to read-only, elevated per job
 - [ ] Cosign verification enforced before any deploy
