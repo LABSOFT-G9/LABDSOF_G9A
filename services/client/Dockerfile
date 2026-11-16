@@ -8,5 +8,7 @@ RUN npm run build
 
 # Runtime stage (nginx:stable-alpine, digest read 2026-11-15)
 FROM nginx:stable-alpine@sha256:901e593c95dc85f5a729f5765516321366ef4ac401821431d408897e95287d0a
+# Apply Alpine security updates released after the base image was built.
+RUN apk upgrade --no-cache
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

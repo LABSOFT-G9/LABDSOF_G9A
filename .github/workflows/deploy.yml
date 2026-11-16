@@ -5,7 +5,7 @@ name: Deploy
 # (Actions -> Deploy -> Run workflow) to redeploy or roll back a tag
 # (CICD.md §7). Production always waits for the `production` approval.
 #
-# 1. validate the tag   2. (release only) retag sha-<commit> as the version
+# 1. validate the tag   2. (release only) retag dev-<commit> as the version
 # 3. verify every signature   4. deploy   5. smoke check
 #
 # Steps 4-5 run only when the environment variable DEPLOY_ENABLED is "true"
@@ -24,11 +24,11 @@ on:
         type: string
         required: true
       tag:
-        description: "sha-<commit> (dev) or a version such as v1.4.0 (production)"
+        description: "dev-<commit> (dev) or a version such as v1.4.0 (production)"
         type: string
         required: true
       promote_sha:
-        description: "Release only: retag sha-<this commit> as the version first"
+        description: "Release only: retag dev-<this commit> as the version first"
         type: string
         default: ""
     outputs:
@@ -46,7 +46,7 @@ on:
         options: [dev, production]
         required: true
       tag:
-        description: "Image tag: sha-<commit> or a version such as 1.4.0"
+        description: "Image tag: dev-<commit> or a version such as 1.4.0 (not the moving dev tag)"
         type: string
         required: true
 
@@ -85,9 +85,9 @@ jobs:
           TAG="${INPUT_TAG#v}" # release tag v1.4.0 -> image tag 1.4.0
           case "$ENVIRONMENT" in dev|production) ;; *) echo "::error::Unknown environment '$ENVIRONMENT'"; exit 1;; esac
           [ "$TAG" != latest ] || { echo "::error::Refusing to deploy 'latest'"; exit 1; }
-          [[ "$TAG" =~ ^(sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] \
-            || { echo "::error::Tag '$TAG' is neither sha-<commit> nor a version like 1.4.0"; exit 1; }
-          if [ "$ENVIRONMENT" = production ] && [[ "$TAG" == sha-* ]]; then
+          [[ "$TAG" =~ ^(dev-[0-9a-f]{7,40}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] \
+            || { echo "::error::Tag '$TAG' is neither dev-<commit> nor a version like 1.4.0"; exit 1; }
+          if [ "$ENVIRONMENT" = production ] && [[ "$TAG" == dev-* ]]; then
             echo "::error::Production only runs released versions"; exit 1
           fi
           echo "tag=$TAG" >>"$GITHUB_OUTPUT"
@@ -112,7 +112,7 @@ jobs:
           repo="${GITHUB_REPOSITORY,,}"
           for name in $SERVICES; do
             image="ghcr.io/${repo}-${name}"
-            docker buildx imagetools create -t "${image}:${TAG}" "${image}:sha-${PROMOTE_SHA}"
+            docker buildx imagetools create -t "${image}:${TAG}" "${image}:dev-${PROMOTE_SHA}"
           done
 
       # Identity = the workflow file that signs (dev.yml, see its header).
