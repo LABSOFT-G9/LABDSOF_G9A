@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 
-const config = { owner: 'Phenriquerafael', repository: 'LABDSOF_G9A', projectNumber: 9, sprintField: 'Sprint' };
+// projectOwner owns personal project 9; owner owns the repository since its transfer to the organization.
+const config = { projectOwner: 'Phenriquerafael', owner: 'LABSOFT-G9', repository: 'LABDSOF_G9A', projectNumber: 9, sprintField: 'Sprint' };
 const projectQuery = `query($owner:String!, $number:Int!, $field:String!) {
   user(login:$owner) { projectV2(number:$number) {
     id
@@ -90,7 +91,7 @@ function labelNames(connection) {
 async function checkSprints({ token, fetchImpl = fetch } = {}) {
   if (!token) throw new Error('GITHUB_TOKEN not set. Configure the MY_PAT Actions secret.');
   const request = (query, variables) => graphql(query, variables, token, fetchImpl);
-  const data = await request(projectQuery, { owner: config.owner, number: config.projectNumber, field: config.sprintField });
+  const data = await request(projectQuery, { owner: config.projectOwner, number: config.projectNumber, field: config.sprintField });
   const project = data.user?.projectV2;
   if (!project?.id) throw new Error('Project 9 is unavailable; check MY_PAT access.');
   const field = project.field;
