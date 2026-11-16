@@ -117,14 +117,14 @@ async function audit({ history: storedHistory, historyText, now = new Date(), lo
 function report(result) {
   const errors=result.findings.filter(f=>f.level==='error').length;
   const warnings=result.findings.length-errors;
-  const lines=['## Chart data validation','',`Checked at ${result.now}. Repository: Phenriquerafael/LABDSOF_G9A; project 9. History: ${SPRINT_KEYS.map(historyFileName).join(', ')}.`,
+  const lines=['## Chart data validation','',`Checked at ${result.now}. Repository: LABSOFT-G9/LABDSOF_G9A; project 9. History: ${SPRINT_KEYS.map(historyFileName).join(', ')}.`,
     `Open issues checked: ${result.checked ?? 'unavailable'}. Latest valid snapshot: ${result.latestDate ?? 'unavailable'}.`,
     `Active project issues in collection candidate (including closed): ${result.candidateCount ?? 'unavailable'}.`,
     `${errors} error(s), ${warnings} warning(s).`,''];
   if(!result.findings.length) lines.push('All checks passed. This validates current data, not the future midnight snapshot.');
   else {
     lines.push('| Severity | Check | Details | Issues |','|---|---|---|---|');
-    for(const f of result.findings) lines.push(`| ${f.level} | ${escapeMarkdown(f.check)} | ${escapeMarkdown(f.message)} | ${f.ids.map(id=>`[#${id}](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/${id})`).join(', ')} |`);
+    for(const f of result.findings) lines.push(`| ${f.level} | ${escapeMarkdown(f.check)} | ${escapeMarkdown(f.message)} | ${f.ids.map(id=>`[#${id}](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/${id})`).join(', ')} |`);
   }
   const historyGap = result.findings.find(f=>f.details);
   if(historyGap) {
