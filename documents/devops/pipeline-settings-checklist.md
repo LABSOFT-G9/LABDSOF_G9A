@@ -1,25 +1,47 @@
 # Pipeline settings checklist
 
-Settings that only the repository owner (Pedro) can apply by hand, from [CICD.md §11.3 and §12](CICD.md#113-how-to-set-it-up). Written for US-18 ([#71](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/71)) and US-22 ([#75](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/75)).
+Target repository settings for the pipeline, from [CICD.md §11.3 and §12](CICD.md#113-how-to-set-it-up). Written for US-18 ([#71](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/71)) and US-22 ([#75](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/75)).
 
-**Every item is "not applied".** The pipeline files only exist in the repository; none of these settings has been changed through the API or confirmed in the GitHub UI. Replace the status with the date, the person and a link or screenshot as evidence once an item is applied.
+The repository is `LABSOFT-G9/LABDSOF_G9A`, owned by the free organization `LABSOFT-G9`. Changing these settings needs the repository **Admin** role.
 
-| # | Setting (where) | Value | Status |
+## Access
+
+| # | Setting | Desired state | Applied |
 |---|---|---|---|
-| 1 | Ruleset `main-quality` on `main` (Settings → Rules → Rulesets) | Active, no bypass list; PR with 1 approval; Code Owner review; block force pushes and deletion | not applied |
-| 2 | Same ruleset: required status check | Require `ci-required` **only after EN-02 code exists and one CI run has reported it**; before that, jobs are skipped and the check proves little | not applied |
-| 3 | Tag ruleset for `v*` | Restrict creations, updates and deletions; bypass only named tech leads and DevOps (needed by `prod.yml`). **Apply before the first tag**, otherwise any collaborator can start a release | not applied |
-| 4 | Actions → General → Workflow permissions | Read repository contents permission (read-only default); workflows elevate per job | not applied |
-| 5 | Actions → General → Fork pull request workflows | Require approval for first-time contributors | not applied |
-| 6 | Environment `dev` (Settings → Environments) | No reviewers; deployment branches: `main` only; dev-only credentials. **Create it before the first merge**: `dev.yml` uses it on every merge, and GitHub creates a missing environment by itself with default settings | not applied |
-| 7 | Variables on `dev` | `DEPLOY_ENABLED` (leave unset or `false` until the dev host, #83, and the deploy step in `deploy.yml` work) and `APP_URL` (public dev URL, not a secret) | not applied |
-| 8 | Environment `production` | Required reviewers (Martim, Ricardo); deployment tags `v*` only; no admin bypass. **Create it before the first `v*` tag**: if `prod.yml` runs against a missing environment, GitHub creates one with no reviewers and nobody approves the release | not applied |
-| 8b | Variables on `production` | `DEPLOY_ENABLED` (leave unset or `false` until the prod host exists; a release then only retags, verifies and creates the GitHub Release) and `APP_URL` | not applied |
-| 9 | Code security → Secret scanning and push protection | Enabled | not applied |
-| 10 | Code security → Dependabot alerts and version updates | Enabled (`.github/dependabot.yml` is in the repository) | not applied |
-| 11 | Code scanning (CodeQL) | Results uploaded by `pr.yml` and `dev.yml` appear under Security → Code scanning after the first run on a repository that has code; confirm that default setup is **not** also enabled, to avoid two analyses | not applied |
-| 12 | GHCR package visibility and access, after the first push | Check each `<repo>-<service>` package: visibility, and Manage Actions access for this repository (`packages: write`) | not applied |
-| 13 | Collaborators | Write access for the team | not applied |
-| 14 | Branches | No `dev` branch exists; no ruleset or environment refers to one | not applied |
+| A1 | Organization | `LABSOFT-G9`, Free plan. Custom repository roles are not available on Free, so project roles map to teams with built-in roles | yes |
+| A2 | Team `maintainers` | Repository role **Maintain**. Members: Martim, Ricardo | yes |
+| A3 | Team `developers` | Repository role **Write**. Members: Pedro, Afonso, Sandro | yes |
+| A4 | Admin | Martim, as an individual collaborator | yes |
+| A5 | Individual collaborator entries | None besides the admin; everyone else gets access through a team | no |
+| A6 | Project board | Org project [LABSOFT-G9 #1](https://github.com/orgs/LABSOFT-G9/projects/1), linked to the repository, "Auto-add to project" on for this repository's issues; `maintainers` Admin and `developers` Write on the board | partly |
+
+## Rulesets
+
+| # | Setting | Desired state | Applied |
+|---|---|---|---|
+| 1 | Ruleset `main-review` on the default branch (`main`) | Pull request required; 1 approval; the most recent push approved by someone other than its pusher; stale approvals dismissed on push; conversations resolved; force pushes and deletion blocked. Bypass: **Admin** role | yes |
+| 1b | Ruleset `main-maintainers-only` on `main` | Restrict updates: only the bypass list can merge or push to `main`. Bypass: `maintainers` team and **Admin** role. Developers open, review and approve PRs, but do not merge | yes |
+| 2 | Required status check `ci-required` | Required in `main-review` once `pr.yml` is on `main` | no |
+| 3 | Ruleset `tags-maintainers-only` | All tags (covers `v*` for `prod.yml`): creation, update and deletion restricted. Bypass: `maintainers` team and **Admin** role | yes |
+
+The Admin bypass lets an admin merge without another person's approval. It is for emergencies only; GitHub logs each bypass under Settings → Rules → Insights.
+
+No automation pushes to `main`: the metrics bot (`metrics.yml`) delivers its snapshot as a pull request.
+
+## Actions, environments and security
+
+| # | Setting (where) | Desired state | Applied |
+|---|---|---|---|
+| 4 | Actions → General → Workflow permissions | Read repository contents permission (read-only default); workflows elevate per job | no |
+| 5 | Actions → General → Fork pull request workflows | Require approval for first-time contributors | no |
+| 6 | Environment `dev` (Settings → Environments) | No reviewers; deployment branches: `main` only; dev-only credentials. Must exist before the first merge of the pipeline: `dev.yml` uses it on every merge, and GitHub creates a missing environment by itself with default settings | no |
+| 7 | Variables on `dev` | `DEPLOY_ENABLED` (unset or `false` until the dev host, #83, and the deploy step in `deploy.yml` work) and `APP_URL` (public dev URL, not a secret) | no |
+| 8 | Environment `production` | Required reviewers: the `maintainers` team; deployment tags `v*` only; no admin bypass. Must exist before the first `v*` tag: if `prod.yml` runs against a missing environment, GitHub creates one with no reviewers | no |
+| 8b | Variables on `production` | `DEPLOY_ENABLED` (unset or `false` until the prod host exists; a release then only retags, verifies and creates the GitHub Release) and `APP_URL` | no |
+| 9 | Code security → Secret scanning and push protection | Enabled | no |
+| 10 | Code security → Dependabot alerts and version updates | Enabled (`.github/dependabot.yml` is in the repository) | no |
+| 11 | Code scanning (CodeQL) | Results uploaded by `pr.yml` and `dev.yml` under Security → Code scanning; default setup **not** also enabled, to avoid two analyses | no |
+| 12 | GHCR packages | Images `ghcr.io/labsoft-g9/labdsof_g9a-<service>`; visibility checked, and Manage Actions access for this repository (`packages: write`) | no |
+| 14 | Branches | No `dev` branch; no ruleset or environment refers to one | yes |
 
 Not in this checklist: the `production` secrets and the GHCR cleanup token (Phase 3), which belong to US-19 and US-22. Test the release gate once with a throwaway tag (CICD.md §7) before the first real release.
