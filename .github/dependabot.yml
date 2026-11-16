@@ -1,0 +1,22 @@
+# Dependabot version updates (CICD.md §12). Only ecosystems that exist in the
+# repository are enabled: Dependabot reports an error for a manifest-less
+# ecosystem. When EN-02 (#68) adds the services, add one block per directory:
+#
+#   - package-ecosystem: maven            # directory: /services/<name>
+#   - package-ecosystem: pip              # directory: /services/ai-triage
+#   - package-ecosystem: npm              # directory: /client
+#   - package-ecosystem: docker           # directory: each Dockerfile folder
+#
+# Each block copies the schedule and grouping below. Pull requests go through
+# pr.yml like any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "US-18"

@@ -1,6 +1,6 @@
 # Essential Git workflow
 
-**Status:** proposal v0.1 · remote configuration not verified
+**Status:** proposal v0.1 · remote settings tracked in [pipeline-settings-checklist.md](../devops/pipeline-settings-checklist.md)
 
 Git, PRs, reviews and traceability are part of §8.1 of the assignment. Having a standalone document is an organisational choice; the practices are not optional.
 
@@ -10,22 +10,21 @@ Git, PRs, reviews and traceability are part of §8.1 of the assignment. Having a
 2. Update the main branch and create a short-lived branch: feature/US-01-reporting, fix/BUG-12-state or docs/DISC-02-competitors.
 3. Make small, purposeful commits: “US-01: validate building membership”.
 4. Open a PR with the objective, item reference, changes, verification and limitations.
-5. Obtain at least one review from another member; authors do not approve their own changes.
-6. Merge only when applicable checks pass and relevant comments are resolved.
+5. Obtain at least one review from another member; authors do not approve their own changes. GitHub enforces this on `main`: the most recent push must be approved by someone other than its pusher.
+6. Merge only when applicable checks pass and relevant comments are resolved. Only the `maintainers` team (Martim, Ricardo) and admins can merge into `main`; developers open, review and approve.
 7. Prefer squashing working commits; preserve authorship/co-authorship and the item reference. Delete merged branches when safe.
 
-The name main is the proposed convention; confirm the actual default branch before configuring protections. Do not force-push shared branches or rewrite published history without coordination.
+The default branch is `main`; the rulesets target the default branch. Do not force-push shared branches or rewrite published history without coordination.
 
-## Remote configuration to perform/verify
+## Remote configuration
 
-- [ ] Confirm remote repository and team access.
-- [ ] Define the main branch.
-- [ ] Configure available protection rules: PR, review, force-push blocking and relevant checks.
-- [ ] Create the pipeline before configuring its checks as required.
-- [ ] Verify with a real PR and record the link/evidence.
-- [ ] If a protection is unavailable on the chosen plan, record the limitation and compensating process.
+- Repository `LABSOFT-G9/LABDSOF_G9A`; teams `maintainers` (Maintain: Martim, Ricardo) and `developers` (Write: Pedro, Afonso, Sandro); Martim is admin.
+- Default branch `main`.
+- Rulesets: `main-review` (PR, 1 approval by someone other than the last pusher, conversations resolved, no force push or deletion), `main-maintainers-only` (only maintainers and admins merge) and `tags-maintainers-only` (only maintainers and admins create, move or delete tags). Admins can bypass, for emergencies only.
+- Required check `ci-required` once the pipeline is on `main`.
+- Custom repository roles are not available on the Free plan; project roles map to teams with built-in roles ([CICD.md §11.2](../devops/CICD.md#112-roles-in-the-organization)).
 
-None of these configurations was performed by creating this document.
+Which of these are applied is tracked in the [settings checklist](../devops/pipeline-settings-checklist.md).
 
 ## Conventions
 

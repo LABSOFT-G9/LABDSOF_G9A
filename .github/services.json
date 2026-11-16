@@ -1,0 +1,8 @@
+[
+  { "name": "notification", "dir": "services/notification", "language": "maven" },
+  { "name": "issue",        "dir": "services/issue",        "language": "maven" },
+  { "name": "dispatch",     "dir": "services/dispatch",     "language": "maven" },
+  { "name": "calendar-sim", "dir": "services/calendar-sim", "language": "maven" },
+  { "name": "ai-triage",    "dir": "services/ai-triage",    "language": "python" },
+  { "name": "client",       "dir": "services/client",       "language": "node" }
+]

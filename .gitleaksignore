@@ -1,0 +1,9 @@
+# gitleaks allowlist (read automatically from the repository root).
+# One fingerprint per line: <commit>:<file>:<rule>:<line>. Review every addition.
+#
+# False positives: line 13 of documents/07a-contract-examples.md is a sample
+# `Idempotency-Key: <uuid>` header in a contract example, not a credential.
+# Found by the first CI run on PR #116 (2026-11-15). The two commits are the
+# older versions of that line.
+b47fa9758a061173efe699c07a7bfbe4a4edd107:documents/07a-contract-examples.md:generic-api-key:13
+4cd7b4f7fc295630cdb3f4c2543155f2b85f71c7:documents/07a-contract-examples.md:generic-api-key:13

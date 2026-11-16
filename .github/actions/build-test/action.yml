@@ -1,0 +1,73 @@
+name: Build and test
+description: Set up the service's language toolchain and run its build and tests.
+
+# Used by pr.yml and dev.yml. Every third-party action is pinned to a full
+# commit SHA (version in the comment), resolved with `gh api` on 2026-11-15.
+
+inputs:
+  dir:
+    description: Service folder
+    required: true
+  language:
+    description: maven, python or node
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Java services (Spring Boot 4.1, Maven, ADR-002). `verify` runs unit tests,
+    # ArchUnit boundary tests (ADR-009) and integration tests. Those start real
+    # MySQL 8.4 and RabbitMQ containers themselves (Testcontainers, to be
+    # confirmed in EN01-U9); the runner's Docker daemon is enough.
+    - if: inputs.language == 'maven'
+      uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      with:
+        distribution: temurin
+        java-version: "25"
+        cache: maven
+        cache-dependency-path: ${{ inputs.dir }}/pom.xml
+    - if: inputs.language == 'maven'
+      name: Maven verify
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: mvn --batch-mode --no-transfer-progress verify
+
+    # ai-triage (Python 3.14, Flask, pytest).
+    - if: inputs.language == 'python'
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: "3.14"
+    - if: inputs.language == 'python'
+      name: Install dependencies and run pytest
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        python -m pip install --upgrade pip
+        for f in requirements.txt requirements-dev.txt; do
+          if [ -f "$f" ]; then pip install -r "$f"; fi
+        done
+        pip install pytest
+        python -m pytest
+
+    # client (React + Vite, Vitest). `npm test` runs Vitest.
+    - if: inputs.language == 'node'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: lts/*
+        cache: npm
+        cache-dependency-path: ${{ inputs.dir }}/package-lock.json
+    - if: inputs.language == 'node'
+      name: Install, build and test
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        npm ci
+        npm run build --if-present
+        npm test
+
+    - if: inputs.language != 'maven' && inputs.language != 'python' && inputs.language != 'node'
+      name: Unknown language
+      shell: bash
+      run: |
+        echo "::error::Unknown language '${{ inputs.language }}' in .github/services.json (use maven, python or node)"
+        exit 1

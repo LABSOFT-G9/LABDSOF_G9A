@@ -4,13 +4,41 @@ This document describes our branching model, pipelines, golden images, security 
 
 Related: [observability and degraded operation](OBSERVABILITY.md) and disaster recovery (document to be written, issue [#42](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/42)).
 
-**Status:** proposal. Nothing in this document is applied to the repository or to GitHub settings yet.
+**Status:** proposal. Which GitHub settings are applied is tracked in the [settings checklist](pipeline-settings-checklist.md).
+
+## Implementation status
+
+Added by US-18 (PR #116; `Refs #71`, `Refs #69`). The files exist in the repository; the [settings checklist](pipeline-settings-checklist.md) tracks which GitHub settings are applied. Workflow runs are claimed only when observed on GitHub: the pull-request checks have run on PR #116; `dev.yml`, `deploy.yml` and `prod.yml` have never run.
+
+| Item | File | State |
+|---|---|---|
+| The service list (name, folder, language) | `.github/services.json` | The only list. Adding a service = a folder with a `Dockerfile` plus one line here |
+| Build and test per language (Maven, pytest, npm/Vitest) | `.github/actions/build-test/action.yml` | Shared by `pr.yml` and `dev.yml` |
+| Pull request: gitleaks, CodeQL, `buf`, then per service build and test, hadolint, image build (not scanned, not pushed), `ci-required` | `.github/workflows/pr.yml` | Written; `buf` does nothing until `contracts/proto` exists |
+| Merge to `main`: gitleaks, CodeQL, per service build and test, then amd64 build, push `sha-<sha>`, Trivy, attestation, cosign; deploy to dev; ZAP baseline | `.github/workflows/dev.yml` | Written, never run. The deploy only verifies signatures until `DEPLOY_ENABLED` is `true` on the `dev` environment; DAST runs only after a real deploy |
+| Deploy one environment (validate tag, retag on release, verify signatures, deploy, smoke check); also started by hand to redeploy or roll back | `.github/workflows/deploy.yml` | Written, never run. The deploy step is a placeholder that fails on purpose until a host exists (US-17) |
+| Release by tag `v*`: verify, approval, retag without rebuilding, deploy, GitHub Release | `.github/workflows/prod.yml` | Written, never run. Refuses to run unless the `dev.yml` run for the commit passed with its DAST job, so dev deploy must work before the first release |
+| Dependabot, CODEOWNERS, pre-commit gitleaks, gitleaks allowlist | `.github/dependabot.yml`, `.github/CODEOWNERS`, `.pre-commit-config.yaml`, `.gitleaksignore` | Written |
+| Settings (rulesets, environments, variables, Actions defaults) | [pipeline-settings-checklist.md](pipeline-settings-checklist.md) | Desired settings, with an applied column; admins only |
+| Golden images, GHCR cleanup | none | Not implemented (Phase 3) |
+
+Where the implementation differs from this document:
+
+- File names: `pr.yml`, `dev.yml` and `prod.yml` replace `ci.yml`, `main.yml` and `release.yml` used in the sections below; `deploy.yml` replaces `scripts/deploy.sh`.
+- One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
+- Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers). Images are built for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64; adding arm64 later means QEMU or native runners, EN01-U9).
+- Pull requests do not scan the image; Trivy scans the pushed image in `dev.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise). hadolint and `buf` run on PRs only.
+- `pr.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
+- gitleaks runs from its container image, not `gitleaks-action`, which needs a licence for organisation-owned repositories.
+- Signing identity: the signing job is in `dev.yml`, so `deploy.yml` verifies `.../.github/workflows/dev.yml@refs/heads/main` (expected from how GitHub OIDC works; to be confirmed on the first signed image). Renaming `dev.yml` or moving the job, for example to the future infra repository, changes the identity.
+- One switch per environment: the variable `DEPLOY_ENABLED` on the `dev` and `production` environments, and the URL in `APP_URL` on each.
+- ADR-004 still describes `feature/* → dev → main` (from PR #40); this document and the workflows use `main` only. The ADR is not edited here.
 
 ## Rollout phases
 
-- **Phase 1 (now, before the app runs anywhere):** the `main-quality` ruleset (PR with 1 approval, no force push, no deletion). No required status checks until there is a build and tests.
+- **Phase 1 (now, before the app runs anywhere):** rulesets `main-review` and `main-maintainers-only` on `main` (PR with 1 approval, no force push, no deletion, merges by maintainers) and `tags-maintainers-only` on tags. No required status checks until there is a build and tests.
 - **Phase 2 (once there is a build and tests):** `ci.yml` as required checks, the tag-gated release (`release.yml`), the tag ruleset, the `production` environment, automatic dev deploy from `main` (`main.yml`), DAST and the `dev` environment.
-- **Phase 3 (when the team or registry outgrows the basics):** golden-image repository, GHCR cleanup and the organization transfer. These sections are marked "Phase 3".
+- **Phase 3 (when the team or registry outgrows the basics):** golden-image repository and GHCR cleanup. These sections are marked "Phase 3".
 
 ---
 
@@ -31,9 +59,9 @@ There is one long-lived branch: `main`. It is the integration branch, it is what
 
 | Branch or ref | Purpose | Who can merge or create it | Protection | Deploys to |
 |---|---|---|---|---|
-| `main` | Integration and release candidate | Any collaborator, through a PR with 1 approval and passing checks | Protected: PR, approval, checks, no force push, no deletion | **Dev** (automatic on every merge) |
+| `main` | Integration and release candidate | `maintainers` team, through a PR approved by someone else (and passing checks, once required) | Protected: PR, approval, checks, no force push, no deletion | **Dev** (automatic on every merge) |
 | `feature/*`, `fix/*`, any other | Short-lived work branches, merged into `main` by PR | n/a (anyone can push) | None | Nothing (PR checks run on the PR) |
-| Tag `v*` on `main` | A release | **Named tech leads and DevOps only** | Tag ruleset | **Prod** (after approval) |
+| Tag `v*` on `main` | A release | **`maintainers` team and admins only** | Tag ruleset | **Prod** (after approval) |
 
 See [section 11](#11-access-control-and-roles) for how this is enforced.
 
@@ -191,7 +219,7 @@ git push origin v1.4.0
 
 ### Safeguards
 
-- **Tag ruleset** (Settings → Rules → Rulesets): only named tech leads and DevOps can create `v*` tags.
+- **Tag ruleset** `tags-maintainers-only` (Settings → Rules → Rulesets): only the `maintainers` team and admins can create, move or delete tags, including `v*`.
 - Pipeline **fails if the tagged commit is not on `main`**.
 - Pipeline **fails if no signed image exists** for that commit (meaning `main.yml` never built it).
 - Pipeline **fails if the `main` run for that commit did not pass**, DAST included.
@@ -463,7 +491,7 @@ jobs:
     steps:
       - uses: snok/container-retention-policy@<commit-sha>   # v3.x, pin by SHA and confirm the latest release
         with:
-          account: user                          # personal account; use the org name after a transfer
+          account: LABSOFT-G9                    # the organization that owns the packages
           token: ${{ secrets.GHCR_CLEANUP_PAT }}
           image-names: "<app>"                   # the package name, without the ghcr.io/<owner>/ prefix
           image-tags: "sha-*"                    # WARNING: also matches released versions; keep dry-run until section 10.1 is resolved
@@ -488,59 +516,56 @@ This is a starting point that has not been run against your registry. Check the 
 
 ## 11. Access control and roles
 
-> This section assumes a **public repository owned by a personal GitHub account** on the Free plan. Everything below is available at no cost in that setup. If the project outgrows it, see [11.5](#115-when-to-move-to-an-organization).
+> The repository is owned by the free organization **`LABSOFT-G9`** (public, Free plan). Which settings are applied is tracked in [pipeline-settings-checklist.md](pipeline-settings-checklist.md).
 
 ### 11.1 Who can do what
 
 | Action | Who | Enforced by |
 |---|---|---|
-| Push to `feature/*`, `fix/*` | Any collaborator | No restriction |
-| Merge a PR into `main` (deploys to dev) | **Any collaborator** | Ruleset `main-quality`: PR + checks + 1 approval |
-| Create a `v*` tag (release to prod) | **Named tech leads and DevOps** | Tag ruleset |
-| Approve the prod deployment | **DevOps (Martim) or tech lead (Ricardo)** | Environment `production` required reviewers |
+| Push to `feature/*`, `fix/*` | Any team member | No restriction |
+| Approve a PR into `main` | Anyone except the person who pushed last | Ruleset `main-review` |
+| Merge a PR into `main` (deploys to dev) | **`maintainers` team** (Martim, Ricardo) and admins | Ruleset `main-maintainers-only` |
+| Push to `main` without a PR, or merge without approval | **Admins only** (Martim), for emergencies; logged | Admin bypass on both `main` rulesets |
+| Create, move or delete any tag, including `v*` (release to prod) | **`maintainers` team** and admins | Ruleset `tags-maintainers-only` |
+| Approve the prod deployment | `maintainers` (Martim or Ricardo) | Environment `production` required reviewers (not applied yet) |
 | Change pipelines (`.github/`, Dockerfiles, infra) | DevOps reviewers | CODEOWNERS |
-| Change repo settings, rulesets, secrets | **Repo owner only** | Owner role |
+| Change repo settings, rulesets, secrets, environments | **Admins only** | Admin role |
 
 ![Who can merge, deploy and release at each step](images/access-control-flow.png)
 
-### 11.2 Roles on a personal repository
+The image above does not show the teams yet; the table is authoritative.
 
-A personal repository has only two permission levels, so "tech lead" and "DevOps" do not exist as GitHub roles. They become **lists of usernames** in rulesets, environments and CODEOWNERS.
+### 11.2 Roles in the organization
 
-| Level | What it can do |
-|---|---|
-| **Owner** (exactly one) | Everything: settings, rulesets, environments, secrets, collaborators |
-| **Collaborator** | Read and write: push to unprotected branches, open and merge PRs (subject to the rulesets) |
-| Anyone else | Read the public repo, fork it, open PRs from their fork. No write access. |
+GitHub has fixed repository roles; custom roles need GitHub Enterprise Cloud and are not available on the Free plan. Project roles therefore map to teams that carry a built-in role:
 
-There are no teams, and no Triage, Maintain or Admin roles. Mapping for this project:
+| Project role | Team | Repository role | People |
+|---|---|---|---|
+| Maintainers (DevOps, tech lead) | `maintainers` | **Maintain** | Martim, Ricardo |
+| Developers | `developers` | **Write** | Pedro, Afonso, Sandro |
+| Admin (settings) | none, individual entry | **Admin** | Martim |
+| External contributors | none | none | Fork + PR only |
 
-| Project role | In GitHub |
-|---|---|
-| Developers | Collaborators |
-| Tech leads | Collaborators, listed in the tag ruleset and CODEOWNERS |
-| DevOps | Martim: tag ruleset bypass list and `production` reviewer |
-| External contributors | Fork + PR only |
+What the built-in roles allow:
 
-The owner (Pedro) is the only admin: settings, rulesets, secrets. DevOps (Martim) approves and releases, but cannot change settings.
+| Role | Can | Cannot |
+|---|---|---|
+| **Write** | Push branches; open, review, approve PRs; issues, labels, milestones, releases; re-run Actions | Merge into `main` here (ruleset), tag, change settings |
+| **Maintain** | Write, plus repository metadata, features (issues, wiki, projects), merge-button options, Pages, renaming non-default branches, interaction limits | Rulesets, environments, secrets and variables, access, webhooks, security settings, visibility, transfer or deletion |
+| **Admin** | Everything, including the above | none |
+
+At organization level there are only Owner (Martim) and Member.
 
 ### 11.3 How to set it up
 
-**1. Add collaborators:** Settings → Collaborators → Add people (these get Write access).
+**1. Teams:** Organization → Teams → New team (`maintainers`, `developers`), then Repository → Settings → Collaborators and teams → Add teams, with role Maintain and Write.
 
-**2. Ruleset for `main`** (anyone can merge, because a merge only deploys to dev). Settings → Rules → Rulesets → New branch ruleset:
-- Name `main-quality`, enforcement **Active**, target branch `main`, **no bypass list**
-- Require a pull request before merging (1 approval)
-- Require Code Owner review (applies only to the paths in CODEOWNERS)
-- Require status checks to pass (build, test, SAST, container scan) (from Phase 2)
-- Block force pushes, restrict deletions
+**2. Rulesets for `main`** (Settings → Rules → Rulesets), target `~DEFAULT_BRANCH`:
+- `main-review`: require a pull request; 1 approval; require approval of the most recent reviewable push; dismiss stale approvals; require conversation resolution; block force pushes; restrict deletions. Bypass: Admin role.
+- `main-maintainers-only`: restrict updates. Bypass: `maintainers` team and Admin role. A bypass applies only to the ruleset that lists it, so maintainers still need an approval from `main-review`.
+- Add `ci-required` as a required status check to `main-review` once `pr.yml` is on `main`.
 
-Production is protected by the tag ruleset and the `production` environment instead, not by a merge gate.
-
-**3. Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset)
-- Target: tags matching `v*`
-- Rules: restrict creations, restrict updates, restrict deletions
-- Bypass list: named tech leads and DevOps users (the only ones who can create release tags)
+**3. Tag ruleset** `tags-maintainers-only`: all tags (`~ALL`); restrict creations, updates and deletions; bypass `maintainers` team and Admin role.
 
 **4. CODEOWNERS** (`.github/CODEOWNERS`) protects the pipeline itself:
 
@@ -551,50 +576,41 @@ Production is protected by the tag ruleset and the `production` environment inst
 /infra/          @<owner-username>
 ```
 
-Keep this limited to sensitive paths. A `*` entry would force an approval from those owners on every PR into `main`, which is every PR.
+Keep this limited to sensitive paths. A `*` entry would force an approval from those owners on every PR into `main`, which is every PR. Code Owner review is not required by the rulesets at the moment.
 
 **5. Environments** (Settings → Environments)
 
 | Environment | Settings |
 |---|---|
 | `dev` | No reviewers. Deployment branches: `main` only. Deploy credentials for dev only. |
-| `production` | Required reviewers: DevOps (Martim) and the tech lead (Ricardo). Prevent self-review. Deployment branches and tags: `v*` only. **Do not** allow administrators to bypass. Prod secrets live here, never at repo level. |
+| `production` | Required reviewers: the `maintainers` team. Prevent self-review. Deployment branches and tags: `v*` only. **Do not** allow administrators to bypass. Prod secrets live here, never at repo level. |
 
-If there is only one DevOps person, "prevent self-review" would block them from approving their own release. Turn it off in that case, or add a second reviewer.
-
-**6. Hardening for a public repo** (Settings → Actions → General)
+**6. Hardening for a public repo** (Organization or Repository → Settings → Actions → General)
 - Require approval to run workflows from first-time contributors
 - Default `GITHUB_TOKEN` permissions: read-only, elevate per job
 - Pin third-party actions by commit SHA
 - Never expose secrets to fork PRs, and avoid `pull_request_target` unless you fully understand it
 - Check the GHCR package visibility after the first push, since a public repo's package may be publicly pullable
 
-### 11.4 Limits of a personal account
+### 11.4 Limits and risks
 
-- **One owner, no co-admins.** If that person is unavailable, nobody else can change settings.
-- **Everything is a list of usernames.** Adding or removing a tech lead means editing the tag ruleset, the environment reviewers and CODEOWNERS.
-- **Bypass is powerful.** Keep the bypass lists as short as possible.
-- **Open merges mean open dev deploys.** Any collaborator's merged change reaches dev. That is intended, but it means dev must never hold prod credentials, and a bad merge breaks dev until it is fixed.
+- **One admin.** Only Martim holds Admin; if he is unavailable nobody can change settings. Adding a second organization owner removes that risk.
+- **Admin bypass.** An admin can merge without a second person's approval, against "authors never approve their own changes". Use it only for emergencies; GitHub logs each bypass (Settings → Rules → Insights).
+- **Merged means deployed to dev.** A maintainer's merge reaches dev, so dev must never hold prod credentials.
+- **No automation pushes to `main`.** The metrics bot delivers its snapshot as a pull request.
 
-### 11.5 When to move to an organization
+### 11.5 Names that depend on the organization
 
-> Phase 3. Decide earlier if the single-owner limits (11.4) start blocking the team.
-
-Creating a **free organization** and transferring the repository (Settings → Danger Zone → Transfer) removes those limits. Rulesets are available for public repositories on the Free plan for organizations too. You get:
-
-- **Teams** (`developers`, `tech-leads`, `devops`), so rulesets, CODEOWNERS and environments point to a team instead of individual usernames
-- **Repository roles:** Read, Triage, Write, Maintain and Admin (custom roles are Enterprise only)
-- **Several admins**, and organization roles (Owner, Member, Billing manager, Security manager, and others)
-- **Branch restrictions** ("restrict who can push") on organization-owned repos
-
-After a transfer, the GHCR image path changes from `ghcr.io/<user>/<app>` to `ghcr.io/<org>/<app>`, so update the workflows and any deployment manifests.
+- Image paths: `ghcr.io/labsoft-g9/labdsof_g9a-<service>`, derived from `${GITHUB_REPOSITORY}`.
+- Cosign identity: `https://github.com/LABSOFT-G9/LABDSOF_G9A/.github/workflows/dev.yml@refs/heads/main`, also derived from `${GITHUB_REPOSITORY}`.
+- Project board: the organization project [LABSOFT-G9 #1](https://github.com/orgs/LABSOFT-G9/projects/1).
 
 ---
 
 ## 12. Repository settings checklist
 
-- [ ] Ruleset `main-quality` on `main` (PR with 1 approval, status checks, no force push, no deletion), see section 11.3
-- [ ] Tag ruleset for `v*`, limited to named tech leads and DevOps
+- [x] Rulesets on `main` (`main-review`, `main-maintainers-only`: PR with 1 approval, no force push, no deletion, merges by maintainers); status checks still to add, see section 11.3
+- [x] Tag ruleset (`tags-maintainers-only`), limited to the `maintainers` team and admins
 - [ ] No `dev` branch exists, and no ruleset or environment refers to one
 - [ ] GitHub Environments: `dev` (deployment branch `main`, no approval), `production` (required reviewers, `v*` only)
 - [ ] Secret scanning and push protection enabled
@@ -634,8 +650,6 @@ After a transfer, the GHCR image path changes from `ghcr.io/<user>/<app>` to `gh
 These are not decided yet. The workflows contain placeholders until they are.
 
 - **Deploy target for dev and prod.** The cloud provider, host or cluster is not chosen. `scripts/deploy.sh` is a placeholder.
-- **Named tech leads and DevOps users.** The tag ruleset, environment reviewers and CODEOWNERS need usernames.
-- **Single owner or organization.** Decide whether one owner account is acceptable, or move to an organization early (11.5).
 - **Dev on every merge or on demand.** Automatic deploys show integration problems early, but they also break the shared environment on every bad merge.
 - **Base images until phase 3.** Use official images pinned by digest, or wait for the golden images.
 
@@ -645,7 +659,7 @@ These are not decided yet. The workflows contain placeholders until they are.
 
 - Docker, `docker buildx imagetools create`: https://docs.docker.com/reference/cli/docker/buildx/imagetools/create/, accessed 2026-10-25.
 - Trivy action v0.36.0, commit `ed142fd0673e97e23eac54620cfb913e5ce36c25`: from `gh api` on [aquasecurity/trivy-action releases](https://github.com/aquasecurity/trivy-action/releases), accessed 2026-10-29. The release was published 2026-04-22. Source of the tag-force-push warning: [trivy-action releases](https://github.com/aquasecurity/trivy-action/releases), accessed 2026-10-29, and a search summary that reports the March 2026 incident; confirm it on the advisory before relying on it.
-- Repository roles on a personal account (sections 11.2 and 11.4): [permission levels for a personal account repository](https://docs.github.com/en/enterprise-cloud@latest/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/permission-levels-for-a-personal-account-repository), accessed 2026-10-29. It describes one owner and collaborators, with no read-only collaborators on private personal repositories.
+- Custom repository roles (section 11.2) require GitHub Enterprise Cloud; on the `LABSOFT-G9` Free plan the API answers "Feature not available": https://docs.github.com/enterprise-cloud@latest/rest/orgs/custom-roles, accessed 2026-11-16. The Write, Maintain and Admin capabilities in 11.2 are to be confirmed on GitHub's repository-roles page.
 - Deleting package versions (section 10.2): [deleting and restoring a package](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package), accessed 2026-10-29. It says GitHub Packages supports only classic personal access tokens. The GraphQL `deletePackageVersion` route needs a classic token with `read:packages`, `delete:packages` and `repo`. A `GITHUB_TOKEN` can delete through the REST API only on registries with granular permissions. Earlier versions of the same page list fewer scopes, so check the live page.
 - Rulesets and environment reviewers on public repositories (sections 11.3 and 12): [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), accessed 2026-10-29, and [managing environments for deployment](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), accessed 2026-10-29. Rulesets are available in public repositories under GitHub Free. Environment protection rules such as required reviewers are available on public repositories across plans. The page does not address free-plan organizations specifically.
 

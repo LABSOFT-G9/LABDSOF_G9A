@@ -1,0 +1,7 @@
+# Pipelines, images and infrastructure need DevOps approval (CICD.md §11.3).
+# No `*` entry: it would require this owner on every pull request.
+/.github/       @IsepMartimOliveira
+**/Dockerfile   @IsepMartimOliveira
+/infra/         @IsepMartimOliveira
+/scripts/       @IsepMartimOliveira
+/.gitleaksignore @IsepMartimOliveira
