@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: validate-chart-data
@@ -22,6 +23,20 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+      # Snapshots wait in an open metrics PR until it is merged; validate that
+      # history so the freshness check does not fail while the PR is open.
+      - name: Use the open metrics PR history, if any
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh pr list --base main --state open --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("metrics/"))][0].headRefName // ""')
+          if [ -n "$open" ]; then
+            git fetch origin "$open"
+            git checkout "origin/$open" -- workflow-scripts/data/
+            echo "Validating history from $open"
+          fi
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
