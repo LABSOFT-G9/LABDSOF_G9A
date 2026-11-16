@@ -109,9 +109,9 @@ jobs:
           SERVICES: ${{ steps.req.outputs.services }}
           PROMOTE_SHA: ${{ inputs.promote_sha }}
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
           for name in $SERVICES; do
-            image="ghcr.io/${repo}-${name}"
+            image="ghcr.io/${owner}/labdsof-${name}"
             docker buildx imagetools create -t "${image}:${TAG}" "${image}:dev-${PROMOTE_SHA}"
           done
 
@@ -121,9 +121,9 @@ jobs:
           TAG: ${{ steps.req.outputs.tag }}
           SERVICES: ${{ steps.req.outputs.services }}
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
           for name in $SERVICES; do
-            cosign verify "ghcr.io/${repo}-${name}:${TAG}" \
+            cosign verify "ghcr.io/${owner}/labdsof-${name}:${TAG}" \
               --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/dev.yml@refs/heads/main" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
           done

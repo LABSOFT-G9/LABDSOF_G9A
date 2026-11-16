@@ -41,7 +41,7 @@ No automation pushes to `main`: the metrics bot (`metrics.yml`) delivers its sna
 | 9 | Code security → Secret scanning and push protection | Enabled | no |
 | 10 | Code security → Dependabot alerts and version updates | Enabled (`.github/dependabot.yml` is in the repository) | no |
 | 11 | Code scanning (CodeQL) | Results uploaded by `pr.yml` and `dev.yml` under Security → Code scanning; default setup **not** also enabled, to avoid two analyses | no |
-| 12 | GHCR packages | Images `ghcr.io/labsoft-g9/labdsof_g9a-<service>`; visibility checked, and Manage Actions access for this repository (`packages: write`) | no |
+| 12 | GHCR packages | Images `ghcr.io/labsoft-g9/labdsof-<service>`; visibility checked, and Manage Actions access for this repository (`packages: write`) | no |
 | 14 | Branches | No `dev` branch; no ruleset or environment refers to one | yes |
 
 Not in this checklist: the `production` secrets and the GHCR cleanup token (Phase 3), which belong to US-19 and US-22. Test the release gate once with a throwaway tag (CICD.md §7) before the first real release.

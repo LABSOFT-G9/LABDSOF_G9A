@@ -25,7 +25,7 @@ Added by US-18 (PR #116; `Refs #71`, `Refs #69`). The files exist in the reposit
 Where the implementation differs from this document:
 
 - File names: `pr.yml`, `dev.yml` and `prod.yml` replace `ci.yml`, `main.yml` and `release.yml` used in the sections below; `deploy.yml` replaces `scripts/deploy.sh`.
-- One image per service, `ghcr.io/<owner>/<repo>-<service>`, all lowercase (§6); the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
+- One image per service, `ghcr.io/<owner>/labdsof-<service>`, all lowercase (§6), for example `ghcr.io/labsoft-g9/labdsof-notification`; the §8 skeleton's single `${{ github.repository }}` path is not used. Six services: `issue`, `dispatch`, `notification`, `ai-triage`, `calendar-sim`, `client` (the §8 list omits `calendar-sim`). The folders in `services/` are skeletons for testing the pipeline until EN-02-02 (#78).
 - Added from ADR-004: `buf lint` and `buf breaking`, ArchUnit and integration tests (through Maven `verify`, with real MySQL 8.4 and RabbitMQ containers). Images are built for linux/amd64 only (team decision; ADR-004 proposes amd64 and arm64; adding arm64 later means QEMU or native runners, EN01-U9).
 - Pull requests do not scan the image; Trivy scans the pushed image in `dev.yml`, so a vulnerable image is caught after merge, not on the PR (§3 says PRs also scan; the team chose otherwise). hadolint and `buf` run on PRs only.
 - `pr.yml` has no `paths:` filter, so the required check `ci-required` is always reported.
@@ -187,7 +187,7 @@ Suggested policy:
 
 All images live in GitHub Container Registry: `ghcr.io/<org>/<app>`.
 
-One image per service (`<repo>-issue`, `<repo>-dispatch`, …). A tag promotes every service image built from that commit.
+One image per service (`labdsof-issue`, `labdsof-dispatch`, …). A tag promotes every service image built from that commit.
 
 | Event | Tags pushed | Notes |
 |---|---|---|
@@ -603,7 +603,7 @@ Keep this limited to sensitive paths. A `*` entry would force an approval from t
 
 ### 11.5 Names that depend on the organization
 
-- Image paths: `ghcr.io/labsoft-g9/labdsof_g9a-<service>`, derived from `${GITHUB_REPOSITORY}`.
+- Image paths: `ghcr.io/labsoft-g9/labdsof-<service>`; the owner comes from `${GITHUB_REPOSITORY_OWNER}`, the `labdsof-` prefix is fixed in `dev.yml`, `deploy.yml` and `prod.yml`.
 - Cosign identity: `https://github.com/LABSOFT-G9/LABDSOF_G9A/.github/workflows/dev.yml@refs/heads/main`, also derived from `${GITHUB_REPOSITORY}`.
 - Project board: the organization project [LABSOFT-G9 #1](https://github.com/orgs/LABSOFT-G9/projects/1).
 

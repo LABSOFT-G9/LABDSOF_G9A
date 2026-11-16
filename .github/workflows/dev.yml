@@ -120,7 +120,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # One image per service: ghcr.io/<owner>/<repo>-<service>, lowercase
+      # One image per service: ghcr.io/<owner>/labdsof-<service>, lowercase
       # (CICD.md §6). Dev tags: dev-<sha> (immutable, what gets deployed) and
       # dev (moves to the latest scanned and signed dev image). Releases add
       # the version tag to the same digest (prod.yml); `latest` is never used.
@@ -129,8 +129,8 @@ jobs:
         env:
           SERVICE: ${{ matrix.service.name }}
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
-          echo "name=ghcr.io/${repo}-${SERVICE}" >>"$GITHUB_OUTPUT"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/labdsof-${SERVICE}" >>"$GITHUB_OUTPUT"
 
       # Single architecture (linux/amd64) by team decision. To add arm64, add
       # docker/setup-qemu-action and set platforms: linux/amd64,linux/arm64.

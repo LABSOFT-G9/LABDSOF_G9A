@@ -31,7 +31,7 @@ GitHub notification delivery also depends on the account's repository watch and 
 
 Pull requests run `.github/workflows/pr.yml`; merges to `main` run `dev.yml` (publish images, deploy to dev); a `v*` tag runs `prod.yml` (promote to production); `deploy.yml` is the shared deploy. Details and status: [CI/CD strategy](documents/devops/CICD.md#implementation-status) and the [settings the owner must apply](documents/devops/pipeline-settings-checklist.md).
 
-**Adding a service:** put it in its own folder with a `Dockerfile` (for example `services/notification/`) and add one line to `.github/services.json` with its name, folder and language (`maven`, `python` or `node`). The image is `ghcr.io/<owner>/<repo>-<name>`, lowercase. Protobuf contracts live in `contracts/proto`.
+**Adding a service:** put it in its own folder with a `Dockerfile` (for example `services/notification/`) and add one line to `.github/services.json` with its name, folder and language (`maven`, `python` or `node`). The image is `ghcr.io/<owner>/labdsof-<name>`, lowercase. Protobuf contracts live in `contracts/proto`.
 
 **Secrets scan before commit** (once per clone):
 
