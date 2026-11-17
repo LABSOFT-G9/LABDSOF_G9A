@@ -16,12 +16,14 @@ concurrency:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
+    environment: metrics
     timeout-minutes: 10
 
     # main is protected (PR + review from someone else). The metrics GitHub App
     # is the only bypass actor on the main-review ruleset, so the snapshot is
-    # pushed straight to main with the App's token. MY_PAT is still needed to
-    # read personal project 9, which the App cannot see.
+    # pushed straight to main with the App's token. The App secrets live in the
+    # `metrics` environment, which only allows main. MY_PAT (a repository
+    # secret) is still needed to read personal project 9, which the App cannot see.
     steps:
       - name: Create metrics App token
         id: app-token
