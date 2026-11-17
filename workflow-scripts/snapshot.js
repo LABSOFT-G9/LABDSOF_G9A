@@ -3,7 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { appendSnapshot, dataDirectory } = require("./history-files.js");
 
-const owner = "Phenriquerafael";
+// The board stays a personal project; the repository moved to the LABSOFT-G9 organization.
+const projectOwner = "Phenriquerafael";
 const repoOwner = "LABSOFT-G9";
 const repository = "LABDSOF_G9A";
 const projectNumber = 9;
@@ -77,11 +78,11 @@ function nextCursor(connection, seen) {
 }
 
 async function findProject() {
-  const data = await graphql(projectQuery, { owner, number: projectNumber });
-  if (!data.user) throw new Error(`GitHub user ${owner} was not found or is inaccessible.`);
+  const data = await graphql(projectQuery, { owner: projectOwner, number: projectNumber });
+  if (!data.user) throw new Error(`GitHub user ${projectOwner} was not found or is inaccessible.`);
   const project = data.user.projectV2;
   if (!project?.id) {
-    throw new Error(`Project ${projectNumber} is unavailable under user ${owner}. Confirm the owner and number at https://github.com/users/${owner}/projects/${projectNumber} and that MY_PAT has read:project access. A repository link is not required.`);
+    throw new Error(`Project ${projectNumber} is unavailable under user ${projectOwner}. Confirm the owner and number at https://github.com/users/${projectOwner}/projects/${projectNumber} and that MY_PAT has read:project access. A repository link is not required.`);
   }
   return project;
 }
