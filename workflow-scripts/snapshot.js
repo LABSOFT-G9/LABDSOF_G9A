@@ -4,6 +4,7 @@ const path = require("node:path");
 const { appendSnapshot, dataDirectory } = require("./history-files.js");
 
 const owner = "Phenriquerafael";
+const repoOwner = "LABSOFT-G9";
 const repository = "LABDSOF_G9A";
 const projectNumber = 9;
 const sprintFieldName = "Sprint"; // GitHub Projects field name (single-select, iteration or text).
@@ -120,7 +121,7 @@ async function fetchIssues(project) {
       if (!item.content.repository?.nameWithOwner) throw new Error("Issue repository information is missing.");
       const sourceRepository = item.content.repository.nameWithOwner;
       repositories.set(sourceRepository, (repositories.get(sourceRepository) || 0) + 1);
-      if (sourceRepository.toLowerCase() !== `${owner}/${repository}`.toLowerCase()) continue;
+      if (sourceRepository.toLowerCase() !== `${repoOwner}/${repository}`.toLowerCase()) continue;
       const id = item.content.number;
       const status = item.status?.name?.trim();
       if (!Number.isSafeInteger(id) || id <= 0) throw new Error("Invalid issue number returned by GitHub.");
@@ -145,15 +146,15 @@ async function fetchIssues(project) {
   const unassigned = [...issues.values()].filter(issue => issue.sprint === null).length;
   if (unassigned) console.warn(`${unassigned} issues have no ${sprintFieldName} value; saved with sprint: null. Assign them on the board to include them in a sprint filter.`);
   const counts = values => [...values].map(([name, count]) => `${name}: ${count}`).join(", ") || "none";
-  console.log(`Project ${projectNumber}: scanned ${scanned} active items. Types: ${counts(types)}. Issue repositories: ${counts(repositories)}. Matched ${owner}/${repository}: ${issues.size}.`);
+  console.log(`Project ${projectNumber}: scanned ${scanned} active items. Types: ${counts(types)}. Issue repositories: ${counts(repositories)}. Matched ${repoOwner}/${repository}: ${issues.size}.`);
   if (!issues.size) {
     let hint;
     if (!scanned) {
       hint = "The project returned no active items. Confirm the project number and add existing repository issues to the board; archived items are not collected.";
     } else if (!repositories.size && types.has("DraftIssue")) {
-      hint = `The board contains draft cards, not repository issues. Convert the intended cards to issues in ${owner}/${repository}, or add existing issues to the project. Draft cards have no repository issue number and are not supported by the current burndown format.`;
+      hint = `The board contains draft cards, not repository issues. Convert the intended cards to issues in ${repoOwner}/${repository}, or add existing issues to the project. Draft cards have no repository issue number and are not supported by the current burndown format.`;
     } else if (repositories.size) {
-      hint = `Issues were found under ${counts(repositories)}, but none under ${owner}/${repository}. Confirm which repository should be tracked; changing a project owner does not transfer its issues.`;
+      hint = `Issues were found under ${counts(repositories)}, but none under ${repoOwner}/${repository}. Confirm which repository should be tracked; changing a project owner does not transfer its issues.`;
     } else {
       hint = "No Issue items were returned. Pull requests and other item types are excluded from this issue-based chart.";
     }
@@ -191,7 +192,7 @@ async function main() {
   // Replace colons for Windows-compatible filenames; keep the same UTC date as history.
   const rawFilename = `${snapshot.date.replace(/:/g, "-")}-${process.pid}.json`;
   fs.writeFileSync(path.join(rawDirectory, rawFilename), JSON.stringify(rawSnapshot, null, 2));
-  console.log(`Snapshot saved to ${path.basename(file)} (Sprint ${key}): ${issues.length} issues from ${owner}/${repository}, project ${projectNumber}.`);
+  console.log(`Snapshot saved to ${path.basename(file)} (Sprint ${key}): ${issues.length} issues from ${repoOwner}/${repository}, project ${projectNumber}.`);
 }
 
 main().catch(error => {
