@@ -58,8 +58,7 @@ jobs:
             echo "No snapshot changes"
             exit 0
           fi
-          # [skip ci]: the App token triggers workflows, and a data-only commit must not redeploy dev.
-          git commit -m "update metrics [skip ci]"
+          git commit -m "update metrics"
           # main may have moved during the run; the snapshot only touches data files.
           git pull --rebase origin main
           git push origin HEAD:main
