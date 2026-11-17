@@ -20,10 +20,6 @@ name: Dev
 on:
   push:
     branches: [main]
-    # Daily metrics snapshots (metrics.yml) only touch this folder; they must
-    # not rebuild or redeploy dev.
-    paths-ignore:
-      - "workflow-scripts/data/**"
 
 permissions:
   contents: read
