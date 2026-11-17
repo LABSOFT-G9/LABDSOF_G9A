@@ -34,13 +34,15 @@ jobs:
           permission-contents: write
 
       - name: Checkout repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-          token: ${{ steps.app-token.outputs.token }}
+          # The App token is not left in .git/config while the script runs;
+          # the push step passes it explicitly.
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
 
@@ -50,15 +52,38 @@ jobs:
         run: node workflow-scripts/snapshot.js
 
       - name: Commit and push to main
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
+          # Commit as the App so the history shows who pushed.
+          bot_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
           git add workflow-scripts/data/
           if git diff --cached --quiet; then
             echo "No snapshot changes"
             exit 0
           fi
+          # The App can bypass main's review rule, so only data files may be committed.
+          unexpected=$(git status --porcelain | grep -v ' workflow-scripts/data/' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::Unexpected changes outside workflow-scripts/data/:"
+            echo "$unexpected"
+            exit 1
+          fi
           git commit -m "update metrics"
+          url="https://x-access-token:${APP_TOKEN}@github.com/${REPO}.git"
           # main may have moved during the run; the snapshot only touches data files.
-          git pull --rebase origin main
-          git push origin HEAD:main
+          for attempt in 1 2 3; do
+            git pull --rebase "$url" main
+            if git push "$url" HEAD:main; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed, retrying"
+            sleep 5
+          done
+          echo "::error::Could not push the snapshot to main after 3 attempts"
+          exit 1

@@ -20,6 +20,10 @@ name: Dev
 on:
   push:
     branches: [main]
+    # Metrics snapshots (metrics.yml) only touch this folder and must not
+    # rebuild or redeploy dev.
+    paths-ignore:
+      - "workflow-scripts/data/**"
 
 permissions:
   contents: read
