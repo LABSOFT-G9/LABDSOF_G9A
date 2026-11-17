@@ -71,7 +71,7 @@ test('completed status is case insensitive and validates input', () => {
 async function collect({fail=false}={}) {
   const source=fs.readFileSync(path.join(directory,'snapshot.js'),'utf8').replace(/main\(\)\.catch\([\s\S]*$/, '');
   const writes=new Map(), queries=[];
-  const item=(id,sprint,labels=['Story','frontend'],repository='Phenriquerafael/LABDSOF_G9A')=>({content:{__typename:'Issue',number:id,title:'Issue '+id,repository:{nameWithOwner:repository},labels:{nodes:labels.map(name=>({name})),pageInfo:{hasNextPage:false}}},status:{name:'Ready'},sprint});
+  const item=(id,sprint,labels=['Story','frontend'],repository='LABSOFT-G9/LABDSOF_G9A')=>({content:{__typename:'Issue',number:id,title:'Issue '+id,repository:{nameWithOwner:repository},labels:{nodes:labels.map(name=>({name})),pageInfo:{hasNextPage:false}}},status:{name:'Ready'},sprint});
   const responses=[{user:{projectV2:{id:'p9',number:9,title:'Project'}}},{node:{items:{nodes:[item(1,{name:'Sprint A'}),item(2,{title:'B'}),item(99,{name:'C'},['Task'],'other/repo')],pageInfo:{hasNextPage:true,endCursor:'next'}}}},{node:{items:{nodes:[item(3,{text:' C '},['Sub-Task']),item(4,null,[])],pageInfo:{hasNextPage:false}}}}];
   // Only the sprint file for today's collection exists, holding one older snapshot.
   const existingDay=new Date().toISOString().slice(0,10);
