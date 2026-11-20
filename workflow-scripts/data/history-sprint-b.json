@@ -12343,5 +12343,858 @@
         ]
       }
     ]
+  },
+  {
+    "date": "2026-11-20T23:44:52.729Z",
+    "issues": [
+      {
+        "id": 1,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "devops",
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 2,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 3,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 4,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 5,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 6,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 7,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 8,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 9,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "Epic"
+        ]
+      },
+      {
+        "id": 10,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "Epic"
+        ]
+      },
+      {
+        "id": 11,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 12,
+        "status": "In progress",
+        "sprint": "Sprint B",
+        "labels": [
+          "security",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 14,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 15,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 16,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Task"
+        ]
+      },
+      {
+        "id": 17,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "ai",
+          "Task"
+        ]
+      },
+      {
+        "id": 18,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 19,
+        "status": "In progress",
+        "sprint": "Sprint B",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 20,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 21,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 22,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 23,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 24,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Task"
+        ]
+      },
+      {
+        "id": 25,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Task"
+        ]
+      },
+      {
+        "id": 26,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Task"
+        ]
+      },
+      {
+        "id": 27,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "Epic"
+        ]
+      },
+      {
+        "id": 28,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "Epic"
+        ]
+      },
+      {
+        "id": 29,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Epic"
+        ]
+      },
+      {
+        "id": 30,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 31,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 32,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 33,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 34,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 42,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "devops",
+          "documentation",
+          "Task"
+        ]
+      },
+      {
+        "id": 43,
+        "status": "Done",
+        "sprint": "Sprint A",
+        "labels": [
+          "documentation",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 56,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "ai",
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 57,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "ai",
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 58,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 59,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 60,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 61,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 62,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 63,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 64,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "backend",
+          "Story"
+        ]
+      },
+      {
+        "id": 65,
+        "status": "Ready",
+        "sprint": "Sprint B",
+        "labels": [
+          "ai",
+          "backend",
+          "frontend",
+          "Story"
+        ]
+      },
+      {
+        "id": 66,
+        "status": "Ready",
+        "sprint": "Sprint C",
+        "labels": [
+          "ai",
+          "documentation",
+          "Story"
+        ]
+      },
+      {
+        "id": 68,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Task"
+        ]
+      },
+      {
+        "id": 69,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 70,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "needs:decision",
+          "Story"
+        ]
+      },
+      {
+        "id": 71,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 72,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 73,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 74,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 75,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "security",
+          "Story"
+        ]
+      },
+      {
+        "id": 76,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "Story"
+        ]
+      },
+      {
+        "id": 77,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 78,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 79,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 80,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 81,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 82,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 83,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "needs:decision",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 84,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "needs:decision",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 85,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 86,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 87,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 88,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 89,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 90,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 91,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 92,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 93,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "ai",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 94,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 95,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "ai",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 96,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 97,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 98,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "ai",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 99,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 100,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 101,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 102,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 103,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 104,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 105,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 106,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 107,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "frontend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 108,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 109,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 110,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "backend",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 111,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "ai",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 112,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "devops",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 113,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "devops",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 114,
+        "status": "Backlog",
+        "sprint": "Sprint B",
+        "labels": [
+          "security",
+          "Sub-Task"
+        ]
+      },
+      {
+        "id": 115,
+        "status": "Backlog",
+        "sprint": "Sprint C",
+        "labels": [
+          "security",
+          "Sub-Task"
+        ]
+      }
+    ]
   }
 ]
