@@ -86,6 +86,8 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/deploy.yml
+    # A reusable workflow gets no secrets unless the caller passes them.
+    secrets: inherit
     with:
       environment: production
       tag: ${{ github.ref_name }}
