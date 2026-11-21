@@ -9,9 +9,11 @@ name: Deploy
 # 3. verify every signature   4. deploy   5. smoke check
 #
 # Steps 4-5 run only when the environment variable DEPLOY_ENABLED is "true"
-# (set on the `dev` / `production` environment). Until a host exists
-# (US-17-01, #83) leave it unset: the run then verifies and stops. The deploy
-# step itself is still a placeholder that fails on purpose.
+# (set on the `dev` / `production` environment); otherwise the run verifies and
+# stops. Step 4 needs, on that environment: secrets AWS_ACCESS_KEY_ID and
+# AWS_SECRET_ACCESS_KEY (IAM user bmc-deploy-<env>, labdsof-infra
+# bootstrap/deploy-access.tf) and variable AWS_REGION. The URL is APP_URL if
+# set, else the edge host's current public IP.
 #
 # Services come from .github/services.json. Pins: full commit SHAs resolved
 # with `gh api` on 2026-11-15.
@@ -73,7 +75,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: .github/services.json
+          sparse-checkout: |
+            .github/services.json
+            compose.yaml
           sparse-checkout-cone-mode: false
 
       - name: Validate the request
@@ -129,29 +133,70 @@ jobs:
           done
           echo "All signatures valid for ${TAG}"
 
-      # PLACEHOLDER until US-17-01 (#83). Replace with the real mechanism (for
-      # example SSH or a cloud call) using this environment's secrets.
+      # Deploy over SSM Run Command (labdsof-infra, README "Application
+      # deploy"): sign in as bmc-deploy-<env> (key in this environment's
+      # secrets), copy compose.yaml to the application host and run
+      # bmc-app-deploy <tag> there; it reads the database passwords from
+      # Parameter Store and runs docker compose pull + up. No SSH.
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: vars.DEPLOY_ENABLED == 'true'
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
       - name: Deploy
+        id: deploy
         if: vars.DEPLOY_ENABLED == 'true'
         env:
           TAG: ${{ steps.req.outputs.tag }}
+          ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          echo "Would run: BMC_TAG=${TAG} docker compose pull && BMC_TAG=${TAG} docker compose up -d"
-          echo "::error::Deploy target not configured (US-17); nothing was deployed"
-          exit 1
+          env_tag="$ENVIRONMENT"; [ "$env_tag" = production ] && env_tag=prod
+          host() { # instance attribute of the running host with this Role tag
+            aws ec2 describe-instances \
+              --filters "Name=tag:Environment,Values=$env_tag" "Name=tag:Role,Values=$1" Name=instance-state-name,Values=running \
+              --query "Reservations[].Instances[].$2" --output text
+          }
+          app=$(host app InstanceId)
+          [ -n "$app" ] && [ "$(wc -w <<<"$app")" -eq 1 ] \
+            || { echo "::error::Expected one running application host in $env_tag, found: '${app}'"; exit 1; }
+          edge_ip=$(host edge PublicIpAddress)
+
+          jq -n --arg compose "$(base64 -w0 compose.yaml)" --arg tag "$TAG" '{commands: [
+              "set -euo pipefail",
+              "echo \($compose) | base64 -d > /opt/bmc-app/compose.yaml",
+              "/usr/local/bin/bmc-app-deploy \($tag)"
+            ]}' >"$RUNNER_TEMP/params.json"
+          id=$(aws ssm send-command --instance-ids "$app" --document-name AWS-RunShellScript \
+            --comment "Deploy $TAG (run $GITHUB_RUN_ID)" --timeout-seconds 900 \
+            --parameters "file://$RUNNER_TEMP/params.json" --query Command.CommandId --output text)
+          echo "SSM command $id on $app"
+
+          status=Pending
+          for _ in $(seq 1 120); do
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$app" --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$app" \
+            --query '[StandardOutputContent,StandardErrorContent]' --output text || true
+          [ "$status" = Success ] || { echo "::error::Deploy command ended with $status"; exit 1; }
+          echo "url=http://${edge_ip}" >>"$GITHUB_OUTPUT"
 
       # Readiness endpoints are internal (ADR-004); check the public entry point.
+      # APP_URL (a fixed address, once there is a domain) or the edge host's
+      # current public IP from the deploy step.
       - name: Smoke check
-        if: vars.DEPLOY_ENABLED == 'true' && vars.APP_URL != ''
+        if: vars.DEPLOY_ENABLED == 'true'
         env:
-          URL: ${{ vars.APP_URL }}
+          URL: ${{ vars.APP_URL || steps.deploy.outputs.url }}
         run: curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors --max-time 20 "${URL}/" >/dev/null
 
       - name: Result
         id: result
         env:
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
-          URL: ${{ vars.APP_URL }}
+          URL: ${{ vars.APP_URL || steps.deploy.outputs.url }}
         run: |
           if [ "$ENABLED" = true ]; then deployed=true; else deployed=false; echo "DEPLOY_ENABLED is not true: verified only, nothing deployed."; fi
           echo "deployed=$deployed" >>"$GITHUB_OUTPUT"

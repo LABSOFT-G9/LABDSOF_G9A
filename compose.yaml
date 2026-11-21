@@ -1,0 +1,113 @@
+# Application host (ADR-004): what runs on it, at one image tag.
+#
+# Deployed by .github/workflows/deploy.yml: the job copies this file to the
+# host and runs `bmc-app-deploy <tag>` there (labdsof-infra, ansible/roles/app),
+# which provides, in its env file:
+#   BMC_TAG                 image tag, dev-<commit> or a version
+#   DB_HOST, DB_PORT        the database host (MySQL 8.4, one database per service)
+#   <NAME>_DB_PASSWORD      ISSUE_, DISPATCH_, NOTIFICATION_, KEYCLOAK_
+# Secrets never live in this file or in Git.
+#
+# First version: Traefik and the six services, ADR-004's routes. Keycloak,
+# RabbitMQ, Mailpit, the OIDC middleware and the egress network are added when
+# the services use them. Pins: images by digest, read 2026-11-21.
+name: bmc
+
+services:
+  # The only container with a published port (80). The edge host forwards the
+  # internet's 80/443 here. TLS comes with a domain name.
+  traefik:
+    image: traefik:v3.7.16@sha256:1336e85aaed293bd63d005086e0dd013b04078b26aaeb1c18b26a2f928af7e65
+    restart: unless-stopped
+    command:
+      - --entrypoints.web.address=:80
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=bmc_edge
+      # Never route the Traefik API (ADR-004).
+      - --api.dashboard=false
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [edge]
+
+  client:
+    image: ghcr.io/labsoft-g9/labdsof-client:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [edge]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.client.rule: PathPrefix(`/`)
+      traefik.http.routers.client.priority: "1"
+      traefik.http.routers.client.entrypoints: web
+      traefik.http.services.client.loadbalancer.server.port: "80"
+
+  issue:
+    image: ghcr.io/labsoft-g9/labdsof-issue:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [edge, internal]
+    environment:
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: issue
+      DB_USER: issue
+      DB_PASSWORD: ${ISSUE_DB_PASSWORD:-}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.issue.rule: PathPrefix(`/api/issue`)
+      traefik.http.routers.issue.entrypoints: web
+      traefik.http.routers.issue.middlewares: issue-strip
+      traefik.http.middlewares.issue-strip.stripprefix.prefixes: /api/issue
+      traefik.http.services.issue.loadbalancer.server.port: "8080"
+
+  dispatch:
+    image: ghcr.io/labsoft-g9/labdsof-dispatch:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [edge, internal]
+    environment:
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: dispatch
+      DB_USER: dispatch
+      DB_PASSWORD: ${DISPATCH_DB_PASSWORD:-}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dispatch.rule: PathPrefix(`/api/dispatch`)
+      traefik.http.routers.dispatch.entrypoints: web
+      traefik.http.routers.dispatch.middlewares: dispatch-strip
+      traefik.http.middlewares.dispatch-strip.stripprefix.prefixes: /api/dispatch
+      traefik.http.services.dispatch.loadbalancer.server.port: "8080"
+
+  notification:
+    image: ghcr.io/labsoft-g9/labdsof-notification:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [edge, internal]
+    environment:
+      DB_HOST: ${DB_HOST:-}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: notification
+      DB_USER: notification
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.notification.rule: PathPrefix(`/api/notifications`)
+      traefik.http.routers.notification.entrypoints: web
+      traefik.http.routers.notification.middlewares: notification-strip
+      traefik.http.middlewares.notification-strip.stripprefix.prefixes: /api/notifications
+      traefik.http.services.notification.loadbalancer.server.port: "8080"
+
+  # Internal only (ADR-004: never routed).
+  ai-triage:
+    image: ghcr.io/labsoft-g9/labdsof-ai-triage:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [internal]
+
+  calendar-sim:
+    image: ghcr.io/labsoft-g9/labdsof-calendar-sim:${BMC_TAG:?}
+    restart: unless-stopped
+    networks: [internal]
+
+networks:
+  edge: {}
+  internal: {}
