@@ -187,16 +187,28 @@ Suggested policy:
 
 All images live in GitHub Container Registry: `ghcr.io/<org>/<app>`.
 
-One image per service (`labdsof-issue`, `labdsof-dispatch`, …). A tag promotes every service image built from that commit.
+One image per service, named `ghcr.io/labsoft-g9/labdsof-<service>`. A tag promotes every service image built from that commit.
+
+| Image | Service |
+|---|---|
+| `labdsof-client` | Web client (nginx) |
+| `labdsof-issue` | Issue service |
+| `labdsof-dispatch` | Dispatch service |
+| `labdsof-notification` | Notification service |
+| `labdsof-ai-triage` | AI triage stub |
+| `labdsof-calendar-sim` | Calendar simulator |
 
 | Event | Tags pushed | Notes |
 |---|---|---|
 | Merge to `main` | `dev-<sha>` | Deployed to dev, and the release candidate |
+| Merge to `main` | `dev` | Moves to the latest scanned and signed dev image. For people only: deploys use `dev-<sha>` |
 | Tag `v1.4.0` | `1.4.0` | **Retag** of the `dev-<sha>` image, never a rebuild. Short tags (`1.4`, `1`) are not pushed, because they move between releases |
 
 Avoid deploying `latest`. Deploy by **version tag or digest**. Image cleanup is covered in [section 10](#10-ghcr-cleanup-retention).
 
 GHCR image paths must be **lowercase**. This repository's name has uppercase letters, so lowercase the repository name in scripts (for example `${REPO,,}` in bash) before building image references.
+
+**Access.** The packages are linked to this repository, so they take its permissions: only the pipeline (`GITHUB_TOKEN` with `packages: write`) and the repository's collaborators can push. The packages are **public**, so anyone can pull them. The hosts therefore need no pull credential and no registry secret is stored. If the images ever become private, store a read-only pull token as a secret (Parameter Store on the hosts), never in the repository.
 
 Every image is:
 - **Signed** with cosign (keyless, GitHub OIDC)
