@@ -198,6 +198,9 @@ jobs:
       contents: read
       packages: write # deploy.yml asks for it (release retag); dev never retags
     uses: ./.github/workflows/deploy.yml
+    # A reusable workflow gets no secrets unless the caller passes them: the
+    # deploy needs the environment's AWS key (bmc-deploy-dev).
+    secrets: inherit
     with:
       environment: dev
       tag: dev-${{ github.sha }}
