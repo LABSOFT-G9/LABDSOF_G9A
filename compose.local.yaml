@@ -1,0 +1,81 @@
+# Local stack (EN-02-03, DEVOPS-02): compose.yaml plus what a laptop needs.
+#
+#   cp .env.example .env        # then change the passwords
+#   docker compose -f compose.yaml -f compose.local.yaml up --build
+#   open http://localhost
+#
+# On top of compose.yaml this file:
+#   - builds every service from its folder instead of pulling it from GHCR
+#     (tagged ghcr.io/labsoft-g9/labdsof-<service>:local, never pushed);
+#   - adds MySQL 8.4, the same image as the database host, with the four
+#     databases and users (local/mysql/init.sh); data in the volume `mysql`;
+#   - points the services at it (DB_HOST=mysql).
+# Only Traefik publishes a port (80), as on the hosts. MySQL is reachable only
+# on the `database` network; use `docker compose exec mysql mysql -uroot -p`.
+# Start again from an empty database: `docker compose ... down -v`.
+
+services:
+  client:
+    build: services/client
+
+  issue:
+    build: services/issue
+    networks: [database]
+    environment:
+      DB_HOST: mysql
+    depends_on:
+      mysql: { condition: service_healthy }
+
+  dispatch:
+    build: services/dispatch
+    networks: [database]
+    environment:
+      DB_HOST: mysql
+    depends_on:
+      mysql: { condition: service_healthy }
+
+  notification:
+    build: services/notification
+    networks: [database]
+    environment:
+      DB_HOST: mysql
+    depends_on:
+      mysql: { condition: service_healthy }
+
+  ai-triage:
+    build: services/ai-triage
+
+  calendar-sim:
+    build: services/calendar-sim
+
+  # Same image and pin as the database host (labdsof-infra,
+  # ansible/roles/database/files/compose.yaml).
+  mysql:
+    image: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set it in .env}
+      ISSUE_DB_PASSWORD: ${ISSUE_DB_PASSWORD:?set it in .env}
+      DISPATCH_DB_PASSWORD: ${DISPATCH_DB_PASSWORD:?set it in .env}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set it in .env}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set it in .env}
+    volumes:
+      - mysql:/var/lib/mysql
+      # Runs once, on the first start with an empty volume.
+      - ./local/mysql/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      # The root password is passed through the environment, not the command line.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [database]
+
+networks:
+  # No internet access needed: MySQL talks only to the services.
+  database:
+    internal: true
+
+volumes:
+  mysql: {}
