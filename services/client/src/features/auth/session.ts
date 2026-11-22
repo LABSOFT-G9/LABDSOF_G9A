@@ -71,6 +71,7 @@ export async function expireSession(context: AppContext, invalidate: () => Promi
 export function watchSession(context: AppContext, invalidate: () => Promise<void>): () => void {
   let known = readSession(context.queryClient)?.sub ?? null;
   let latest: Session | null = null;
+  let latestAt = 0;
   // Transitions run one at a time, each applying the NEWEST answer: if /me reports B and then C before B's cleanup
   // ran, no cleanup can write B back over C. (Running after the cache's notification also avoids re-entering it.)
   let queue = Promise.resolve();
@@ -82,9 +83,12 @@ export function watchSession(context: AppContext, invalidate: () => Promise<void
     known = session?.sub ?? null;
     if (event.action.manual || previous === null || previous === known) return;
     latest = session;
+    latestAt = event.query.state.dataUpdatedAt;
     queue = queue
       .then(async () => {
         const target = latest;
+        // Something newer was written since this answer (loadAuth already wiped for it, or a sign-in/out): skip.
+        if ((context.queryClient.getQueryState(sessionKey)?.dataUpdatedAt ?? 0) > latestAt) return;
         await context.queryClient.cancelQueries();
         // While cancelling, the user may have signed out (or in) here: if the cache no longer holds the answer this
         // cleanup was for, our own write is newer and wins. Never put another account back over it.

@@ -28,6 +28,7 @@ export function ErrorFallback({ error, reset }: ErrorComponentProps) {
       </h1>
       <ErrorState
         error={error}
+        showTitle={false}
         onRetry={() => {
           reset();
           void router.invalidate();

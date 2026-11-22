@@ -182,7 +182,7 @@ describe("watchSession", () => {
 
     expect(readSession(context.queryClient)).toEqual(third);
     expect(context.queryClient.getQueryData(["issues", "list"])).toBeUndefined();
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalled(); // once or twice: a later cleanup skips if a newer write landed
   });
 
   it("does nothing when the refetch names the same person", async () => {
@@ -202,7 +202,9 @@ describe("watchSession", () => {
       query,
       action: { type: "success", data: other, dataUpdatedAt: Date.now(), manual: false },
     });
-    writeSession(context.queryClient, null); // the user signs out before the queued cleanup runs
+    // The user signs out before the queued cleanup runs. (This proves the guard; it does not force the sign-out to
+    // land inside the cleanup's own `await cancelQueries()`, where the same check after the await applies.)
+    writeSession(context.queryClient, null);
     await flush();
 
     expect(readSession(context.queryClient)).toBeNull();
