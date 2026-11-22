@@ -4,6 +4,7 @@ import type { AppContext } from "@/app/context";
 import { type AuthState, loadAuth } from "@/features/auth";
 import { UpdatePrompt } from "@/features/pwa";
 import { NotFoundFallback } from "@/shared/components/fallbacks";
+import { useFocusOnNavigation } from "@/shared/hooks/use-focus-on-navigation";
 import { Toaster } from "@/shared/ui/sonner";
 
 export interface RouterContext extends AppContext {
@@ -19,6 +20,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function Root() {
   const router = useRouter();
+  useFocusOnNavigation();
   // Connection back: ask again (guards, loaders, stale queries).
   useEffect(() => {
     const online = () => void router.invalidate();

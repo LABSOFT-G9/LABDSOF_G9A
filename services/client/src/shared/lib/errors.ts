@@ -44,6 +44,6 @@ export const isApiError = (error: unknown, status?: number): error is ApiError =
 export const isClientError = (error: unknown): boolean =>
   error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429;
 
-/** The server could not be asked, or could not answer. Never evidence that the session ended. */
+/** The server could not be asked, could not answer, or asked us to slow down. Never evidence the session ended. */
 export const isUnavailable = (error: unknown): boolean =>
-  error instanceof NetworkError || (error instanceof ApiError && error.status >= 500);
+  error instanceof NetworkError || (error instanceof ApiError && (error.status >= 500 || error.status === 429));

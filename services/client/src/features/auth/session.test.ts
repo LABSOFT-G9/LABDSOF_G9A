@@ -37,16 +37,17 @@ describe("loadAuth", () => {
     await expect(loadAuth(contextWith(async () => null))).resolves.toEqual({ kind: "anonymous" });
   });
 
-  it.each([new NetworkError(), new ApiError(503, "DEPENDENCY_UNAVAILABLE", "down")])(
-    "is unreachable when the API cannot answer and nothing is known (%s)",
-    async (error) => {
-      const me = vi.fn(async () => {
-        throw error;
-      });
-      await expect(loadAuth(contextWith(me))).resolves.toEqual({ kind: "unreachable" });
-      expect(me).toHaveBeenCalledOnce(); // no retries holding the navigation
-    },
-  );
+  it.each([
+    new NetworkError(),
+    new ApiError(503, "DEPENDENCY_UNAVAILABLE", "down"),
+    new ApiError(429, "RATE_LIMITED", "slow down"),
+  ])("is unreachable when the API cannot answer and nothing is known (%s)", async (error) => {
+    const me = vi.fn(async () => {
+      throw error;
+    });
+    await expect(loadAuth(contextWith(me))).resolves.toEqual({ kind: "unreachable" });
+    expect(me).toHaveBeenCalledOnce(); // no retries holding the navigation
+  });
 
   it("is failed, not a crash, when /me answers something unusable", async () => {
     const error = new ContractError("GET /api/issue/me", ["email: required"]);
@@ -75,6 +76,29 @@ describe("loadAuth", () => {
     await expect(loadAuth(context)).resolves.toEqual({ kind: "anonymous" });
     expect(me).toHaveBeenCalledTimes(2);
   });
+
+  it("wipes the previous account's data before returning another account", async () => {
+    const me = vi.fn<AuthSession["me"]>(async () => session);
+    const context = contextWith(me);
+    await loadAuth(context);
+    context.queryClient.setQueryData(["issues", "list"], [{ id: "private" }]);
+    age(context);
+    me.mockResolvedValueOnce(other);
+    await expect(loadAuth(context)).resolves.toEqual({ kind: "signed-in", session: other });
+    expect(context.queryClient.getQueryData(["issues", "list"])).toBeUndefined();
+  });
+
+  it.each([new NetworkError(), new ApiError(429, "RATE_LIMITED", "slow down")])(
+    "keeps the known session through a blip (%s)",
+    async (error) => {
+      const me = vi.fn<AuthSession["me"]>(async () => session);
+      const context = contextWith(me);
+      await loadAuth(context);
+      age(context);
+      me.mockRejectedValueOnce(error);
+      await expect(loadAuth(context)).resolves.toEqual({ kind: "signed-in", session });
+    },
+  );
 
   it("keeps the known session through a network blip", async () => {
     const me = vi.fn<AuthSession["me"]>(async () => session);

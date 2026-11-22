@@ -128,7 +128,7 @@ colours appear only with an icon and text (NFR-07).
 **Strings.** Every user-facing string is in `src/shared/i18n/en.ts`, so adding pt-PT touches no component.
 
 **Page titles and focus** (WCAG 2.4.2, 2.4.3). `<PageHeader>` sets the tab title to "<page> · BMC" and renders the
-page's `<h1>`. After each in-app navigation, the shell moves focus to that heading, so screen readers announce the new
+page's `<h1>`. After each navigation (sign-in and sign-out included), the root route moves focus to that heading without scrolling, so screen readers announce the new
 page. A page without `<PageHeader>` renders `<DocumentTitle>` and an `<h1 tabIndex={-1}>` itself.
 
 ## Recipes

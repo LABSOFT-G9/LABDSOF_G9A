@@ -15,6 +15,7 @@ describe("safeRedirect", () => {
     "/\r/evil.test",
     "/%09/evil.test".replace("%09", "\t"),
     "/a\\b",
+    "/€",
     "issues",
     "",
     undefined,

@@ -29,7 +29,8 @@ describe("app (mock adapters)", () => {
     await screen.findByRole("heading", { name: "Sign in to BMC" });
     await user.click(screen.getByRole("button", { name: /Resident/ }));
 
-    await screen.findByRole("heading", { level: 1, name: "People" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "People" });
+    await waitFor(() => expect(heading).toHaveFocus()); // focus follows the sign-in navigation too
     expect(router.state.location.pathname).toBe("/example");
     expect(router.state.location.search).toEqual({ q: "demo" });
     expect(router.state.location.hash).toBe("results");

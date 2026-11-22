@@ -50,7 +50,9 @@ export function LoginPage({ auth, redirectTo }: { auth: AuthState; redirectTo: s
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-3 text-center">
           <Logo className="size-12" />
-          <h1 className="text-2xl font-semibold">{t.auth.title}</h1>
+          <h1 tabIndex={-1} className="text-2xl font-semibold outline-none">
+            {t.auth.title}
+          </h1>
           <p className="text-muted-foreground text-sm">{t.auth.subtitle}</p>
         </div>
 

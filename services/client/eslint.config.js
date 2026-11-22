@@ -95,6 +95,11 @@ export default tseslint.config(
           message:
             "Read configuration through useAppConfig() / AppConfig; src/app/config.ts is the only reader of import.meta.env.",
         },
+        {
+          selector: "VariableDeclarator[init.type='MetaProperty']",
+          message:
+            "Read configuration through useAppConfig() / AppConfig; src/app/config.ts is the only reader of import.meta.env.",
+        },
       ],
     },
   },

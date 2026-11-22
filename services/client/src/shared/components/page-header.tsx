@@ -3,7 +3,7 @@ import { DocumentTitle } from "@/shared/components/document-title";
 
 /**
  * The one <h1> of a page, with an optional subtitle and actions. Also sets the document title (WCAG 2.4.2); the
- * shell moves focus to this heading after each navigation, hence `tabIndex={-1}`.
+ * root route moves focus to this heading after each navigation, hence `tabIndex={-1}`.
  */
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (

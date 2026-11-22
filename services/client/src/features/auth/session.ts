@@ -19,10 +19,14 @@ const toState = (session: Session | null): AuthState =>
  * memory; once it is older than the query's stale time it is asked again, so an edge session that ended while the
  * app was open is noticed on the next navigation. A network blip keeps the session we already had.
  */
-export async function loadAuth({ queryClient, services }: AppContext): Promise<AuthState> {
+export async function loadAuth(context: AppContext): Promise<AuthState> {
+  const { queryClient, services } = context;
   const inMemory = readSession(queryClient);
   try {
-    return toState(await queryClient.fetchQuery(sessionQuery(services.auth)));
+    const session = await queryClient.fetchQuery(sessionQuery(services.auth));
+    // The re-ask found another account: wipe the previous one's data BEFORE any loader can read it from the cache.
+    if (inMemory && session && inMemory.sub !== session.sub) await forgetUserData(context, session);
+    return toState(session);
   } catch (error) {
     if (isUnavailable(error)) return inMemory === undefined ? { kind: "unreachable" } : toState(inMemory);
     return { kind: "failed", error };
