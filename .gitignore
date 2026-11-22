@@ -2,3 +2,8 @@
 # Lecturer document; not part of the repository
 LABDSOF-26-27-Assignment.pdf
 __pycache__/
+
+# Local environment (secrets); .env.example is the template
+.env
+.env.*
+!.env.example

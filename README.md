@@ -137,4 +137,21 @@ DEC-01: scope and IoT; DEC-03: team/schedule/Sprint B; DEC-04: stack and archite
 
 ## Run the project
 
-There is no application to run yet. The [walking skeleton plan](documents/10-walking-skeleton.md) is retained for later implementation planning, with fields for actual commands, environment and evidence. The team has excluded its development from Sprint 1 following the evaluator's clarification.
+### Locally with Docker
+
+Needs Docker with Compose v2 and port 80 free.
+
+```bash
+cp .env.example .env          # then change every password in .env
+docker compose -f compose.yaml -f compose.local.yaml up --build
+```
+
+Open <http://localhost>. The APIs are at `/api/issue`, `/api/dispatch` and `/api/notifications`.
+
+`compose.local.yaml` adds what a laptop needs on top of `compose.yaml`: it builds each service from its folder, and adds MySQL 8.4 with the `issue`, `dispatch`, `notification` and `keycloak` databases and users. Only Traefik publishes a port. `.env` is ignored by Git; `.env.example` lists every variable. To start again with an empty database: `docker compose -f compose.yaml -f compose.local.yaml down -v` (this deletes the local data). Keycloak, RabbitMQ and Mailpit are added when the services use them.
+
+On dev and prod the same `compose.yaml` runs on the application host and its values come from Parameter Store ([labdsof-infra](https://github.com/LABSOFT-G9/labdsof-infra)).
+
+### Walking skeleton
+
+The services are still skeletons. The [walking skeleton plan](documents/10-walking-skeleton.md) is retained for later implementation planning, with fields for actual commands, environment and evidence. The team has excluded its development from Sprint 1 following the evaluator's clarification.
