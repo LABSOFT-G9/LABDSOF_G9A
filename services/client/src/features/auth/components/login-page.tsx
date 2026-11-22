@@ -8,6 +8,7 @@ import { DocumentTitle } from "@/shared/components/document-title";
 import { ErrorState } from "@/shared/components/error-state";
 import { Logo } from "@/shared/components/logo";
 import { t } from "@/shared/i18n";
+import { isApiError } from "@/shared/lib/errors";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
@@ -60,7 +61,7 @@ export function LoginPage({ auth, redirectTo }: { auth: AuthState; redirectTo: s
           <Alert role="status">
             <CloudOff aria-hidden />
             <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-              {t.auth.unreachable}
+              {isApiError(auth.error, 429) ? t.auth.busy : t.auth.unreachable}
               <Button size="sm" variant="outline" onClick={() => void router.invalidate()}>
                 {t.common.retry}
               </Button>

@@ -4,7 +4,7 @@ import { DocumentTitle } from "@/shared/components/document-title";
 import { ErrorState } from "@/shared/components/error-state";
 import { t } from "@/shared/i18n";
 import { Button } from "@/shared/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/shared/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from "@/shared/ui/empty";
 import { Spinner } from "@/shared/ui/spinner";
 
 /** Shown only when a route takes longer than `defaultPendingMs`. */
@@ -22,6 +22,10 @@ export function ErrorFallback({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   return (
     <div className="mx-auto max-w-xl p-4">
+      <DocumentTitle title={t.common.errorTitle} />
+      <h1 tabIndex={-1} className="mb-4 text-2xl font-semibold outline-none">
+        {t.common.errorTitle}
+      </h1>
       <ErrorState
         error={error}
         onRetry={() => {
@@ -41,7 +45,10 @@ export function NotFoundFallback() {
         <EmptyMedia variant="icon">
           <SearchX aria-hidden />
         </EmptyMedia>
-        <EmptyTitle>{t.common.notFoundTitle}</EmptyTitle>
+        {/* A real heading: the page's <h1>, which focus moves to after navigation. */}
+        <h1 tabIndex={-1} className="text-lg font-medium tracking-tight outline-none">
+          {t.common.notFoundTitle}
+        </h1>
         <EmptyDescription>{t.common.notFoundBody}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>

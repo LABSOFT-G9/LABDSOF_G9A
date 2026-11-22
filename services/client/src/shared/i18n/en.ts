@@ -27,6 +27,7 @@ export const en = {
     personasTitle: "Choose a demo persona",
     personasHint: "Mock mode: there is no identity provider yet. Each persona is synthetic.",
     unreachable: "BMC could not be reached. Check your connection and try again.",
+    busy: "BMC is busy right now. Try again in a moment.",
     accountMenu: "Account menu",
   },
   common: {

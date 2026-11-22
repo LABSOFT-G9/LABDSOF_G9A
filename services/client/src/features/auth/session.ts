@@ -6,8 +6,8 @@ import { isUnavailable } from "@/shared/lib/errors";
 export type AuthState =
   | { readonly kind: "signed-in"; readonly session: Session }
   | { readonly kind: "anonymous" }
-  /** The API could not be reached, so nobody knows whether there is a session. */
-  | { readonly kind: "unreachable" }
+  /** The API could not be reached (or asked us to slow down), so nobody knows whether there is a session. */
+  | { readonly kind: "unreachable"; readonly error: unknown }
   /** The API answered something unusable (e.g. `/me` broke its contract). The login page shows it, with sign-out. */
   | { readonly kind: "failed"; readonly error: unknown };
 
@@ -28,7 +28,7 @@ export async function loadAuth(context: AppContext): Promise<AuthState> {
     if (inMemory && session && inMemory.sub !== session.sub) await forgetUserData(context, session);
     return toState(session);
   } catch (error) {
-    if (isUnavailable(error)) return inMemory === undefined ? { kind: "unreachable" } : toState(inMemory);
+    if (isUnavailable(error)) return inMemory === undefined ? { kind: "unreachable", error } : toState(inMemory);
     return { kind: "failed", error };
   }
 }
@@ -84,7 +84,13 @@ export function watchSession(context: AppContext, invalidate: () => Promise<void
     latest = session;
     queue = queue
       .then(async () => {
-        await forgetUserData(context, latest);
+        const target = latest;
+        await context.queryClient.cancelQueries();
+        // While cancelling, the user may have signed out (or in) here: if the cache no longer holds the answer this
+        // cleanup was for, our own write is newer and wins. Never put another account back over it.
+        if ((readSession(context.queryClient)?.sub ?? null) !== (target?.sub ?? null)) return;
+        context.queryClient.clear();
+        writeSession(context.queryClient, target);
         await invalidate();
       })
       .catch(() => undefined);

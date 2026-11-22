@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Search, Users } from "lucide-react";
-import { type FormEvent, useId } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { useServices } from "@/app/context";
 import { peopleQuery } from "@/features/example/api";
 import { CreatePersonForm } from "@/features/example/create-person-form";
@@ -24,10 +24,18 @@ export function PeoplePage({ search }: { search: string | undefined }) {
   const query = useQuery(peopleQuery(example, search));
   const navigate = useNavigate();
   const searchId = useId();
+  // Controlled, and re-synced when the URL changes (back/forward) by adjusting state during render: no remount, so
+  // focus stays in the field after a search. https://react.dev/learn/you-might-not-need-an-effect
+  const [draft, setDraft] = useState(search ?? "");
+  const [syncedSearch, setSyncedSearch] = useState(search);
+  if (syncedSearch !== search) {
+    setSyncedSearch(search);
+    setDraft(search ?? "");
+  }
 
   function onSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const q = String(new FormData(event.currentTarget).get("q") ?? "").trim();
+    const q = draft.trim();
     void navigate({ to: "/example", search: { q: q || undefined }, replace: true });
   }
 
@@ -45,10 +53,10 @@ export function PeoplePage({ search }: { search: string | undefined }) {
             </label>
             <Input
               id={searchId}
-              key={search ?? ""}
               name="q"
               type="search"
-              defaultValue={search ?? ""}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
               placeholder={t.example.searchPlaceholder}
             />
             <Button type="submit" variant="outline">

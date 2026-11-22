@@ -52,6 +52,44 @@ describe("app (mock adapters)", () => {
     expect(document.title).toBe("Settings · BMC");
   });
 
+  it("gives the error page a heading and a title, and focuses it", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("bmc-mock-persona", "resident");
+    const example = {
+      listPeople: async () => {
+        throw new ApiError(409, "INVALID_TRANSITION", "Boom.");
+      },
+      getPerson: async () => {
+        throw new Error("unused");
+      },
+      createPerson: async () => {
+        throw new Error("unused");
+      },
+    };
+    renderApp("/dashboard", { services: { example } });
+    await screen.findByRole("heading", { level: 1, name: "Hello, Demo" });
+
+    const nav = screen.getAllByRole("navigation", { name: "Main" })[0]!;
+    await user.click(within(nav).getByRole("link", { name: "People" }));
+
+    const heading = await screen.findByRole("heading", { level: 1, name: "Something went wrong" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(document.title).toBe("Something went wrong · BMC");
+  });
+
+  it("keeps focus in the search field after searching", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("bmc-mock-persona", "resident");
+    const { router } = renderApp("/example");
+
+    const field = await screen.findByRole("searchbox", { name: "Search people" });
+    await user.type(field, "bea{Enter}");
+
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "bea" }));
+    expect(await screen.findByText("Bea Sample")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search people" })).toHaveFocus();
+  });
+
   it("hides the admin area from non-staff as not found", async () => {
     localStorage.setItem("bmc-mock-persona", "resident");
     renderApp("/admin");

@@ -45,7 +45,7 @@ describe("loadAuth", () => {
     const me = vi.fn(async () => {
       throw error;
     });
-    await expect(loadAuth(contextWith(me))).resolves.toEqual({ kind: "unreachable" });
+    await expect(loadAuth(contextWith(me))).resolves.toEqual({ kind: "unreachable", error });
     expect(me).toHaveBeenCalledOnce(); // no retries holding the navigation
   });
 
@@ -190,6 +190,22 @@ describe("watchSession", () => {
     await context.queryClient.refetchQueries({ queryKey: sessionKey });
     await flush();
     expect(context.queryClient.getQueryData(["issues", "list"])).toBeDefined();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("never writes another account back over a sign-out made while its cleanup was pending", async () => {
+    const { context, invalidate } = await signedIn(async () => other);
+    const query = context.queryClient.getQueryCache().find({ queryKey: sessionKey })!;
+    query.setState({ data: other, dataUpdatedAt: Date.now(), status: "success" });
+    context.queryClient.getQueryCache().notify({
+      type: "updated",
+      query,
+      action: { type: "success", data: other, dataUpdatedAt: Date.now(), manual: false },
+    });
+    writeSession(context.queryClient, null); // the user signs out before the queued cleanup runs
+    await flush();
+
+    expect(readSession(context.queryClient)).toBeNull();
     expect(invalidate).not.toHaveBeenCalled();
   });
 
