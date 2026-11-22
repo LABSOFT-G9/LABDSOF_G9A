@@ -66,6 +66,10 @@ export async function expireSession(context: AppContext, invalidate: () => Promi
  */
 export function watchSession(context: AppContext, invalidate: () => Promise<void>): () => void {
   let known = readSession(context.queryClient)?.sub ?? null;
+  let latest: Session | null = null;
+  // Transitions run one at a time, each applying the NEWEST answer: if /me reports B and then C before B's cleanup
+  // ran, no cleanup can write B back over C. (Running after the cache's notification also avoids re-entering it.)
+  let queue = Promise.resolve();
   return context.queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.query.queryKey[0] !== sessionKey[0]) return;
     if (event.action.type !== "success") return;
@@ -73,10 +77,13 @@ export function watchSession(context: AppContext, invalidate: () => Promise<void
     const previous = known;
     known = session?.sub ?? null;
     if (event.action.manual || previous === null || previous === known) return;
-    // Not inside the cache's own notification: clearing the cache from here would re-enter it.
-    queueMicrotask(() => {
-      void forgetUserData(context, session).then(invalidate);
-    });
+    latest = session;
+    queue = queue
+      .then(async () => {
+        await forgetUserData(context, latest);
+        await invalidate();
+      })
+      .catch(() => undefined);
   });
 }
 

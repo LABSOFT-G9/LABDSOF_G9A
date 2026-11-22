@@ -139,6 +139,28 @@ describe("watchSession", () => {
     expect(invalidate).toHaveBeenCalledOnce();
   });
 
+  it("applies overlapping changes in order and ends on the newest session", async () => {
+    const third: Session = { ...session, sub: "third" };
+    const { context, invalidate } = await signedIn(async () => other);
+    const query = context.queryClient.getQueryCache().find({ queryKey: sessionKey })!;
+    // Two server answers back to back, before any cleanup has run: B, then C.
+    const answer = (data: Session) => {
+      query.setState({ data, dataUpdatedAt: Date.now(), status: "success" });
+      context.queryClient.getQueryCache().notify({
+        type: "updated",
+        query,
+        action: { type: "success", data, dataUpdatedAt: Date.now(), manual: false },
+      });
+    };
+    answer(other);
+    answer(third);
+    await flush();
+
+    expect(readSession(context.queryClient)).toEqual(third);
+    expect(context.queryClient.getQueryData(["issues", "list"])).toBeUndefined();
+    expect(invalidate).toHaveBeenCalledTimes(2);
+  });
+
   it("does nothing when the refetch names the same person", async () => {
     const { context, invalidate } = await signedIn(async () => session);
     await context.queryClient.refetchQueries({ queryKey: sessionKey });
