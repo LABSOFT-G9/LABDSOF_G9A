@@ -1,13 +1,16 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
-import { isApiError, isClientError, NetworkError } from "@/shared/lib/errors";
+import { ContractError, isApiError, isClientError } from "@/shared/lib/errors";
 
 /** How long data counts as fresh by default. Mutations invalidate what they change. */
 export const STALE_TIME_MS = 30_000;
 const MAX_RETRIES = 3;
 
-/** A 4xx is a definite answer; network errors, 429 and 5xx retry with backoff, but not while offline. */
+/**
+ * Network errors, 429 and 5xx retry with backoff. Not retried: a 4xx (a definite answer), a ContractError (the same
+ * body will break the contract again) and anything while offline (the `online` event re-runs the loaders instead).
+ */
 export const retryPolicy = (failureCount: number, error: unknown): boolean =>
-  !isClientError(error) && failureCount < MAX_RETRIES && (navigator.onLine || !(error instanceof NetworkError));
+  navigator.onLine && failureCount < MAX_RETRIES && !isClientError(error) && !(error instanceof ContractError);
 
 const retryDelay = (attempt: number): number => Math.min(800 * 2 ** attempt, 10_000);
 

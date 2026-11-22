@@ -38,6 +38,15 @@ describe("static delivery", () => {
     expect(vite).toBe(nginx);
   });
 
+  it("the service worker never caches API responses and lets edge navigations through (ADR-011)", () => {
+    const vite = read("vite.config.ts");
+    expect(vite).toMatch(/runtimeCaching: \[\]/);
+    expect(vite).toMatch(/registerType: "prompt"/);
+    expect(vite).toMatch(/navigateFallbackDenylist: EDGE_PATHS\.map/);
+    const edge = vite.match(/const EDGE_PATHS = \[([^\]]+)\]/)?.[1] ?? "";
+    for (const path of ["/api", "/oidc", "/logout", "/auth"]) expect(edge).toContain(`"${path}"`);
+  });
+
   it("index.html declares no manifest of its own (vite-plugin-pwa injects it)", () => {
     expect(read("index.html")).not.toContain('rel="manifest"');
   });
