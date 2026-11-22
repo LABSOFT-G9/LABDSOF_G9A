@@ -58,7 +58,8 @@ export function PeoplePage({ search }: { search: string | undefined }) {
           </form>
 
           {query.isPending ? (
-            <div className="space-y-2" aria-busy="true" aria-label={t.common.loading}>
+            <div className="space-y-2" role="status">
+              <span className="sr-only">{t.common.loading}</span>
               {[0, 1, 2, 3, 4].map((i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}

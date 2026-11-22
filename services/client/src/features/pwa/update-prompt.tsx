@@ -4,6 +4,8 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 import { t } from "@/shared/i18n";
 
 const CHECK_EVERY_MS = 60 * 60_000;
+/** Module-level, so a remount (StrictMode, HMR) replaces the hourly check instead of adding another. */
+let updateTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
  * Registers the service worker and, when a new version is waiting, asks before reloading ("prompt", ADR-011):
@@ -17,7 +19,8 @@ export function UpdatePrompt() {
     onRegisteredSW(_url, registration) {
       if (!registration) return;
       // Long-lived tabs and installed apps check for a new version every hour.
-      setInterval(() => void registration.update().catch(() => undefined), CHECK_EVERY_MS);
+      clearInterval(updateTimer);
+      updateTimer = setInterval(() => void registration.update().catch(() => undefined), CHECK_EVERY_MS);
     },
   });
 

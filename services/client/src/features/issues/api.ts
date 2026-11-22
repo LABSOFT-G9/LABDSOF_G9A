@@ -11,5 +11,5 @@ export const issueKeys = {
 export const issueListQuery = (issues: IssueApi) =>
   queryOptions({
     queryKey: issueKeys.list(),
-    queryFn: () => issues.list(),
+    queryFn: ({ signal }) => issues.list(signal),
   });

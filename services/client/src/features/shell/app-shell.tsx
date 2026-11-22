@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useRef } from "react";
 import { useAppConfig } from "@/app/context";
 import { InstallButton } from "@/features/install";
 import { navFor } from "@/features/shell/nav";
@@ -25,6 +25,22 @@ import {
   SidebarTrigger,
 } from "@/shared/ui/sidebar";
 
+/**
+ * After a navigation inside the app, move focus to the new page's <h1> (or <main>), so keyboard and screen-reader
+ * users land on the new content and hear its name, instead of staying on the link they used. Not on first load.
+ */
+function useFocusOnNavigation() {
+  const pathname = useRouterState({ select: (state) => state.resolvedLocation?.pathname });
+  const previous = useRef(pathname);
+  useEffect(() => {
+    if (previous.current === pathname) return;
+    previous.current = pathname;
+    const main = document.getElementById("main");
+    const target = main?.querySelector<HTMLElement>("h1") ?? main;
+    target?.focus();
+  }, [pathname]);
+}
+
 const readSidebarOpen = () => {
   try {
     return localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "false";
@@ -40,6 +56,7 @@ const readSidebarOpen = () => {
 export function AppShell({ session, children }: { session: Session; children: ReactNode }) {
   const { adapters } = useAppConfig();
   const items = navFor(session);
+  useFocusOnNavigation();
 
   return (
     <SidebarProvider defaultOpen={readSidebarOpen()}>

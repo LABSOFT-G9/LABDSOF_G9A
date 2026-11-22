@@ -66,6 +66,8 @@ exception.
   (loaders, guards). That is what makes mock ↔ HTTP a one-line switch.
 - **Imports inside `src/` use `@/` only**: `@/shared/ui/button`, never `./button` or `../ui/button`. Lint enforces it.
   The generated `src/routeTree.gen.ts` is the only exception.
+- **The network and the environment have one door each.** Lint rejects `fetch`, `XMLHttpRequest`, `WebSocket` and
+  `EventSource` outside `src/adapters/http/`, and `import.meta.env` outside `src/app/config.ts`.
 
 ## How the pieces fit
 
@@ -90,8 +92,19 @@ session (`createQueryClient` → `expireSession`).
 `Idempotency-Key`, which you can pass in to make a retry of the same action safe. `If-Match` is opt-in via `ifMatch`.
 
 **Authentication** (ADR-005: BFF at the edge). The browser never sees a token. `AuthSession.me()` is
-`GET /api/issue/me`, where a 401 means "no session"; `login()` and `logout()` navigate to the edge OIDC plugin's paths.
-The root route resolves the session before any guard runs. Guards are UX, never the security control:
+`GET /api/issue/me`, where a 401 means "no session". `login()` and `logout()` navigate to the edge OIDC plugin's paths;
+their HTTP promises never settle, because the page is leaving.
+
+The root route resolves the session before any guard runs:
+
+- it reuses the session for 5 minutes, then asks again on the next navigation;
+- a network blip keeps the known session;
+- an unusable `/me` shows on the login page, with a sign-out button.
+
+`watchSession` reacts when a background refetch finds the session ended, or a different account: it wipes the previous
+person's cached data and re-runs the guards.
+
+Guards are UX, never the security control:
 
 - `requireSession` (`_app` layout) sends you to `/login?redirect=…`;
 - `requirePlatformRole` answers **not found**, never "forbidden";
@@ -113,6 +126,10 @@ The theme follows the system with a toggle, and `public/theme-init.js` applies i
 colours appear only with an icon and text (NFR-07).
 
 **Strings.** Every user-facing string is in `src/shared/i18n/en.ts`, so adding pt-PT touches no component.
+
+**Page titles and focus** (WCAG 2.4.2, 2.4.3). `<PageHeader>` sets the tab title to "<page> · BMC" and renders the
+page's `<h1>`. After each in-app navigation, the shell moves focus to that heading, so screen readers announce the new
+page. A page without `<PageHeader>` renders `<DocumentTitle>` and an `<h1 tabIndex={-1}>` itself.
 
 ## Recipes
 
@@ -187,7 +204,12 @@ The `/admin` page is a placeholder for the role-guard example.
 - a restrictive Content-Security-Policy with `script-src 'self'`, `X-Frame-Options: DENY`, `nosniff`,
   `Referrer-Policy: no-referrer` and a `Permissions-Policy`.
 
-`test/static.test.ts` checks that `index.html` has no inline script and that the CSP is present.
+`npm run preview` sends the same CSP, so a violation shows up locally too. `npm run dev` does not, because Vite's dev
+server needs inline scripts. `test/static.test.ts` checks that:
+
+- `index.html` has no inline script;
+- the CSP is present;
+- nginx and `vite preview` send the same CSP string.
 
 ## Known limits
 

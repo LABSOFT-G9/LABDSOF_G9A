@@ -15,10 +15,10 @@ export const personKeys = {
 };
 
 export const peopleQuery = (example: ExampleApi, search: string | undefined) =>
-  queryOptions({ queryKey: personKeys.list(search), queryFn: () => example.listPeople({ search }) });
+  queryOptions({ queryKey: personKeys.list(search), queryFn: ({ signal }) => example.listPeople({ search }, signal) });
 
 export const personQuery = (example: ExampleApi, id: number) =>
-  queryOptions({ queryKey: personKeys.detail(id), queryFn: () => example.getPerson(id) });
+  queryOptions({ queryKey: personKeys.detail(id), queryFn: ({ signal }) => example.getPerson(id, signal) });
 
 export const createPersonMutation = (example: ExampleApi, queryClient: QueryClient) =>
   mutationOptions({

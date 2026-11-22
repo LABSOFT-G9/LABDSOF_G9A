@@ -4,6 +4,14 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+/**
+ * The Content-Security-Policy of the deployed app. nginx.conf serves the same string (test/static.test.ts checks
+ * they match); `vite preview` sends it too, so a CSP violation shows up locally, not only in the Docker image.
+ * Not on `npm run dev`: Vite's dev server needs inline scripts for hot reload.
+ */
+const CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
 /** Paths answered by the edge (Traefik + its OIDC plugin, ADR-004/005), never by the SPA or its service worker. */
 const EDGE_PATHS = ["/api", "/oidc", "/logout", "/auth"];
 
@@ -72,6 +80,6 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     server: { port: 5173, proxy },
-    preview: { port: 4173, proxy },
+    preview: { port: 4173, proxy, headers: { "Content-Security-Policy": CSP } },
   };
 });

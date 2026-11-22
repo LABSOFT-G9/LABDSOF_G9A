@@ -1,11 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { ChevronRight, CloudOff, LogIn } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
+import { ChevronRight, CloudOff, LogIn, LogOut } from "lucide-react";
 import { useAppContext } from "@/app/context";
 import type { AuthState } from "@/features/auth/session";
-import { startSession } from "@/features/auth/session";
-import { Logo } from "@/shared/components/logo";
+import { signOut, startSession } from "@/features/auth/session";
+import { DocumentTitle } from "@/shared/components/document-title";
 import { ErrorState } from "@/shared/components/error-state";
+import { Logo } from "@/shared/components/logo";
 import { t } from "@/shared/i18n";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
@@ -20,18 +21,24 @@ export function LoginPage({ auth, redirectTo }: { auth: AuthState; redirectTo: s
   const context = useAppContext();
   const { services } = context;
   const router = useRouter();
-  const navigate = useNavigate();
 
   const signIn = useMutation({
     mutationFn: async (personaId: string | null) => {
       if (personaId && services.devPersonas) {
         await services.devPersonas.signInAs(personaId);
         await startSession(context);
-        await router.invalidate();
-        await navigate({ to: redirectTo, replace: true });
+        // `href`, not `to`: the return target may carry ?query and #hash.
+        await router.navigate({ href: redirectTo, replace: true });
       } else {
+        // The HTTP adapter leaves the page and never settles, so the button stays "Signing in…" until it unloads.
         await services.auth.login(redirectTo);
       }
+    },
+  });
+  const leave = useMutation({
+    mutationFn: async () => {
+      await signOut(context);
+      await router.invalidate(); // mock adapter only: the HTTP one has left the page
     },
   });
 
@@ -39,6 +46,7 @@ export function LoginPage({ auth, redirectTo }: { auth: AuthState; redirectTo: s
 
   return (
     <main id="main" className="flex min-h-dvh items-center justify-center p-4 pt-safe pb-safe">
+      <DocumentTitle title={t.auth.signIn} />
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-3 text-center">
           <Logo className="size-12" />
@@ -58,9 +66,20 @@ export function LoginPage({ auth, redirectTo }: { auth: AuthState; redirectTo: s
           </Alert>
         ) : null}
 
+        {auth.kind === "failed" ? (
+          // The session could not be read (e.g. /me broke its contract): let the user retry, or sign out and switch.
+          <div className="space-y-3">
+            <ErrorState error={auth.error} onRetry={() => void router.invalidate()} />
+            <Button variant="outline" className="w-full" disabled={leave.isPending} onClick={() => leave.mutate()}>
+              <LogOut aria-hidden />
+              {t.auth.signOut}
+            </Button>
+          </div>
+        ) : null}
+
         {signIn.isError ? <ErrorState error={signIn.error} /> : null}
 
-        {personas.length > 0 ? (
+        {auth.kind === "failed" ? null : personas.length > 0 ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t.auth.personasTitle}</CardTitle>

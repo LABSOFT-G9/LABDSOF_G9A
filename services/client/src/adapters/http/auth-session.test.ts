@@ -39,11 +39,14 @@ describe("httpAuthSession (BFF at the edge)", () => {
     await expect(auth.me()).rejects.toMatchObject({ status: 503 });
   });
 
-  it("navigates to the edge login and logout paths", async () => {
+  it("navigates to the edge login and logout paths, and never settles (the page is leaving)", async () => {
     const { auth, navigate } = setup(new Response(null, { status: 204 }));
-    await auth.login("/issues?x=1");
+    const settled = vi.fn();
+    void auth.login("/issues?x=1").then(settled, settled);
     expect(navigate).toHaveBeenLastCalledWith("/oidc/login?redirect=%2Fissues%3Fx%3D1");
-    await auth.logout();
+    void auth.logout().then(settled, settled);
     expect(navigate).toHaveBeenLastCalledWith("/logout");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).not.toHaveBeenCalled();
   });
 });

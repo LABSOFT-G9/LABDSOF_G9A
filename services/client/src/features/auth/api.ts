@@ -8,6 +8,9 @@ export const sessionQuery = (auth: AuthSession) =>
     queryKey: sessionKey,
     queryFn: () => auth.me(),
     staleTime: 5 * 60_000,
+    // The root route waits for this answer: fail fast and let the login page offer the retry, instead of holding
+    // every navigation through the default backoff while the API is down.
+    retry: false,
   });
 
 export const readSession = (queryClient: QueryClient): Session | null | undefined =>

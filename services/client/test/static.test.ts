@@ -30,4 +30,15 @@ describe("static delivery", () => {
     expect(csp).not.toMatch(/script-src[^;]*'unsafe-(inline|eval)'/);
     expect(csp).not.toMatch(/https?:/);
   });
+
+  it("vite preview sends the same CSP as nginx", () => {
+    const nginx = read("nginx.conf").match(/Content-Security-Policy "([^"]+)" always/)?.[1];
+    const vite = read("vite.config.ts").match(/const CSP =\s*"([^"]+)"/)?.[1];
+    expect(vite).toBeDefined();
+    expect(vite).toBe(nginx);
+  });
+
+  it("index.html declares no manifest of its own (vite-plugin-pwa injects it)", () => {
+    expect(read("index.html")).not.toContain('rel="manifest"');
+  });
 });

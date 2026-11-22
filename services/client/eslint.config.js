@@ -68,6 +68,37 @@ export default tseslint.config(
     },
   },
   {
+    // The network only through the HTTP adapters; the environment only through src/app/config.ts. Otherwise a feature
+    // could bypass its port, and mock/HTTP switching would silently stop covering it.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/adapters/http/**", "src/app/config.ts", "src/**/*.test.{ts,tsx}", "src/test/**"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...["fetch", "XMLHttpRequest", "WebSocket", "EventSource"].map((name) => ({
+          name,
+          message: "Reach the network through a port and its HTTP adapter (src/adapters/http).",
+        })),
+      ],
+      "no-restricted-properties": [
+        "error",
+        ...["window", "globalThis", "self"].map((object) => ({
+          object,
+          property: "fetch",
+          message: "Reach the network through a port and its HTTP adapter (src/adapters/http).",
+        })),
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.type='MetaProperty'][property.name='env']",
+          message:
+            "Read configuration through useAppConfig() / AppConfig; src/app/config.ts is the only reader of import.meta.env.",
+        },
+      ],
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/routeTree.gen.ts"],
     plugins: { boundaries },

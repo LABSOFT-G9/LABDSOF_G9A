@@ -13,14 +13,21 @@ describe("readConfig", () => {
   });
 
   it("reads the variables, treating empty values as unset", () => {
-    const config = readConfig({ VITE_ADAPTERS: "http", VITE_MOCK_LATENCY_MS: "", VITE_LOGIN_URI: "/login", DEV: true });
-    expect(config).toMatchObject({ adapters: "http", mockLatencyMs: 300, loginUri: "/login", dev: true });
+    const config = readConfig({
+      VITE_ADAPTERS: "http",
+      VITE_MOCK_LATENCY_MS: "",
+      VITE_LOGIN_URI: "/oidc/start",
+      DEV: true,
+    });
+    expect(config).toMatchObject({ adapters: "http", mockLatencyMs: 300, loginUri: "/oidc/start", dev: true });
   });
 
-  it.each([{ VITE_ADAPTERS: "graphql" }, { VITE_LOGIN_URI: "https://idp.test/login" }, { VITE_LOGOUT_URI: "//x" }])(
-    "fails loudly on %o",
-    (env) => {
-      expect(() => readConfig(env)).toThrow(/Invalid client configuration/);
-    },
-  );
+  it.each([
+    { VITE_ADAPTERS: "graphql" },
+    { VITE_LOGIN_URI: "https://idp.test/login" },
+    { VITE_LOGOUT_URI: "//x" },
+    { VITE_LOGIN_URI: "/sign-in" },
+  ])("fails loudly on %o", (env) => {
+    expect(() => readConfig(env)).toThrow(/Invalid client configuration/);
+  });
 });

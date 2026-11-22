@@ -10,9 +10,12 @@ export type Session = Me;
 export interface AuthSession {
   /** The signed-in user, or `null` when there is no session. Throws `NetworkError`/`ApiError` when it cannot tell. */
   me(): Promise<Session | null>;
-  /** Start a sign-in that returns to `returnTo` (a same-origin path). The HTTP adapter leaves the page. */
+  /**
+   * Start a sign-in that returns to `returnTo` (a same-origin path). The HTTP adapter leaves the page and its
+   * promise never settles, so code after `await login()` runs only with adapters that stay (the mock).
+   */
   login(returnTo: string): Promise<void>;
-  /** End the session. The HTTP adapter leaves the page. */
+  /** End the session. Like `login`, the HTTP adapter leaves the page and never settles. */
   logout(): Promise<void>;
 }
 

@@ -15,6 +15,9 @@ export interface EdgeAuthConfig {
  * Session through the Backend-for-Frontend at the edge (ADR-005): Traefik's OIDC plugin holds the tokens and the
  * browser only an HttpOnly cookie. `GET /api/issue/me` answers who it is; a 401 means "no session".
  */
+/** The page is being replaced: nothing after this should run, so the promise stays pending (see the port). */
+const leave = () => new Promise<never>(() => undefined);
+
 export function httpAuthSession(http: HttpClient, config: EdgeAuthConfig): AuthSession {
   const navigate = config.navigate ?? ((url: string) => window.location.assign(url));
   return {
@@ -29,9 +32,11 @@ export function httpAuthSession(http: HttpClient, config: EdgeAuthConfig): AuthS
     async login(returnTo) {
       // How the plugin returns the user to `returnTo` is a detail of spike item 3; the parameter name may change.
       navigate(`${config.loginUri}?redirect=${encodeURIComponent(returnTo)}`);
+      return leave();
     },
     async logout() {
       navigate(config.logoutUri);
+      return leave();
     },
   };
 }

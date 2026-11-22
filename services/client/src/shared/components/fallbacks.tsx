@@ -1,5 +1,6 @@
 import { type ErrorComponentProps, Link, useRouter } from "@tanstack/react-router";
 import { SearchX } from "lucide-react";
+import { DocumentTitle } from "@/shared/components/document-title";
 import { ErrorState } from "@/shared/components/error-state";
 import { t } from "@/shared/i18n";
 import { Button } from "@/shared/ui/button";
@@ -35,6 +36,7 @@ export function ErrorFallback({ error, reset }: ErrorComponentProps) {
 export function NotFoundFallback() {
   return (
     <Empty className="min-h-[50vh]">
+      <DocumentTitle title={t.common.notFoundTitle} />
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <SearchX aria-hidden />

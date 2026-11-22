@@ -8,8 +8,8 @@ const SearchSchema = z.object({ redirect: z.string().optional().catch(undefined)
 export const Route = createFileRoute("/login")({
   validateSearch: SearchSchema,
   beforeLoad: ({ context, search }) => {
-    // Already signed in: straight to where they were going.
-    if (context.auth.kind === "signed-in") throw redirect({ to: safeRedirect(search.redirect), replace: true });
+    // Already signed in: straight to where they were going. `href`, because the target may carry ?query and #hash.
+    if (context.auth.kind === "signed-in") throw redirect({ href: safeRedirect(search.redirect), replace: true });
   },
   component: LoginRoute,
 });

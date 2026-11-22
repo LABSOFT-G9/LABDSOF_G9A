@@ -6,13 +6,19 @@ z.config({ jitless: true });
 const AdapterModeSchema = z.enum(["mock", "http"]);
 export type AdapterMode = z.infer<typeof AdapterModeSchema>;
 
-const sameOriginPath = z.string().regex(/^\/(?!\/)/, "must be a same-origin path starting with a single /");
+/**
+ * Login and logout must be navigations the service worker lets reach the network: one of the edge prefixes in
+ * vite.config.ts (EDGE_PATHS). Anything else would be answered by the cached app shell and sign-in would break.
+ */
+const edgePath = z
+  .string()
+  .regex(/^\/(api|oidc|logout|auth)(\/|\?|$)/, "must be a same-origin path under /oidc, /logout, /auth or /api");
 
 const EnvSchema = z.object({
   VITE_ADAPTERS: AdapterModeSchema.default("mock"),
   VITE_MOCK_LATENCY_MS: z.coerce.number().int().min(0).max(10_000).default(300),
-  VITE_LOGIN_URI: sameOriginPath.default("/oidc/login"),
-  VITE_LOGOUT_URI: sameOriginPath.default("/logout"),
+  VITE_LOGIN_URI: edgePath.default("/oidc/login"),
+  VITE_LOGOUT_URI: edgePath.default("/logout"),
 });
 
 export interface AppConfig {

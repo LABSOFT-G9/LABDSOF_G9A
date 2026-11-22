@@ -6,7 +6,10 @@ import { signOut } from "@/features/auth/session";
 import { t } from "@/shared/i18n";
 import { DropdownMenuItem } from "@/shared/ui/dropdown-menu";
 
-/** A menu item: clears local data, ends the session (the BFF adapter leaves the page), then shows the login page. */
+/**
+ * A menu item: clears local data and ends the session. The HTTP adapter leaves the page (its promise never settles);
+ * the mock one returns, and then the login page is shown.
+ */
 export function SignOutButton() {
   const context = useAppContext();
   const navigate = useNavigate();

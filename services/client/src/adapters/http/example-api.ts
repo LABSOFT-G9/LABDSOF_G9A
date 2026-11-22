@@ -30,14 +30,14 @@ export function toPerson(dto: PersonDto): Person {
  */
 export function httpExampleApi(http: HttpClient): ExampleApi {
   return {
-    async listPeople({ search }) {
+    async listPeople({ search }, signal) {
       const query = new URLSearchParams({ limit: String(PAGE_SIZE), select: FIELDS });
       const q = search?.trim();
       if (q) query.set("q", q);
       const path = q ? `${PREFIX}/users/search?${query}` : `${PREFIX}/users?${query}`;
-      return (await http.get(path, PeoplePageDtoSchema)).users.map(toPerson);
+      return (await http.get(path, PeoplePageDtoSchema, signal)).users.map(toPerson);
     },
-    getPerson: async (id) => toPerson(await http.get(`${PREFIX}/users/${id}`, PersonDtoSchema)),
+    getPerson: async (id, signal) => toPerson(await http.get(`${PREFIX}/users/${id}`, PersonDtoSchema, signal)),
     // DummyJSON fakes writes: it answers as if it stored the person, but nothing is kept.
     createPerson: async (input) =>
       toPerson(await http.request("POST", `${PREFIX}/users/add`, { schema: PersonDtoSchema, body: input })),

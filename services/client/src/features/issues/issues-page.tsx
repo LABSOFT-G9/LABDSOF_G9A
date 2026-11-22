@@ -19,7 +19,8 @@ export function IssuesPage() {
     <>
       <PageHeader title={t.issues.title} subtitle={t.issues.subtitle} />
       {query.isPending ? (
-        <div className="space-y-3" aria-busy="true" aria-label={t.common.loading}>
+        <div className="space-y-3" role="status">
+          <span className="sr-only">{t.common.loading}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-20 w-full" />
           ))}

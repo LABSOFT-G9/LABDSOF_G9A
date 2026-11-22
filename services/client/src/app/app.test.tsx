@@ -22,6 +22,35 @@ describe("app (mock adapters)", () => {
     expect(screen.queryByText("Water leak in the entrance hall")).not.toBeInTheDocument();
   });
 
+  it("returns to a target with a query and a hash after sign-in", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/example?q=demo#results");
+
+    await screen.findByRole("heading", { name: "Sign in to BMC" });
+    await user.click(screen.getByRole("button", { name: /Resident/ }));
+
+    await screen.findByRole("heading", { level: 1, name: "People" });
+    expect(router.state.location.pathname).toBe("/example");
+    expect(router.state.location.search).toEqual({ q: "demo" });
+    expect(router.state.location.hash).toBe("results");
+  });
+
+  it("titles each page and moves focus to its heading after navigating", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("bmc-mock-persona", "resident");
+    renderApp("/dashboard");
+
+    await screen.findByRole("heading", { level: 1, name: "Hello, Demo" });
+    await waitFor(() => expect(document.title).toBe("Hello, Demo · BMC"));
+
+    const nav = screen.getAllByRole("navigation", { name: "Main" })[0]!;
+    await user.click(within(nav).getByRole("link", { name: "Settings" }));
+
+    const heading = await screen.findByRole("heading", { level: 1, name: "Settings" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(document.title).toBe("Settings · BMC");
+  });
+
   it("hides the admin area from non-staff as not found", async () => {
     localStorage.setItem("bmc-mock-persona", "resident");
     renderApp("/admin");

@@ -28,7 +28,9 @@ export type Membership = z.infer<typeof MembershipSchema>;
 export const MeSchema = z.object({
   sub: z.string(),
   name: z.string(),
-  email: z.email(),
+  // A plain string: the client only displays it, and a strict format check here would lock out a user whose
+  // identity-provider email is unusual (the root route needs /me to parse before anything renders).
+  email: z.string(),
   memberships: z.array(MembershipSchema),
   platformRoles: z.array(PlatformRoleSchema).default([]),
   contractor: z.object({ id: z.string(), status: z.enum(["pending", "active", "suspended"]) }).nullable(),

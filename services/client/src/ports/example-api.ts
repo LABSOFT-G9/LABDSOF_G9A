@@ -17,7 +17,8 @@ export interface Person {
 
 /** A port with a filtered list, a detail and a mutation: the three shapes every feature needs. */
 export interface ExampleApi {
-  listPeople(filter: { search?: string | undefined }): Promise<Person[]>;
-  getPerson(id: number): Promise<Person>;
+  /** `signal` aborts the request when nobody needs the answer any more (TanStack Query passes it). */
+  listPeople(filter: { search?: string | undefined }, signal?: AbortSignal): Promise<Person[]>;
+  getPerson(id: number, signal?: AbortSignal): Promise<Person>;
   createPerson(input: CreatePerson): Promise<Person>;
 }

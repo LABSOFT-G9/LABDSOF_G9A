@@ -21,8 +21,9 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
-    if (theme === "system") continue; // keep the media-based pair from index.html
-    meta.setAttribute("content", dark ? COLORS.dark : COLORS.light);
+    // System: each tag goes back to the colour of its own media query (index.html's pair). Explicit: both follow it.
+    const forDark = theme === "system" ? (meta.getAttribute("media") ?? "").includes("dark") : dark;
+    meta.setAttribute("content", forDark ? COLORS.dark : COLORS.light);
   }
 }
 

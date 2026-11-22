@@ -9,4 +9,4 @@ export {
   requireSession,
 } from "@/features/auth/guards";
 export { useSession } from "@/features/auth/hooks";
-export { type AuthState, expireSession, loadAuth, signOut, startSession } from "@/features/auth/session";
+export { type AuthState, expireSession, loadAuth, signOut, startSession, watchSession } from "@/features/auth/session";

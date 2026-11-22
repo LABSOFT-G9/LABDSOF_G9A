@@ -4,7 +4,7 @@ import { readConfig, type AppConfig } from "@/app/config";
 import { createContainer } from "@/app/container";
 import { type AppContext, ServicesProvider } from "@/app/context";
 import { createQueryClient } from "@/app/query-client";
-import { expireSession } from "@/features/auth";
+import { expireSession, watchSession } from "@/features/auth";
 import { routeTree } from "@/routeTree.gen";
 import { ErrorFallback, NotFoundFallback, PendingFallback } from "@/shared/components/fallbacks";
 import type { Services } from "@/ports/services";
@@ -39,6 +39,8 @@ export function createAppRouter({ config = readConfig(), services, history }: Cr
     defaultNotFoundComponent: NotFoundFallback,
     scrollRestoration: true,
   });
+  // The session query refetches on its own (window focus, the re-ask in loadAuth): react when it names someone else.
+  watchSession(context, () => router.invalidate());
   return router;
 }
 

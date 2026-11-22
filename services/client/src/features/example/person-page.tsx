@@ -4,6 +4,7 @@ import { ArrowLeft, Briefcase, Building, Mail } from "lucide-react";
 import { useServices } from "@/app/context";
 import { personQuery } from "@/features/example/api";
 import { PersonAvatar } from "@/features/example/person-avatar";
+import { DocumentTitle } from "@/shared/components/document-title";
 import { t } from "@/shared/i18n";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
@@ -28,7 +29,10 @@ export function PersonPage({ personId }: { personId: number }) {
         <CardContent className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
           <PersonAvatar person={person} className="size-20" />
           <div className="min-w-0 space-y-3">
-            <h1 className="text-2xl font-semibold">{person.name}</h1>
+            <DocumentTitle title={person.name} />
+            <h1 tabIndex={-1} className="text-2xl font-semibold outline-none">
+              {person.name}
+            </h1>
             <dl className="text-muted-foreground grid gap-2 text-sm">
               <div className="flex items-center gap-2">
                 <dt>
