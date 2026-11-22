@@ -1,3 +1,3 @@
-export { todoKeys, todoListQuery, todoQuery } from "@/features/example/api";
-export { TodoDetailPage } from "@/features/example/todo-detail-page";
-export { TodosPage } from "@/features/example/todos-page";
+export { peopleQuery, personKeys, personQuery } from "@/features/example/api";
+export { PeoplePage } from "@/features/example/people-page";
+export { PersonPage } from "@/features/example/person-page";

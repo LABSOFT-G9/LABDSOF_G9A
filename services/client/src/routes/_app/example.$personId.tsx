@@ -1,19 +1,19 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { routeData } from "@/app/loaders";
-import { TodoDetailPage, todoQuery } from "@/features/example";
+import { PersonPage, personQuery } from "@/features/example";
 
 /** REFERENCE ONLY. A path parameter, validated; an API 404 becomes the not-found page via `routeData`. */
-export const Route = createFileRoute("/_app/example/$todoId")({
+export const Route = createFileRoute("/_app/example/$personId")({
   loader: async ({ context, params }) => {
-    const id = Number(params.todoId);
+    const id = Number(params.personId);
     if (!Number.isInteger(id) || id <= 0) throw notFound();
-    await routeData(context.queryClient.ensureQueryData(todoQuery(context.services.example, id)));
+    await routeData(context.queryClient.ensureQueryData(personQuery(context.services.example, id)));
     return { id };
   },
-  component: TodoDetailRoute,
+  component: PersonRoute,
 });
 
-function TodoDetailRoute() {
+function PersonRoute() {
   const { id } = Route.useLoaderData();
-  return <TodoDetailPage todoId={id} />;
+  return <PersonPage personId={id} />;
 }

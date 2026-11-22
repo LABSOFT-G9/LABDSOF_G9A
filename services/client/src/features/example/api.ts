@@ -1,6 +1,5 @@
 import { mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
-import type { Todo } from "@/contracts/example";
-import type { ExampleApi } from "@/ports/example-api";
+import type { ExampleApi, Person } from "@/ports/example-api";
 
 /*
  * REFERENCE ONLY — delete with the rest of src/features/example.
@@ -8,25 +7,28 @@ import type { ExampleApi } from "@/ports/example-api";
  * components alike) and `mutationOptions` that keep the cache right after a write.
  */
 
-export const todoKeys = {
-  all: ["example", "todos"] as const,
-  list: () => [...todoKeys.all, "list"] as const,
-  detail: (id: number) => [...todoKeys.all, "detail", id] as const,
+export const personKeys = {
+  all: ["example", "people"] as const,
+  lists: () => [...personKeys.all, "list"] as const,
+  list: (search: string | undefined) => [...personKeys.lists(), { search: search ?? "" }] as const,
+  detail: (id: number) => [...personKeys.all, "detail", id] as const,
 };
 
-export const todoListQuery = (example: ExampleApi) =>
-  queryOptions({ queryKey: todoKeys.list(), queryFn: () => example.listTodos() });
+export const peopleQuery = (example: ExampleApi, search: string | undefined) =>
+  queryOptions({ queryKey: personKeys.list(search), queryFn: () => example.listPeople({ search }) });
 
-export const todoQuery = (example: ExampleApi, id: number) =>
-  queryOptions({ queryKey: todoKeys.detail(id), queryFn: () => example.getTodo(id) });
+export const personQuery = (example: ExampleApi, id: number) =>
+  queryOptions({ queryKey: personKeys.detail(id), queryFn: () => example.getPerson(id) });
 
-export const createTodoMutation = (example: ExampleApi, queryClient: QueryClient) =>
+export const createPersonMutation = (example: ExampleApi, queryClient: QueryClient) =>
   mutationOptions({
-    mutationFn: example.createTodo,
-    onSuccess: (todo: Todo) => {
-      // JSONPlaceholder fakes writes (nothing is stored), so refetching would lose the new todo: put it in the cache
-      // instead. Against a real API, `invalidateQueries({ queryKey: todoKeys.all })` is usually all you need.
-      queryClient.setQueryData<Todo[]>(todoKeys.list(), (todos = []) => [todo, ...todos]);
-      queryClient.setQueryData(todoKeys.detail(todo.id), todo);
+    mutationFn: example.createPerson,
+    onSuccess: (person: Person) => {
+      // DummyJSON fakes writes (nothing is stored), so refetching would lose the new person: put it in the cached
+      // lists instead. Against a real API, `invalidateQueries({ queryKey: personKeys.lists() })` is usually enough.
+      queryClient.setQueriesData<Person[]>({ queryKey: personKeys.lists() }, (people) =>
+        people ? [person, ...people] : people,
+      );
+      queryClient.setQueryData(personKeys.detail(person.id), person);
     },
   });

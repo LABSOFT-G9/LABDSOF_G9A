@@ -35,7 +35,8 @@ src/
   app/          composition root: config.ts (env), container.ts (ports → adapters), router.tsx, query-client.ts,
                 context.tsx (ServicesProvider, useServices, useAppContext), loaders.ts (routeData)
   contracts/    zod schemas + inferred types, one file per backend service; problem.ts (RFC 9457 errors)
-  ports/        interfaces the UI depends on: AuthSession, IssueApi, ExampleApi, Clock; services.ts bundles them
+  ports/        interfaces (and the models they return) the UI depends on: AuthSession, IssueApi, ExampleApi,
+                Clock; services.ts bundles them
   adapters/
     http/       client.ts (the one fetch wrapper) + one adapter per port, over /api/<service>/…
     mock/       in-memory adapters, synthetic personas and data, simulated latency and failures
@@ -165,10 +166,17 @@ A bad value fails at start-up (`src/app/config.ts`).
 
 ## Reference pieces to delete later
 
-`src/features/example`, `src/ports/example-api.ts`, `src/contracts/example.ts`, `src/adapters/*/example-api.ts`, the
-`/api/example` proxy entry in `vite.config.ts` and the Example nav item. They are a complete worked example (list,
-detail with a 404, create with validation) against [JSONPlaceholder](https://jsonplaceholder.typicode.com/), which
-fakes writes. The `/admin` page is a placeholder for the role-guard example.
+`src/features/example`, `src/ports/example-api.ts`, `src/contracts/example.ts`, `src/adapters/*/example-api.ts` (and
+its test), the `/example` routes, the `/api/example` proxy entry in `vite.config.ts` and the People nav item. Together
+they are a complete worked example against [DummyJSON](https://dummyjson.com/docs/users)'s synthetic people:
+
+- a search kept in the URL and validated with zod (`?q=`, `loaderDeps`);
+- a list, and a detail page whose API 404 becomes the not-found page;
+- a create form validated with the request's own schema;
+- the adapter mapping the wire DTO to the UI model, with avatars rewritten to same-origin URLs for the CSP.
+
+DummyJSON fakes writes, so a created person appears in the list but its detail page is "not found" in HTTP mode.
+The `/admin` page is a placeholder for the role-guard example.
 
 ## Delivery
 

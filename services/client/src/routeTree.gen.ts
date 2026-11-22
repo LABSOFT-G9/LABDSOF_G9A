@@ -17,7 +17,7 @@ import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppIssuesRouteImport } from './routes/_app/issues'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppExampleIndexRouteImport } from './routes/_app/example.index'
-import { Route as AppExampleTodoIdRouteImport } from './routes/_app/example.$todoId'
+import { Route as AppExamplePersonIdRouteImport } from './routes/_app/example.$personId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,9 +58,9 @@ const AppExampleIndexRoute = AppExampleIndexRouteImport.update({
   path: '/example/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppExampleTodoIdRoute = AppExampleTodoIdRouteImport.update({
-  id: '/example/$todoId',
-  path: '/example/$todoId',
+const AppExamplePersonIdRoute = AppExamplePersonIdRouteImport.update({
+  id: '/example/$personId',
+  path: '/example/$personId',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -71,7 +71,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
-  '/example/$todoId': typeof AppExampleTodoIdRoute
+  '/example/$personId': typeof AppExamplePersonIdRoute
   '/example/': typeof AppExampleIndexRoute
 }
 export interface FileRoutesByTo {
@@ -81,7 +81,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
-  '/example/$todoId': typeof AppExampleTodoIdRoute
+  '/example/$personId': typeof AppExamplePersonIdRoute
   '/example': typeof AppExampleIndexRoute
 }
 export interface FileRoutesById {
@@ -93,7 +93,7 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/issues': typeof AppIssuesRoute
   '/_app/settings': typeof AppSettingsRoute
-  '/_app/example/$todoId': typeof AppExampleTodoIdRoute
+  '/_app/example/$personId': typeof AppExamplePersonIdRoute
   '/_app/example/': typeof AppExampleIndexRoute
 }
 export interface FileRouteTypes {
@@ -105,7 +105,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/issues'
     | '/settings'
-    | '/example/$todoId'
+    | '/example/$personId'
     | '/example/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -115,7 +115,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/issues'
     | '/settings'
-    | '/example/$todoId'
+    | '/example/$personId'
     | '/example'
   id:
     | '__root__'
@@ -126,7 +126,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/issues'
     | '/_app/settings'
-    | '/_app/example/$todoId'
+    | '/_app/example/$personId'
     | '/_app/example/'
   fileRoutesById: FileRoutesById
 }
@@ -194,11 +194,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppExampleIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/example/$todoId': {
-      id: '/_app/example/$todoId'
-      path: '/example/$todoId'
-      fullPath: '/example/$todoId'
-      preLoaderRoute: typeof AppExampleTodoIdRouteImport
+    '/_app/example/$personId': {
+      id: '/_app/example/$personId'
+      path: '/example/$personId'
+      fullPath: '/example/$personId'
+      preLoaderRoute: typeof AppExamplePersonIdRouteImport
       parentRoute: typeof AppRoute
     }
   }
@@ -209,7 +209,7 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppIssuesRoute: typeof AppIssuesRoute
   AppSettingsRoute: typeof AppSettingsRoute
-  AppExampleTodoIdRoute: typeof AppExampleTodoIdRoute
+  AppExamplePersonIdRoute: typeof AppExamplePersonIdRoute
   AppExampleIndexRoute: typeof AppExampleIndexRoute
 }
 
@@ -218,7 +218,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppIssuesRoute: AppIssuesRoute,
   AppSettingsRoute: AppSettingsRoute,
-  AppExampleTodoIdRoute: AppExampleTodoIdRoute,
+  AppExamplePersonIdRoute: AppExamplePersonIdRoute,
   AppExampleIndexRoute: AppExampleIndexRoute,
 }
 

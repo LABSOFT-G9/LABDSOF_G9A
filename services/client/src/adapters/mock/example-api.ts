@@ -1,28 +1,49 @@
 import type { MockRuntime } from "@/adapters/mock/runtime";
-import type { Todo } from "@/contracts/example";
-import type { ExampleApi } from "@/ports/example-api";
+import type { ExampleApi, Person } from "@/ports/example-api";
 import { ApiError } from "@/shared/lib/errors";
 
-/** REFERENCE ONLY — delete with src/features/example. In-memory todos; created ones stay until the page reloads. */
+/** REFERENCE ONLY — delete with src/features/example. Synthetic people; created ones stay until the page reloads. */
 export function mockExampleApi(runtime: MockRuntime): ExampleApi {
-  const todos: Todo[] = [
-    { id: 1, userId: 1, title: "Read ADR-009 (service internal architecture)", completed: true },
-    { id: 2, userId: 1, title: "Add a port and its mock adapter", completed: false },
-    { id: 3, userId: 1, title: "Switch the port to its HTTP adapter", completed: false },
+  const person = (id: number, name: string, jobTitle: string | null, company: string | null): Person => ({
+    id,
+    name,
+    email: `${name.toLowerCase().replace(/\s+/g, ".")}@people.test`,
+    avatarUrl: null,
+    jobTitle,
+    company,
+  });
+  const people: Person[] = [
+    person(1, "Alex Example", "Building administrator", "Demo Condominiums"),
+    person(2, "Bea Sample", "Plumber", "Demo Plumbing"),
+    person(3, "Caio Placeholder", "Electrician", "Demo Electrics"),
+    person(4, "Dana Fixture", "Lift technician", "Demo Lifts"),
+    person(5, "Eli Stub", "Resident", null),
+    person(6, "Fran Mock", null, null),
   ];
   return {
-    listTodos: () => runtime.call(() => todos),
-    getTodo: (id) =>
+    listPeople: ({ search }) =>
       runtime.call(() => {
-        const todo = todos.find((t) => t.id === id);
-        if (!todo) throw new ApiError(404, "NOT_FOUND", "There is no such todo.");
-        return todo;
+        const q = search?.trim().toLowerCase();
+        return q ? people.filter((p) => `${p.name} ${p.email}`.toLowerCase().includes(q)) : people;
       }),
-    createTodo: (input) =>
+    getPerson: (id) =>
       runtime.call(() => {
-        const todo: Todo = { id: Math.max(0, ...todos.map((t) => t.id)) + 1, userId: 1, completed: false, ...input };
-        todos.unshift(todo);
-        return todo;
+        const found = people.find((p) => p.id === id);
+        if (!found) throw new ApiError(404, "NOT_FOUND", "There is no such person.");
+        return found;
+      }),
+    createPerson: ({ firstName, lastName, email }) =>
+      runtime.call(() => {
+        const created: Person = {
+          id: Math.max(0, ...people.map((p) => p.id)) + 1,
+          name: `${firstName} ${lastName}`,
+          email,
+          avatarUrl: null,
+          jobTitle: null,
+          company: null,
+        };
+        people.unshift(created);
+        return created;
       }),
   };
 }

@@ -20,7 +20,7 @@ describe("createContainer", () => {
 
   it("lets one port differ from the rest", async () => {
     const services = createContainer({ ...testConfig, adapters: "http" }, {}, { example: "mock" });
-    await expect(services.example.listTodos()).resolves.toHaveLength(3);
+    await expect(services.example.listPeople({})).resolves.toHaveLength(6);
     expect(services.devPersonas).toBeUndefined();
   });
 
