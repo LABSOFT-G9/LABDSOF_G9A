@@ -46,7 +46,8 @@ class UseCaseConfig {
     @Bean
     PurgeExpiredIdempotencyKeysService purgeExpiredIdempotencyKeysService(
             TransactionRunner transactions, IdempotencyStore idempotency, Clock clock) {
-        return new PurgeExpiredIdempotencyKeysService(transactions, idempotency, clock);
+        return new PurgeExpiredIdempotencyKeysService(
+                transactions, idempotency, clock, PurgeExpiredIdempotencyKeysService.DEFAULT_BATCH_SIZE);
     }
 
     @Bean

@@ -3,6 +3,7 @@ package pt.isep.bmc.issue.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pt.isep.bmc.issue.support.Fixtures.*;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -12,11 +13,21 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import pt.isep.bmc.issue.application.command.PurgeExpiredIdempotencyKeysService;
+import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
+import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.support.Api.Response;
 import pt.isep.bmc.issue.support.IntegrationTestSupport;
 
 /** Safe retries (US-01, technical design 3.3): same key → same receipt, once. */
 class IdempotencyIT extends IntegrationTestSupport {
+
+    @Autowired
+    TransactionRunner transactions;
+
+    @Autowired
+    IdempotencyStore idempotencyStore;
 
     @Test
     void retryWithTheSameKeyReturnsTheOriginalReceipt() {
@@ -97,6 +108,22 @@ class IdempotencyIT extends IntegrationTestSupport {
         assertThat(reused.status()).isEqualTo(201);
         assertThat(count("reports")).isEqualTo(2);
         assertThat(count("idempotency_keys")).isEqualTo(1);
+    }
+
+    @Test
+    void purgeDeletesExpiredKeysInBatchesOnMysqlAndKeepsLiveOnes() {
+        for (String key : List.of("old-1", "old-2", "old-3")) {
+            api.post("/reports", tokens.token(RESIDENT_A1), key, report(BUILDING_A, AREA_A_GARAGE, TEXT));
+        }
+        jdbc.sql("UPDATE idempotency_keys SET expires_at = expires_at - INTERVAL 25 HOUR").update();
+        api.post("/reports", tokens.token(RESIDENT_A1), "live", report(BUILDING_A, AREA_A_GARAGE, TEXT));
+
+        // Batch size 2: the real SQL runs twice (2 + 1 rows).
+        int purged = new PurgeExpiredIdempotencyKeysService(transactions, idempotencyStore, Clock.systemUTC(), 2).purge();
+
+        assertThat(purged).isEqualTo(3);
+        assertThat(jdbc.sql("SELECT idem_key FROM idempotency_keys").query(String.class).list()).containsExactly("live");
+        assertThat(count("reports")).isEqualTo(4);
     }
 
     @Test

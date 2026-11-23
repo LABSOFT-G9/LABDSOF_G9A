@@ -1,6 +1,7 @@
 package pt.isep.bmc.issue.adapters.out.persistence;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,8 +43,8 @@ class JdbcIdempotencyStore implements IdempotencyStore {
                         rs.getInt("response_status"),
                         UUID.fromString(rs.getString("resource_id")),
                         rs.getLong("resource_version"),
-                        Timestamps.fromColumn(rs.getObject("created_at", java.time.LocalDateTime.class)),
-                        Timestamps.fromColumn(rs.getObject("expires_at", java.time.LocalDateTime.class))))
+                        Timestamps.fromColumn(rs.getObject("created_at", LocalDateTime.class)),
+                        Timestamps.fromColumn(rs.getObject("expires_at", LocalDateTime.class))))
                 .list();
         return rows.stream().findFirst();
     }

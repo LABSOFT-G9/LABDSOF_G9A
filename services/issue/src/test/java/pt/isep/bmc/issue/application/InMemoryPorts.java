@@ -1,7 +1,10 @@
 package pt.isep.bmc.issue.application;
 
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +52,7 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public RuntimeException failNextTransaction;
 
     /** One undo journal per open transaction; a nested transaction that commits is not undone by its parent. */
-    private final java.util.Deque<List<Runnable>> journals = new java.util.ArrayDeque<>();
+    private final Deque<List<Runnable>> journals = new ArrayDeque<>();
 
     @Override
     public <T> T inTransaction(Supplier<T> work) {
@@ -159,7 +162,7 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public int deleteExpired(Instant now, int limit) {
         List<IdempotencyScope> expired = keys.values().stream()
                 .filter(r -> r.isExpiredAt(now))
-                .sorted(java.util.Comparator.comparing(IdempotencyRecord::expiresAt))
+                .sorted(Comparator.comparing(IdempotencyRecord::expiresAt))
                 .limit(limit)
                 .map(IdempotencyRecord::scope)
                 .toList();

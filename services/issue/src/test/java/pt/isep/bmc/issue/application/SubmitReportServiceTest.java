@@ -164,7 +164,7 @@ class SubmitReportServiceTest {
         clock.advance(Duration.ofHours(23));
         service.submit(command("new", GARAGE_A, TEXT));
         clock.advance(Duration.ofHours(1));
-        int purged = new PurgeExpiredIdempotencyKeysService(ports, ports, clock).purge();
+        int purged = new PurgeExpiredIdempotencyKeysService(ports, ports, clock, 500).purge();
         assertThat(purged).isEqualTo(1);
         assertThat(ports.keys.keySet()).extracting(s -> s.key().value()).containsExactly("new");
     }
@@ -175,7 +175,7 @@ class SubmitReportServiceTest {
             service.submit(command("bulk-" + i, GARAGE_A, TEXT));
         }
         clock.advance(Duration.ofHours(25));
-        assertThat(new PurgeExpiredIdempotencyKeysService(ports, ports, clock).purge()).isEqualTo(1_001);
+        assertThat(new PurgeExpiredIdempotencyKeysService(ports, ports, clock, 500).purge()).isEqualTo(1_001);
         assertThat(ports.keys).isEmpty();
     }
 
