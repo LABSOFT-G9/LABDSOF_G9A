@@ -1,4 +1,4 @@
-package pt.isep.bmc.issue.application.port.out;
+package pt.isep.bmc.issue.application.idempotency;
 
 import pt.isep.bmc.issue.domain.shared.ValidationException;
 

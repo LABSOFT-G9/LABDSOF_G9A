@@ -6,7 +6,8 @@ import pt.isep.bmc.issue.domain.shared.ValidationException;
 /**
  * The private text of a report: trimmed, 10 to 4,000 characters (US-01),
  * counted as Unicode code points so that an emoji counts as one character.
- * Control characters other than tab and line breaks are rejected.
+ * Control characters other than tab and line breaks, and lone surrogates,
+ * are rejected.
  *
  * <p>{@link #toString()} never returns the text, so it cannot leak into logs
  * by accident (US-01: private text stays out of logs).
@@ -47,8 +48,13 @@ public final class ReportText {
         return new ReportText(Objects.requireNonNull(stored, "stored"));
     }
 
+    /**
+     * Control characters other than tab and line breaks, and lone UTF-16
+     * surrogates (a broken character that MySQL would store as {@code ?}).
+     */
     private static boolean isForbidden(int codePoint) {
-        return Character.isISOControl(codePoint) && codePoint != '\n' && codePoint != '\r' && codePoint != '\t';
+        return (Character.isISOControl(codePoint) && codePoint != '\n' && codePoint != '\r' && codePoint != '\t')
+                || (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE);
     }
 
     public String value() {

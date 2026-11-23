@@ -48,6 +48,12 @@ class ReportTextTest {
     }
 
     @Test
+    void rejectsLoneSurrogatesThatMysqlWouldStoreAsQuestionMarks() {
+        assertReason("Leak in garage \uD800 level -1", "invalid_characters");
+        assertReason("Leak in garage \uDC00 level -1", "invalid_characters");
+    }
+
+    @Test
     void neverPrintsTheTextAndErrorsNeverEchoIt() {
         String secret = "Flat 2B owner Jane Doe leaks water";
         assertThat(ReportText.of(secret).toString()).doesNotContain("Jane");

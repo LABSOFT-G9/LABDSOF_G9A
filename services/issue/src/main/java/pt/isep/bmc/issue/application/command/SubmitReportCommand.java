@@ -1,7 +1,7 @@
 package pt.isep.bmc.issue.application.command;
 
 import java.util.Objects;
-import pt.isep.bmc.issue.application.port.out.IdempotencyKey;
+import pt.isep.bmc.issue.application.idempotency.IdempotencyKey;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.membership.UserId;

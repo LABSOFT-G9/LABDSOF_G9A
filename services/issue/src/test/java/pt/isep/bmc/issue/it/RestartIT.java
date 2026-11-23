@@ -45,7 +45,7 @@ class RestartIT {
         }
     }
 
-    private static ConfigurableApplicationContext start(MySQLContainer mysql) {
+    static ConfigurableApplicationContext start(MySQLContainer mysql, String... extraArgs) {
         Map<String, Object> properties = new HashMap<>();
         properties.put("server.port", "0");
         properties.put("management.server.port", "0");
@@ -57,7 +57,9 @@ class RestartIT {
         properties.put("bmc.security.jwk-set-uri", TestTokens.get().jwksUri());
         properties.put("bmc.scheduling.enabled", "false");
         // Command-line arguments: default properties would lose to application.yaml.
-        String[] args = properties.entrySet().stream().map(e -> "--" + e.getKey() + "=" + e.getValue())
+        String[] args = java.util.stream.Stream.concat(
+                        properties.entrySet().stream().map(e -> "--" + e.getKey() + "=" + e.getValue()),
+                        java.util.Arrays.stream(extraArgs))
                 .toArray(String[]::new);
         return new SpringApplicationBuilder(IssueApplication.class).run(args);
     }

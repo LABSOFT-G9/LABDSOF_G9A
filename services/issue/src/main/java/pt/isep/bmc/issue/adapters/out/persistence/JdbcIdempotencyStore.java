@@ -87,9 +87,10 @@ class JdbcIdempotencyStore implements IdempotencyStore {
     }
 
     @Override
-    public int deleteExpired(Instant now) {
-        return jdbc.sql("DELETE FROM idempotency_keys WHERE expires_at <= :now")
+    public int deleteExpired(Instant now, int limit) {
+        return jdbc.sql("DELETE FROM idempotency_keys WHERE expires_at <= :now ORDER BY expires_at LIMIT :limit")
                 .param("now", Timestamps.toColumn(now))
+                .param("limit", limit)
                 .update();
     }
 }

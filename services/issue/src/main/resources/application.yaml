@@ -20,6 +20,9 @@ spring:
           time_zone: UTC
   flyway:
     locations: classpath:db/migration
+    # The synthetic seed is a repeatable migration in another location: when
+    # BMC_SEED_SYNTHETIC goes back to false, its history row must not stop the start.
+    ignore-migration-patterns: "*:future,repeatable:missing"
   mvc:
     problemdetails:
       enabled: true

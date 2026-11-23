@@ -1,6 +1,7 @@
 package pt.isep.bmc.issue.application.port.out;
 
 import java.util.Objects;
+import pt.isep.bmc.issue.application.idempotency.IdempotencyKey;
 import pt.isep.bmc.issue.domain.membership.UserId;
 
 /** Keys are scoped per actor and operation (technical design 4.1). */

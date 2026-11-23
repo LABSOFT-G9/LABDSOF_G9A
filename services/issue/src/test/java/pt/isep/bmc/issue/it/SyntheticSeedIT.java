@@ -2,6 +2,7 @@ package pt.isep.bmc.issue.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +44,17 @@ class SyntheticSeedIT {
                 .as("the contractor account has no building membership").isZero();
         assertThat(jdbc.sql("SELECT COUNT(*) FROM users WHERE display_name NOT LIKE 'Synthetic %'")
                 .query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void seededDatabaseStillStartsWithTheSeedSwitchedOff() {
+        try (var context = RestartIT.start(MYSQL, "--bmc.seed-synthetic=false")) {
+            assertThat(context.isActive()).isTrue();
+        }
+    }
+
+    @AfterAll
+    static void stop() {
         MYSQL.stop();
     }
 

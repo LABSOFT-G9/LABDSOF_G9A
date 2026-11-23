@@ -156,10 +156,15 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
-    public int deleteExpired(Instant now) {
-        int before = keys.size();
-        keys.values().removeIf(r -> r.isExpiredAt(now));
-        return before - keys.size();
+    public int deleteExpired(Instant now, int limit) {
+        List<IdempotencyScope> expired = keys.values().stream()
+                .filter(r -> r.isExpiredAt(now))
+                .sorted(java.util.Comparator.comparing(IdempotencyRecord::expiresAt))
+                .limit(limit)
+                .map(IdempotencyRecord::scope)
+                .toList();
+        expired.forEach(keys::remove);
+        return expired.size();
     }
 
     @Override

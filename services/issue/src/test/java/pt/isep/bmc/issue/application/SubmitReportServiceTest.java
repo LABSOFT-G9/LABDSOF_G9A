@@ -16,7 +16,7 @@ import pt.isep.bmc.issue.application.command.SubmitReportCommand;
 import pt.isep.bmc.issue.application.command.SubmitReportService;
 import pt.isep.bmc.issue.application.error.IdempotencyKeyReusedException;
 import pt.isep.bmc.issue.application.error.StorageUnavailableException;
-import pt.isep.bmc.issue.application.port.out.IdempotencyKey;
+import pt.isep.bmc.issue.application.idempotency.IdempotencyKey;
 import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.AreaKind;
@@ -167,6 +167,16 @@ class SubmitReportServiceTest {
         int purged = new PurgeExpiredIdempotencyKeysService(ports, ports, clock).purge();
         assertThat(purged).isEqualTo(1);
         assertThat(ports.keys.keySet()).extracting(s -> s.key().value()).containsExactly("new");
+    }
+
+    @Test
+    void purgeWorksInBatchesUntilNothingExpiredIsLeft() {
+        for (int i = 0; i < 1_001; i++) {
+            service.submit(command("bulk-" + i, GARAGE_A, TEXT));
+        }
+        clock.advance(Duration.ofHours(25));
+        assertThat(new PurgeExpiredIdempotencyKeysService(ports, ports, clock).purge()).isEqualTo(1_001);
+        assertThat(ports.keys).isEmpty();
     }
 
     @Test

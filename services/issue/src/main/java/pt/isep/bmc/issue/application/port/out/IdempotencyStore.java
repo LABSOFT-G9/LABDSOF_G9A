@@ -24,6 +24,10 @@ public interface IdempotencyStore {
      */
     void deleteIfExpired(IdempotencyScope scope, Instant now);
 
-    /** Deletes every record expired at {@code now}; returns how many. */
-    int deleteExpired(Instant now);
+    /**
+     * Deletes at most {@code limit} records expired at {@code now}, oldest
+     * first; returns how many. Small batches keep each purge transaction short,
+     * so its locks never hold up live inserts for long.
+     */
+    int deleteExpired(Instant now, int limit);
 }

@@ -17,8 +17,18 @@ public final class PurgeExpiredIdempotencyKeysService implements PurgeExpiredIde
         this.clock = clock;
     }
 
+    static final int BATCH_SIZE = 500;
+
+    /** Deletes expired keys in batches, one short transaction per batch. */
     @Override
     public int purge() {
-        return transactions.inTransaction(() -> idempotency.deleteExpired(clock.instant()));
+        java.time.Instant now = clock.instant();
+        int total = 0;
+        int deleted;
+        do {
+            deleted = transactions.inTransaction(() -> idempotency.deleteExpired(now, BATCH_SIZE));
+            total += deleted;
+        } while (deleted == BATCH_SIZE);
+        return total;
     }
 }

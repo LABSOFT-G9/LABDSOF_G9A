@@ -29,7 +29,7 @@ import pt.isep.bmc.issue.application.error.NotFoundException;
 import pt.isep.bmc.issue.application.port.in.GetReportQuery;
 import pt.isep.bmc.issue.application.port.in.ListReportsQuery;
 import pt.isep.bmc.issue.application.port.in.SubmitReportUseCase;
-import pt.isep.bmc.issue.application.port.out.IdempotencyKey;
+import pt.isep.bmc.issue.application.idempotency.IdempotencyKey;
 import pt.isep.bmc.issue.application.query.ReportDetails;
 import pt.isep.bmc.issue.application.query.ReportPage;
 import pt.isep.bmc.issue.application.query.ReportSummary;
