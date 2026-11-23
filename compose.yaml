@@ -4,6 +4,8 @@
 # host and runs `bmc-app-deploy <tag>` there (labdsof-infra, ansible/roles/app),
 # which provides, in its env file:
 #   BMC_TAG                 image tag, dev-<commit> or a version
+#   BMC_PUBLIC_HOST         the environment's public name (dev: bmc-g9.duckdns.org),
+#                           for the TLS certificate (and Keycloak's issuer, EN-02-04)
 #   DB_HOST, DB_PORT        the database host (MySQL 8.4, one database per service)
 #   <NAME>_DB_PASSWORD      ISSUE_, DISPATCH_, NOTIFICATION_, KEYCLOAK_
 # Secrets never live in this file or in Git.
@@ -14,13 +16,26 @@
 name: bmc
 
 services:
-  # The only container with a published port (80). The edge host forwards the
-  # internet's 80/443 here. TLS comes with a domain name.
+  # The only container with published ports (80, 443). The edge host forwards
+  # the internet's 80/443 here. HTTPS on 443 with a Let's Encrypt certificate
+  # for BMC_PUBLIC_HOST (HTTP-01 challenge on port 80); every other request on
+  # port 80 is redirected to HTTPS. The routers below use only `websecure`;
+  # TLS is set on the entrypoint, so routers need no TLS labels.
   traefik:
     image: traefik:v3.7.16@sha256:1336e85aaed293bd63d005086e0dd013b04078b26aaeb1c18b26a2f928af7e65
     restart: unless-stopped
     command:
       - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.certresolver=le
+      - --entrypoints.websecure.http.tls.domains[0].main=${BMC_PUBLIC_HOST:?}
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # Kept in a volume: a new certificate on every deploy would hit Let's
+      # Encrypt's rate limits (5 per name per week).
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=bmc_edge
@@ -28,8 +43,10 @@ services:
       - --api.dashboard=false
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
     networks: [edge]
 
   client:
@@ -40,7 +57,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.client.rule: PathPrefix(`/`)
       traefik.http.routers.client.priority: "1"
-      traefik.http.routers.client.entrypoints: web
+      traefik.http.routers.client.entrypoints: websecure
       traefik.http.services.client.loadbalancer.server.port: "80"
 
   issue:
@@ -63,7 +80,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.routers.issue.rule: PathPrefix(`/api/issue`)
-      traefik.http.routers.issue.entrypoints: web
+      traefik.http.routers.issue.entrypoints: websecure
       traefik.http.routers.issue.middlewares: issue-strip
       traefik.http.middlewares.issue-strip.stripprefix.prefixes: /api/issue
       traefik.http.services.issue.loadbalancer.server.port: "8080"
@@ -81,7 +98,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.routers.dispatch.rule: PathPrefix(`/api/dispatch`)
-      traefik.http.routers.dispatch.entrypoints: web
+      traefik.http.routers.dispatch.entrypoints: websecure
       traefik.http.routers.dispatch.middlewares: dispatch-strip
       traefik.http.middlewares.dispatch-strip.stripprefix.prefixes: /api/dispatch
       traefik.http.services.dispatch.loadbalancer.server.port: "8080"
@@ -99,7 +116,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.routers.notification.rule: PathPrefix(`/api/notifications`)
-      traefik.http.routers.notification.entrypoints: web
+      traefik.http.routers.notification.entrypoints: websecure
       traefik.http.routers.notification.middlewares: notification-strip
       traefik.http.middlewares.notification-strip.stripprefix.prefixes: /api/notifications
       traefik.http.services.notification.loadbalancer.server.port: "8080"
@@ -118,3 +135,7 @@ services:
 networks:
   edge: {}
   internal: {}
+
+volumes:
+  # Let's Encrypt account and certificates (acme.json); survives redeploys.
+  letsencrypt: {}
