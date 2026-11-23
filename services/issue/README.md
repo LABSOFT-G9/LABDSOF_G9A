@@ -48,12 +48,14 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 - **Errors** are `application/problem+json` with `code` and `correlationId`:
   - `400 VALIDATION_FAILED` (with `errors[]`) or `INVALID_AREA`
   - `401 UNAUTHENTICATED`
+  - `403 CSRF_HEADER_REQUIRED`, for a state-changing request without the CSRF header
   - `404 NOT_FOUND`, for anything unknown or outside the caller's scope
   - `405` for any attempt to modify a report
   - `422 IDEMPOTENCY_KEY_REUSED`
   - `503 DEPENDENCY_UNAVAILABLE`, which never comes with a receipt
 
   Error bodies never contain the report text.
+- **CSRF** ([ADR-005](../../documents/adr/ADR-005-authentication-authorisation.md#csrf)). Every `POST`, `PUT`, `PATCH` or `DELETE` must carry the custom header named by `CSRF_HEADER` (default `X-BMC-CSRF`), with any non-blank value. A cross-origin page cannot add it without a CORS pre-flight, and there is no CORS. Reads need no header. The check runs before token validation, so such a request gets `403` even without a token.
 - **Idempotency.** The key is scoped per user and operation and kept for 24 hours. The same key and body replay the original `201`, including when several retries run at the same time. The same key with a different body gets `422`.
 - **One transaction per report.** The report, the issue, the first history entry, both outbox rows (`ReportSubmitted`, `TriageRequested`, as CloudEvents JSON, status `pending`) and the key are committed together. The request waits for neither AI nor the broker. The publisher that sends outbox rows to RabbitMQ is part of EN-02-02 ([#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)).
 
@@ -65,6 +67,7 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | `OIDC_ISSUER_URI` | empty | Keycloak realm issuer. **When empty, every API call answers `401`** (fail closed until EN-02-04) |
 | `OIDC_JWK_SET_URI` | `<issuer>/protocol/openid-connect/certs` | Signing keys |
 | `OIDC_AUDIENCE` | `bmc-api` | Required `aud`. When blank, the service refuses to start |
+| `CSRF_HEADER` | `X-BMC-CSRF` | Header required on state-changing requests. Provisional name until EN01-U6 settles it; the client must send the same one. When blank, the service refuses to start |
 | `BMC_SEED_SYNTHETIC` | `false` | `true` loads `db/seed/R__synthetic_fixtures.sql` (synthetic buildings and accounts). Never set it in production |
 | `MANAGEMENT_PORT` | `8081` | `/healthz` (liveness) and `/readyz` (readiness, includes MySQL). Never routed by Traefik |
 
@@ -83,4 +86,5 @@ The integration tests start MySQL with Testcontainers, using the same image pin 
 - a restart
 - the database going down
 - an empty issuer configuration
+- a state-changing request without the CSRF header
 - report text never appearing in logs, even at DEBUG

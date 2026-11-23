@@ -8,6 +8,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
@@ -78,6 +79,11 @@ public final class TestTokens {
     /** Signed with a key the service does not trust. */
     public String forged(String sub) {
         return sign(otherKey, sub, claims -> { });
+    }
+
+    /** Unsigned ({@code alg: none}), which the service must never accept. */
+    public String unsigned(String sub) {
+        return new PlainJWT(new JWTClaimsSet.Builder().subject(sub).build()).serialize();
     }
 
     private static String sign(RSAKey signingKey, String sub, Consumer<JWTClaimsSet.Builder> customise) {

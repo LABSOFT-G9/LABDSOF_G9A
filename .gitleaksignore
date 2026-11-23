@@ -7,3 +7,9 @@
 # older versions of that line.
 b47fa9758a061173efe699c07a7bfbe4a4edd107:documents/07a-contract-examples.md:generic-api-key:13
 4cd7b4f7fc295630cdb3f4c2543155f2b85f71c7:documents/07a-contract-examples.md:generic-api-key:13
+#
+# False positive: an unsigned `alg: none` test token with a synthetic `sub` in
+# the integration tests of US-01-01 (it checks that such tokens get 401). Not a
+# credential: nothing signs it. Found by the first CI run on PR #134
+# (2026-11-23); the test now builds the token at runtime.
+aeb58f67affaa5ab669518cd7c6cef2fd2dc2319:services/issue/src/test/java/pt/isep/bmc/issue/it/ReportAccessIT.java:jwt:128

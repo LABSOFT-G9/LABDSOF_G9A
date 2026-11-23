@@ -61,6 +61,9 @@ bmc:
     issuer-uri: ${OIDC_ISSUER_URI:}
     jwk-set-uri: ${OIDC_JWK_SET_URI:}
     audience: ${OIDC_AUDIENCE:bmc-api}
+    # Custom header required on every state-changing request (ADR-005 CSRF).
+    # Provisional name until EN01-U6 settles it; the client must send it.
+    csrf-header: ${CSRF_HEADER:X-BMC-CSRF}
   seed-synthetic: ${BMC_SEED_SYNTHETIC:false}
   idempotency:
     purge-interval: PT1H

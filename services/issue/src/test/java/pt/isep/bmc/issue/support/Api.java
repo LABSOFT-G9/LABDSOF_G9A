@@ -9,15 +9,33 @@ import java.util.List;
 import java.util.Map;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Minimal HTTP client for the service under test, over a real socket. */
+/**
+ * Minimal HTTP client for the service under test, over a real socket. Like
+ * the SPA, it sends the custom CSRF header on every request unless built with
+ * {@link #withoutCsrfHeader()}.
+ */
 public final class Api {
+
+    /** The service's default {@code bmc.security.csrf-header}. */
+    public static final String CSRF_HEADER = "X-BMC-CSRF";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final String base;
+    private final boolean csrfHeader;
 
     public Api(int port) {
-        this.base = "http://localhost:" + port;
+        this("http://localhost:" + port, true);
+    }
+
+    private Api(String base, boolean csrfHeader) {
+        this.base = base;
+        this.csrfHeader = csrfHeader;
+    }
+
+    /** The same client, but as a cross-site form would send requests. */
+    public Api withoutCsrfHeader() {
+        return new Api(base, false);
     }
 
     public Response post(String path, String token, String idempotencyKey, Object body) {
@@ -45,6 +63,9 @@ public final class Api {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(30));
         if (token != null) {
             builder.header("Authorization", "Bearer " + token);
+        }
+        if (csrfHeader) {
+            builder.header(CSRF_HEADER, "1");
         }
         return builder;
     }

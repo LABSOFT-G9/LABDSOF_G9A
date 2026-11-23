@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import pt.isep.bmc.issue.support.Api;
 import pt.isep.bmc.issue.support.Api.Response;
 import pt.isep.bmc.issue.support.IntegrationTestSupport;
 
@@ -104,6 +105,33 @@ class ReportAccessIT extends IntegrationTestSupport {
         assertThat(api.get("/reports?buildingId=x", tokens.token(RESIDENT_A1)).status()).isEqualTo(400);
     }
 
+    @Test
+    void stateChangingRequestsWithoutTheCsrfHeaderAreRefused() {
+        Api crossSite = api.withoutCsrfHeader();
+        Response response = crossSite.post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                report(BUILDING_A, AREA_A_GARAGE, TEXT));
+
+        assertThat(response.status()).isEqualTo(403);
+        assertThat(response.header("Content-Type")).startsWith("application/problem+json");
+        assertThat(response.json()).containsEntry("code", "CSRF_HEADER_REQUIRED");
+        assertThat(response.body()).doesNotContain("dripping");
+        assertThat(response.header("Set-Cookie")).isNull();
+        assertThat(count("reports")).isZero();
+
+        String reportId = submit(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        assertThat(crossSite.method("DELETE", "/reports/" + reportId, tokens.token(RESIDENT_A1), null).status())
+                .isEqualTo(403);
+        // Reads need no header.
+        assertThat(crossSite.get("/reports/" + reportId, tokens.token(RESIDENT_A1)).status()).isEqualTo(200);
+        // Without a token too (Spring's own CSRF filter); with the header, the token check answers.
+        Response anonymous = crossSite.post("/reports", null, UUID.randomUUID().toString(),
+                report(BUILDING_A, AREA_A_GARAGE, TEXT));
+        assertThat(anonymous.status()).isEqualTo(403);
+        assertThat(anonymous.header("Set-Cookie")).isNull();
+        assertThat(api.post("/reports", null, UUID.randomUUID().toString(), report(BUILDING_A, AREA_A_GARAGE, TEXT))
+                .status()).isEqualTo(401);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"PUT", "PATCH", "DELETE"})
     void reportsCannotBeModifiedOrDeleted(String method) {
@@ -125,7 +153,7 @@ class ReportAccessIT extends IntegrationTestSupport {
                 tokens.token(RESIDENT_A1, c -> c.expirationTime(Date.from(Instant.now().minus(Duration.ofMinutes(5))))),
                 tokens.token(" ", c -> { }),
                 "not.a.jwt",
-                "eyJhbGciOiJub25lIn0.eyJzdWIiOiIwMTk5ZjJhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxMDEifQ.");
+                tokens.unsigned(RESIDENT_A1));
         for (String token : rejected) {
             for (Response response : List.of(
                     api.get("/reports/" + reportId, token),
