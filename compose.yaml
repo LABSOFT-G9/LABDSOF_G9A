@@ -53,6 +53,13 @@ services:
       DB_NAME: issue
       DB_USER: issue
       DB_PASSWORD: ${ISSUE_DB_PASSWORD:-}
+      # Token validation (ADR-005). Until Keycloak runs (EN-02-04), an empty
+      # issuer makes every API call answer 401: the service fails closed.
+      OIDC_ISSUER_URI: ${OIDC_ISSUER_URI:-}
+      OIDC_JWK_SET_URI: ${OIDC_JWK_SET_URI:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-bmc-api}
+      # Synthetic buildings and accounts; "true" only on local and dev.
+      BMC_SEED_SYNTHETIC: ${BMC_SEED_SYNTHETIC:-false}
     labels:
       traefik.enable: "true"
       traefik.http.routers.issue.rule: PathPrefix(`/api/issue`)

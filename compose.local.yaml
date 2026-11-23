@@ -23,6 +23,7 @@ services:
     networks: [database]
     environment:
       DB_HOST: mysql
+      BMC_SEED_SYNTHETIC: "true"
     depends_on:
       mysql: { condition: service_healthy }
 
