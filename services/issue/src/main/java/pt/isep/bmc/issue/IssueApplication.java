@@ -2,19 +2,16 @@ package pt.isep.bmc.issue;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * BMC Issue service. Layers (ADR-009): {@code domain} ← {@code application} ←
+ * {@code adapters.in} / {@code adapters.out}; {@code config} is the
+ * composition root.
+ */
 @SpringBootApplication
-@RestController
 public class IssueApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(IssueApplication.class, args);
-    }
-
-    @GetMapping("/")
-    public String hello() {
-        return "issue up";
     }
 }
