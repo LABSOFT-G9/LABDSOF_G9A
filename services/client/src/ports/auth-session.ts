@@ -12,9 +12,9 @@ export interface SessionMembership {
 
 /**
  * Who is signed in, as the client sees it. Built from the Issue service's `GET /me` (`ProfileSchema`) by the auth
- * adapter. `/me` does not yet say whether the person is platform staff or a contractor, nor give an email (asked on
- * EN-02-04 #80), so over HTTP `email` is `null`, `platformRoles` is empty and `contractor` is `null`; the mock
- * personas fill them so those screens can be built.
+ * adapter. `email` and `platformRoles` come with EN-02-04 (#139); until that is on `main`, over HTTP they are `null`
+ * and empty. `/me` never says whether the person is a contractor (that belongs to Dispatch, #80), so over HTTP
+ * `contractor` is `null`; the mock personas fill it so those screens can be built.
  */
 export interface Session {
   /** The identity provider's subject; the Issue service calls it `userId`. */

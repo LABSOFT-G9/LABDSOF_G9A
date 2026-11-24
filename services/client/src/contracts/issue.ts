@@ -22,7 +22,12 @@ export type PlatformRole = z.infer<typeof PlatformRoleSchema>;
  */
 export const ProfileSchema = z.object({
   userId: z.string(),
-  displayName: z.string(),
+  /** `null` when neither the profile nor the identity provider account has a name. */
+  displayName: z.string().nullable(),
+  /** From the token (EN-02-04, #139); Issue does not store it. Optional until that change is on `main`. */
+  email: z.string().nullable().optional(),
+  /** From the token's realm roles (EN-02-04, #139). Display only: Dispatch checks the role on every staff call. */
+  platformRoles: z.array(z.string()).default([]),
   memberships: z.array(
     z.object({
       membershipId: z.string(),

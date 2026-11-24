@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/lib/errors";
+import { rememberReturnTo, takeReturnTo } from "@/shared/lib/return-to";
 import { renderApp } from "@/test/render-app";
 import { stubIssueApi } from "@/test/fakes";
 
@@ -36,6 +37,34 @@ describe("app (mock adapters)", () => {
     expect(router.state.location.pathname).toBe("/issues");
     expect(router.state.location.search).toEqual({ building: "a" });
     expect(router.state.location.hash).toBe("results");
+  });
+
+  it("lands on the page the edge sign-in started from, once (the edge always returns to /)", async () => {
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
+    rememberReturnTo("/issues?building=a#results");
+    const { router } = renderApp("/");
+
+    await screen.findByRole("heading", { level: 1, name: "Issues" });
+    expect(router.state.location.search).toEqual({ building: "a" });
+    expect(router.state.location.hash).toBe("results");
+    expect(takeReturnTo()).toBeNull();
+  });
+
+  it("ignores a remembered return path that leaves the site", async () => {
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
+    rememberReturnTo("//evil.test");
+    const { router } = renderApp("/");
+
+    await screen.findByRole("heading", { level: 1, name: "Hello, Synthetic" });
+    expect(router.state.location.pathname).toBe("/dashboard");
+  });
+
+  it("keeps the remembered return path while there is no session", async () => {
+    rememberReturnTo("/issues");
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "Sign in to BMC" });
+    expect(takeReturnTo()).toBe("/issues");
   });
 
   it("titles each page and moves focus to its heading after navigating", async () => {

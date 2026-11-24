@@ -31,5 +31,8 @@ if (typeof document !== "undefined") {
 afterEach(() => {
   cleanup();
   // Only the DOM tests have storage; in the node environment (test/static.test.ts) Node's own may throw when touched.
-  if (typeof document !== "undefined") localStorage.clear();
+  if (typeof document !== "undefined") {
+    localStorage.clear();
+    sessionStorage.clear();
+  }
 });

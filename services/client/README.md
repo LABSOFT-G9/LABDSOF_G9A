@@ -121,7 +121,9 @@ Guards are UX, never the security control:
 - `requirePlatformRole` answers **not found**, never "forbidden";
 - `hasBuildingRole(session, buildingId, role)` checks roles per building, because roles are never global.
 
-`safeRedirect` blocks open redirects through `?redirect=`.
+`safeRedirect` blocks open redirects through `?redirect=`. The edge sign-in ignores `?redirect=` and always lands on
+`/`, so the HTTP adapter keeps the return path in `sessionStorage` (`rememberReturnTo`) and the `/` route takes it once,
+through `safeRedirect`, when `/me` names someone.
 
 **Server state** lives in TanStack Query only. Each feature has a key factory and one `queryOptions` per resource,
 shared by its loader and its component. Writes are never retried automatically.

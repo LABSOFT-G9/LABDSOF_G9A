@@ -1,7 +1,8 @@
 import type { HttpClient } from "@/adapters/http/client";
-import { type Profile, ProfileSchema } from "@/contracts/issue";
+import { type PlatformRole, PlatformRoleSchema, type Profile, ProfileSchema } from "@/contracts/issue";
 import type { AuthSession, Session } from "@/ports/auth-session";
 import { isApiError } from "@/shared/lib/errors";
+import { rememberReturnTo } from "@/shared/lib/return-to";
 
 export interface EdgeAuthConfig {
   /** The edge OIDC plugin's LoginUri (ADR-005). */
@@ -11,14 +12,23 @@ export interface EdgeAuthConfig {
   readonly navigate?: (url: string) => void;
 }
 
-/** The wire profile as the client's session model. Fields `/me` does not carry yet get their "none" value. */
+/** Shown when the account has neither a name nor an email. */
+export const UNNAMED_USER = "Signed-in user";
+
+const isPlatformRole = (role: string): role is PlatformRole => PlatformRoleSchema.safeParse(role).success;
+
+/**
+ * The wire profile as the client's session model. Fields `/me` does not carry get their "none" value, and platform
+ * roles the client does not know are dropped (they would unlock nothing here).
+ */
 export function toSession(profile: Profile): Session {
+  const email = profile.email ?? null;
   return {
     sub: profile.userId,
-    name: profile.displayName,
-    email: null,
+    name: profile.displayName || email || UNNAMED_USER,
+    email,
     memberships: profile.memberships.map((m) => ({ ...m, unit: null })),
-    platformRoles: [],
+    platformRoles: profile.platformRoles.filter(isPlatformRole),
     contractor: null,
   };
 }
@@ -42,8 +52,10 @@ export function httpAuthSession(http: HttpClient, config: EdgeAuthConfig): AuthS
       }
     },
     async login(returnTo) {
-      // How the plugin returns the user to `returnTo` is a detail of spike item 3; the parameter name may change.
-      navigate(`${config.loginUri}?redirect=${encodeURIComponent(returnTo)}`);
+      // The edge plugin ignores `?redirect=` and always lands on `/` (#80): keep the path in the tab instead; the `/`
+      // route takes it once `/me` names someone.
+      rememberReturnTo(returnTo);
+      navigate(config.loginUri);
       return leave();
     },
     async logout() {
