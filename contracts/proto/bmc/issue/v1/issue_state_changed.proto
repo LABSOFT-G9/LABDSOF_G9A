@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// The issue as Dispatch needs it for its issue projection. Sent on every state
+// or triage change; applied by `version`. Never carries report text.
+message IssueStateChanged {
+  string issue_id = 1;
+  string building_id = 2;
+  // `received`, `in_triage`, `triaged`, `in_coordination`, `scheduled`,
+  // `in_progress`, `awaiting_validation`, `resolved` or `cancelled`.
+  string state = 3;
+  int32 version = 4;
+  // True while an intervention may be created for the issue.
+  bool dispatchable = 5;
+  // Absent until an administrator decides; never a made-up default.
+  optional string category = 6;
+  optional string urgency = 7;
+  string area_label = 8;
+  // The published summary, when there is one.
+  optional string published_summary_id = 9;
+}
