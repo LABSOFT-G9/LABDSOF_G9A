@@ -14,7 +14,7 @@ The spike was not run as one two-day exercise. Most items were answered by the f
 | 1 | Keycloak 26.8 on MySQL 8.4 with realm import | Pass | PR #139 (open); [2.1](#21-keycloak-on-mysql-item-1) |
 | 2 | Flyway against MySQL 8.4 | Pass | PR #134 (merged); [2.2](#22-flyway-on-mysql-item-2) |
 | 3 | traefik-oidc-auth: `401`, token forwarding, cookie, logout, renewal | Partly tested | PR #139 (open); [2.3](#23-edge-sign-in-plugin-item-3) |
-| 4 | Outbox publisher survives a kill between commit and publish | Pass, with the kill simulated | PR #142 (open); [2.4](#24-outbox-publisher-item-4) |
+| 4 | Outbox publisher survives a kill between commit and publish | Partly tested: the kill is simulated | PR #142 (open); [2.4](#24-outbox-publisher-item-4) |
 | 5 | Quorum queue dead-letters at least once to the DLQ | Pass, with two findings | PR #142 (open) and experiment; [2.5](#25-dead-lettering-and-the-delivery-limit-item-5) |
 | 6 | Buf-generated Java and Python code round-trips proto3 JSON | Pass, with one finding | Experiment on PR #141 (open); [2.6](#26-java-and-python-round-trip-item-6) |
 | 7 | pika consumer in the Flask image | Pass in the base image | Experiment; [2.7](#27-pika-consumer-item-7) |
@@ -65,7 +65,7 @@ Tests of the messaging starter in PR #142 (`OutboxPublisherIT`), against MySQL 8
 | `aRowConfirmedButNotMarkedIsSentAgain` | A row confirmed by the broker but not yet marked `sent` is sent a second time with the same event ID |
 | `aMessageBoundToNoQueueIsReturnedAndItsRowStaysPending` | The broker confirms an unroutable message; only the return shows it |
 
-Limits: the kill is simulated (a failing update, and a connection to a closed port), not a JVM killed in the middle of a publish.
+Why only partly: the kill is simulated (a failing update, and a connection to a closed port), not a JVM killed in the middle of a publish. The three behaviours above hold; a test that kills the process is still missing.
 
 ### 2.5 Dead-lettering and the delivery limit (item 5)
 
@@ -193,6 +193,7 @@ None of the values was measured under load: there is no load yet. They stay star
 | Item | What is missing | Owner |
 |---|---|---|
 | 3 | A browser pass for `SameSite=Strict`, cookie size with real token sizes, token renewal | Ricardo, with EN-02-04 (#80) |
+| 4 | A test that kills the publisher's process between the confirm and the commit | Ricardo, with #78 |
 | 5 | The Spring consumer as a restricted broker user | Ricardo, with #78 |
 | 7 | The consumer inside the AI image, beside gunicorn | Sandro, US-03-01 |
 | 8 | arm64, load, and memory limits per service | Martim (EN01-U3) |
