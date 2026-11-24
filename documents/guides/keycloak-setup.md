@@ -1,6 +1,6 @@
 # Keycloak setup guide (design level)
 
-**Status:** planned configuration, not executed — no Keycloak instance has been set up (EN-01-01, 2026-10-27; revised 2026-11-01 after the PR #45 reviews, and again the same day: the traefik-oidc-auth plugin replaces oauth2-proxy)
+**Status:** implemented for the local stack in EN-02-04 (2026-11-24): Keycloak 26.8.2 with the realm `bmc`, the traefik-oidc-auth plugin v0.24.0 and synthetic accounts run from `compose.yaml` and `compose.local.yaml`, and sign-in is checked end to end by `scripts/e2e-signin.sh`. [Section 12](#12-as-implemented-in-en-02-04) lists what was built and which "to confirm" items below are now settled; where a section and section 12 differ, section 12 is what runs. Not yet run on the dev host. Sections 1–11 are the design of EN-01-01 (2026-10-27; revised 2026-11-01 after the PR #45 reviews, and again the same day: the traefik-oidc-auth plugin replaces oauth2-proxy)
 
 **Audience:** the team members who will set up identity in the spike (Ricardo, Afonso, Martim for infrastructure). Decision and reasons: [ADR-005](../adr/ADR-005-authentication-authorisation.md). Evidence IDs (E27, E88 …) refer to the [evidence register](../adr/README.md#evidence-register-en-01-01). Anything marked **to confirm in the spike** is not in the register and must be checked against the Keycloak, traefik-oidc-auth or Traefik documentation before use. Placeholders such as `<KEYCLOAK_ADMIN_PASSWORD>` stand for values that come from the environment; no real secret, hostname or password belongs in this file or in Git.
 
@@ -175,3 +175,45 @@ Traefik side: the OIDC middleware on the `/api/*` routers and on the routers tha
 7. The measured memory of Keycloak in the full Compose stack (spike item 8, EN01-U3).
 
 Related: [ADR-005](../adr/ADR-005-authentication-authorisation.md), [ADR-007](../adr/ADR-007-notification-service.md), [ADR-004](../adr/ADR-004-deployment-contract.md), [technical design](../07-technical-design.md), [security](../09-security-privacy.md#2-proposed-access-matrix), [workflows](../workflows/bmc-workflows.md).
+
+## 12. As implemented in EN-02-04
+
+Built and run on the local stack on 2026-11-24 (Docker 29.9, amd64). Versions and behaviour below were observed there; nothing here was run on the dev host yet.
+
+### What exists
+
+| Piece | Where | Notes |
+|---|---|---|
+| Keycloak image | `infra/keycloak/Dockerfile` → `ghcr.io/labsoft-g9/labdsof-keycloak` | Stock `quay.io/keycloak/keycloak:26.8.2` (digest pinned), built for MySQL with `KC_HTTP_RELATIVE_PATH=/auth` and health enabled, started with `start --optimized --import-realm`. The realm is baked in, because the deploy copies only `compose.yaml` to the host. Built, scanned and signed like the services (`.github/services.json`, language `image`) |
+| Realm | `infra/keycloak/realm/bmc-realm.json` | Roles `user` (default) and `platform_staff`; client `bmc-edge`; self-registration, email as username, email verification, password reset, brute-force detection. No secret in the file: `${BMC_EDGE_CLIENT_SECRET}`, `${BMC_PUBLIC_URL}` and the SMTP settings are filled from the environment at import |
+| Synthetic accounts | `infra/keycloak/realm/bmc-users-0.json` | Seven accounts `synthetic.<role>@bmc.example`, first name "Synthetic", with fixed IDs equal to the user IDs of Issue's seed (`services/issue`, `db/seed`). Copied into the import folder by the image's entrypoint only when `BMC_SEED_SYNTHETIC=true`; their password is `${BMC_SYNTHETIC_USER_PASSWORD}` (12 characters or more, or the container refuses to start). This settles section 5's open decision: a users file of the same realm, next to the realm file, is imported with it |
+| Edge | `compose.yaml`, labels on `traefik` | Plugin loaded by module name and version (`v0.24.0`, which fixes the open redirect GHSA-h448-jxrw-w73v). One middleware `oidc` on the three API routers and on a router for the plugin's own paths |
+| Mail | `mailpit` in `compose.yaml` | `axllent/mailpit:v1.32`, internal network only. A password-reset email from Keycloak arrived there |
+| Check | `scripts/e2e-signin.sh`, job "Sign-in end to end" in `pr.yml` | The flow of section 8 with curl and a cookie jar, on every pull request |
+
+### Settled values
+
+| Topic (section) | Value that runs |
+|---|---|
+| Hostname and proxy (4) | `KC_HOSTNAME=https://<public host>/auth` (local: `http://localhost/auth`), `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`, `KC_HTTP_ENABLED=true`, `KC_PROXY_HEADERS=xforwarded`, `KC_HTTP_RELATIVE_PATH=/auth` (a build option, set in the image) |
+| Issuer and keys (10) | The issuer in every token is the public address. The edge plugin and the services call Keycloak on the internal name `http://keycloak:8080/auth/realms/bmc`; with the backchannel option above, discovery there still reports the public issuer, and the token and key endpoints on the internal name. Issue: `OIDC_ISSUER_URI` public, `OIDC_JWK_SET_URI` internal |
+| Database (4) | `KC_DB=mysql` (build option), `KC_DB_URL=jdbc:mysql://<host>:<port>/keycloak`, `KC_DB_USERNAME`, `KC_DB_PASSWORD`. Started against MySQL 8.4 with the server defaults of `compose.local.yaml`; the first start takes about a minute for the schema |
+| Admin bootstrap (4) | `KC_BOOTSTRAP_ADMIN_USERNAME=bmc-admin`, `KC_BOOTSTRAP_ADMIN_PASSWORD` from the environment; used only while the `master` realm has no administrator |
+| Health (4) | `GET /auth/health/ready` on the management port 9000, never routed. The image has no curl, so the Compose health check uses bash's `/dev/tcp` |
+| Routed paths (4) | Only `/auth/realms/` and `/auth/resources/`. `/auth/admin/`, `/auth/health` and `/auth/metrics` answer `404` at the edge; the admin console is reached through a port forward |
+| Memory (4) | `mem_limit: 1250m`. Observed about 710 MB after start and a few sign-ins on amd64; not measured under load or on arm64 |
+| Client `bmc-edge` (6) | Confidential, standard flow only, PKCE `S256` required (a request without `code_challenge_method` is refused), redirect URI and post-logout redirect URI `<public URL>/oidc/callback`, audience mapper adding `bmc-api` |
+| Access token (6, 11.3) | `iss` public issuer; `aud` `["bmc-api", "account"]`; `azp` `bmc-edge`; `sub` the user ID; `email`, `email_verified`, `name`, `preferred_username`; realm roles in `realm_access.roles`. Lifetime 300 s, refresh 1800 s (Keycloak defaults; lifetimes stay open, EN01-U6). No building role in it |
+| Plugin (9) | `UnauthenticatedBehavior: Unauthorized` (API calls get `401`, never a redirect), `LoginUri: /oidc/login`, `CallbackUri: /oidc/callback`, `LogoutUri: /logout`, `UsePkce: true`, `TokenValidation: AccessToken` with `ValidAudience: bmc-api`, `Headers`: `Authorization: Bearer {{ .accessToken }}`, `SessionCookie.SameSite: strict` |
+| Secrets (11.5) | `Secret` and `ClientSecret` are Compose variables marked required (`${VAR:?}`): the deploy stops when one is missing, so the plugin never falls back to its documented default secret. `Secret` must be exactly 32 characters |
+| Return after sign-in (9) | Always `/` (`PostLoginRedirectUri`). The plugin accepts a `redirect_uri` on its login path only if it matches `ValidPostLoginRedirectUris` exactly, and wildcards need `TOA_ENABLE_REDIRECT_URI_WILDCARDS`, which stays unset. The client therefore keeps the page to return to itself |
+| Session cookie (11.4) | `TraefikOidcAuth.Session`, `HttpOnly`, `SameSite=Strict`, `Secure` (switched off only in `compose.local.yaml`, which is plain HTTP). With Keycloak's tokens it is about 4.8 kB, split by the plugin into two cookies; sign-in through the redirects works with `Strict` because everything is one origin |
+| Token renewal (11.2) | A session was used at 0 s, 250 s and 380 s with the 300 s access token: every call answered `200`, so the plugin renewed the token by itself |
+| Sign-out (11.2) | `/logout` ends Keycloak's session and the plugin's; the next API call answers `401`. Without a session `/logout` itself answers `401` |
+
+### Still open
+
+- The dev host: the secrets must exist in Parameter Store and in `app_secrets` (labdsof-infra) before this reaches `main`, or the deploy stops. The realm is imported only into an empty `keycloak` database.
+- The `401` from the edge is the plugin's own JSON (`application/json+problem`, no `code` member), not the services' problem format. The client only needs the status.
+- The client `notification-service` (section 6) is not in the realm yet; it is added with the Notification service that uses it.
+- Token lifetimes, rotation of the plugin's `Secret`, RateLimit on `/auth/*` and the plugin's paths, and the CSRF header name remain EN01-U6 items. Memory under load and arm64 remain spike item 8.

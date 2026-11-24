@@ -31,7 +31,7 @@ GitHub notification delivery also depends on the account's repository watch and 
 
 Pull requests run `.github/workflows/pr.yml`; merges to `main` run `dev.yml` (publish images, deploy to dev); a `v*` tag runs `prod.yml` (promote to production); `deploy.yml` is the shared deploy. Details and status: [CI/CD strategy](documents/devops/CICD.md#implementation-status) and the [settings the owner must apply](documents/devops/pipeline-settings-checklist.md).
 
-**Adding a service:** put it in its own folder with a `Dockerfile` (for example `services/notification/`) and add one line to `.github/services.json` with its name, folder and language (`maven`, `python` or `node`). The image is `ghcr.io/<owner>/labdsof-<name>`, lowercase. Protobuf contracts live in `contracts/proto`.
+**Adding a service:** put it in its own folder with a `Dockerfile` (for example `services/notification/`) and add one line to `.github/services.json` with its name, folder and language (`maven`, `python` or `node`; `image` for a stock image with configuration baked in, such as Keycloak in `infra/keycloak`). The image is `ghcr.io/<owner>/labdsof-<name>`, lowercase. Protobuf contracts live in `contracts/proto`.
 
 **Secrets scan before commit** (once per clone):
 
@@ -139,16 +139,38 @@ DEC-01: scope and IoT; DEC-03: team/schedule/Sprint B; DEC-04: stack and archite
 
 ### Locally with Docker
 
-Needs Docker with Compose v2 and port 80 free.
+Needs Docker with Compose v2 and port 80 free (or set `BMC_LOCAL_PORT` and `BMC_LOCAL_URL`, see `.env.example`). The first start downloads Traefik's sign-in plugin, so it needs internet access.
 
 ```bash
-cp .env.example .env          # then change every password in .env
+cp .env.example .env          # then change every password and secret in .env
 docker compose -f compose.yaml -f compose.local.yaml up --build
 ```
 
-Open <http://localhost>. The APIs are at `/api/issue`, `/api/dispatch` and `/api/notifications`.
+Open <http://localhost>. The APIs are at `/api/issue`, `/api/dispatch` and `/api/notifications`; they answer `401` until you sign in.
 
-`compose.local.yaml` adds what a laptop needs on top of `compose.yaml`: it builds each service from its folder, and adds MySQL 8.4 with the `issue`, `dispatch`, `notification` and `keycloak` databases and users. Only Traefik publishes a port. `.env` is ignored by Git; `.env.example` lists every variable. To start again with an empty database: `docker compose -f compose.yaml -f compose.local.yaml down -v` (this deletes the local data). Keycloak, RabbitMQ and Mailpit are added when the services use them.
+**Sign in** at <http://localhost/oidc/login> with a synthetic account and the `BMC_SYNTHETIC_USER_PASSWORD` from your `.env`. Sign out at <http://localhost/logout>.
+
+| Synthetic account | Who |
+|---|---|
+| `synthetic.resident.a1@bmc.example`, `synthetic.resident.a2@bmc.example` | Residents of Synthetic Building A |
+| `synthetic.resident.b1@bmc.example` | Resident of Synthetic Building B |
+| `synthetic.administrator.a@bmc.example`, `synthetic.administrator.b@bmc.example` | Administrator of building A, of building B |
+| `synthetic.contractor@bmc.example` | Contractor account, no building |
+| `synthetic.platform.staff@bmc.example` | Platform staff (realm role `platform_staff`), no building |
+
+They are synthetic: no real person, address or building. Keycloak holds the accounts (`infra/keycloak/realm`); the Issue service holds their buildings and roles (`services/issue`, `db/seed`). The user IDs in the two files must stay equal.
+
+`scripts/e2e-signin.sh` checks the whole sign-in path against the running stack (it also runs on every pull request):
+
+```bash
+set -a; . ./.env; set +a; scripts/e2e-signin.sh
+```
+
+`compose.local.yaml` adds what a laptop needs on top of `compose.yaml`: it builds each service from its folder, serves plain HTTP, and adds MySQL 8.4 with the `issue`, `dispatch`, `notification` and `keycloak` databases and users. Only Traefik publishes a port. `.env` is ignored by Git; `.env.example` lists every variable. RabbitMQ is added when the services use it.
+
+- **Mail.** Keycloak's emails (address verification on sign-up, password reset) are captured by Mailpit, which is never routed. Read them with `docker compose -f compose.yaml -f compose.local.yaml exec mailpit wget -qO- http://localhost:8025/api/v1/messages`, or publish port 8025 in a Compose override of your own.
+- **Keycloak admin console.** Not routed either. User `bmc-admin`, password `KEYCLOAK_ADMIN_PASSWORD`; reach it by publishing the `keycloak` container's port 8080 in an override of your own (`http://localhost:<port>/auth/admin/`).
+- **Start again from empty:** `docker compose -f compose.yaml -f compose.local.yaml down -v` deletes the local data. Keycloak imports the realm and the synthetic accounts only into an empty database, so this is also how a change to `infra/keycloak/realm` or to the secrets in `.env` takes effect.
 
 On dev and prod the same `compose.yaml` runs on the application host and its values come from Parameter Store ([labdsof-infra](https://github.com/LABSOFT-G9/labdsof-infra)).
 

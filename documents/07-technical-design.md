@@ -227,7 +227,7 @@ The [access matrix](09-security-privacy.md#2-proposed-access-matrix) defines pol
 
 | Operation | Service | Actor | Result |
 |---|---|---|---|
-| `GET /me` | Issue | Any authenticated user | Own profile (keyed by `sub`) and memberships; the client loads its session from it and goes to the edge plugin's login URI on `401` |
+| `GET /me` | Issue | Any authenticated user | Own profile (keyed by `sub`) and memberships; the client loads its session from it and goes to the edge plugin's login URI on `401`. Since EN-02-04 it also passes on, from the access token and for display only, the account's `email` and its `platformRoles` (`platform_staff`), and the token's `name` while no profile exists; none of them grants anything in Issue. The contractor link is not here: contractors belong to Dispatch |
 | `GET /buildings/{id}/areas` | Issue | Members of the building | Added with US-01-01 (#85) for the report form; `404` for non-members |
 | `POST /condominium-registrations` | Issue | Any authenticated user | Organisation, first building and the caller's `administrator` membership in one transaction; publishes `MembershipGranted` (workflow 1; proposed addition, DEC entry pending) |
 | `POST /buildings/{id}/invitations` | Issue | Building administrator | Unit and invitee email; stores the token hash with a 7-day expiry and publishes `NotificationRequested` with the link (invitation exception, 4.4). The link carries the token in the URL fragment (`https://<host>/invite#t=<token>`), which browsers never send to a server, so it never reaches Traefik or a service in a path, query or `Referer` |
