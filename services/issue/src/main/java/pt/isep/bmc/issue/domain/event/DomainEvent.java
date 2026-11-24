@@ -9,7 +9,7 @@ import pt.isep.bmc.issue.domain.building.BuildingId;
  * need (technical design 4.4). Written to the outbox in the same transaction
  * as the change; the CloudEvents envelope is added by the outbox adapter.
  */
-public sealed interface DomainEvent permits ReportSubmitted, TriageRequested {
+public sealed interface DomainEvent permits IssueStateChanged, IssueTriaged, ReportSubmitted, TriageRequested {
 
     /** CloudEvents {@code type}, for example {@code ReportSubmitted}. */
     String type();

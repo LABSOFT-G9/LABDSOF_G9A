@@ -5,9 +5,15 @@ import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.AreaKind;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
 import pt.isep.bmc.issue.domain.issue.Issue;
+import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.issue.IssueState;
+import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.TriageDecision;
+import pt.isep.bmc.issue.domain.issue.TriageReason;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.MembershipId;
 import pt.isep.bmc.issue.domain.membership.MembershipRole;
@@ -31,10 +37,59 @@ final class PersistenceMapper {
         entity.areaId = issue.areaId().toString();
         entity.state = issue.state().value();
         entity.version = issue.version();
+        entity.category = issue.category().map(IssueCategory::value).orElse(null);
+        entity.urgency = issue.urgency().map(IssueUrgency::value).orElse(null);
         entity.criticalCheckStatus = issue.criticalCheckStatus().value();
         entity.createdAt = Timestamps.toColumn(issue.createdAt());
-        entity.updatedAt = entity.createdAt;
+        entity.updatedAt = Timestamps.toColumn(issue.updatedAt());
         return entity;
+    }
+
+    static Issue toDomain(IssueEntity entity) {
+        return Issue.restore(
+                new IssueId(UUID.fromString(entity.id)),
+                new BuildingId(UUID.fromString(entity.buildingId)),
+                new AreaId(UUID.fromString(entity.areaId)),
+                IssueState.fromValue(entity.state),
+                entity.version,
+                entity.category == null ? null : category(entity.category),
+                entity.urgency == null ? null : urgency(entity.urgency),
+                CriticalCheckStatus.fromValue(entity.criticalCheckStatus),
+                Timestamps.fromColumn(entity.createdAt),
+                Timestamps.fromColumn(entity.updatedAt));
+    }
+
+    static TriageDecisionEntity toEntity(TriageDecision decision) {
+        TriageDecisionEntity entity = new TriageDecisionEntity();
+        entity.issueId = decision.issueId().toString();
+        entity.resultingVersion = decision.resultingVersion();
+        entity.category = decision.category().value();
+        entity.urgency = decision.urgency().value();
+        entity.reason = decision.reason().value();
+        entity.decidedBy = decision.decidedBy().value();
+        entity.decidedAt = Timestamps.toColumn(decision.decidedAt());
+        return entity;
+    }
+
+    static TriageDecision toDomain(TriageDecisionEntity entity) {
+        return new TriageDecision(
+                new IssueId(UUID.fromString(entity.issueId)),
+                category(entity.category),
+                urgency(entity.urgency),
+                TriageReason.restore(entity.reason),
+                new UserId(entity.decidedBy),
+                entity.resultingVersion,
+                Timestamps.fromColumn(entity.decidedAt));
+    }
+
+    static IssueCategory category(String stored) {
+        return IssueCategory.fromValue(stored)
+                .orElseThrow(() -> new IllegalStateException("unknown stored category"));
+    }
+
+    static IssueUrgency urgency(String stored) {
+        return IssueUrgency.fromValue(stored)
+                .orElseThrow(() -> new IllegalStateException("unknown stored urgency"));
     }
 
     static ReportEntity toEntity(Report report) {
@@ -69,6 +124,7 @@ final class PersistenceMapper {
         entity.type = entry.type().value();
         entity.visibility = entry.visibility().value();
         entity.actorRole = entry.actorRole();
+        entity.issueVersion = entry.issueVersion();
         entity.occurredAt = Timestamps.toColumn(entry.occurredAt());
         return entity;
     }

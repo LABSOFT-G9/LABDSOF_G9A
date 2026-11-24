@@ -53,7 +53,8 @@ public abstract class IntegrationTestSupport {
 
     @BeforeEach
     void resetData() throws Exception {
-        for (String table : new String[] {"outbox", "idempotency_keys", "issue_history", "reports", "issues"}) {
+        for (String table : new String[] {
+            "outbox", "idempotency_keys", "triage_decisions", "issue_history", "reports", "issues"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
         try (var connection = dataSource.getConnection()) {
@@ -64,6 +65,39 @@ public abstract class IntegrationTestSupport {
 
     protected Map<String, Object> report(String buildingId, String areaId, String text) {
         return Map.of("buildingId", buildingId, "areaId", areaId, "text", text);
+    }
+
+    /** Submits a report and returns the ID of the issue it created. */
+    protected String submitIssue(String sub, String buildingId, String areaId) {
+        var response = api.post("/reports", tokens.token(sub), java.util.UUID.randomUUID().toString(),
+                report(buildingId, areaId, TEXT));
+        if (response.status() != 201) {
+            throw new IllegalStateException("report not created: " + response.status());
+        }
+        return (String) response.json().get("issueId");
+    }
+
+    /** {@code POST /issues/{id}/triage} with {@code If-Match: "<version>"} and a fresh idempotency key. */
+    protected pt.isep.bmc.issue.support.Api.Response triage(
+            String sub, String issueId, long version, String category, String urgency, String reason) {
+        return triage(sub, issueId, "\"" + version + "\"", java.util.UUID.randomUUID().toString(),
+                triageBody(category, urgency, reason));
+    }
+
+    protected pt.isep.bmc.issue.support.Api.Response triage(
+            String sub, String issueId, String ifMatch, String idempotencyKey, Object body) {
+        Map<String, String> headers = new java.util.HashMap<>();
+        headers.put("If-Match", ifMatch);
+        headers.put("Idempotency-Key", idempotencyKey);
+        return api.postWithHeaders("/issues/" + issueId + "/triage", tokens.token(sub), headers, body);
+    }
+
+    protected Map<String, Object> triageBody(String category, String urgency, String reason) {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("category", category);
+        body.put("urgency", urgency);
+        body.put("reason", reason);
+        return body;
     }
 
     protected long count(String table) {

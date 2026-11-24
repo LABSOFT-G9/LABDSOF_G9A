@@ -11,8 +11,13 @@ import org.springframework.stereotype.Component;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
 import pt.isep.bmc.issue.domain.event.DomainEvent;
+import pt.isep.bmc.issue.domain.event.IssueStateChanged;
+import pt.isep.bmc.issue.domain.event.IssueTriaged;
 import pt.isep.bmc.issue.domain.event.ReportSubmitted;
 import pt.isep.bmc.issue.domain.event.TriageRequested;
+import pt.isep.bmc.issue.domain.issue.IssueCategory;
+import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -83,6 +88,23 @@ class OutboxWriter implements EventOutbox {
                 data.put("reportId", e.reportId().toString());
                 data.put("issueId", e.issueId().toString());
                 data.put("areaId", e.areaId().toString());
+            }
+            case IssueTriaged e -> {
+                data.put("issueId", e.issueId().toString());
+                data.put("category", e.category().value());
+                data.put("urgency", e.urgency().value());
+                data.put("decisionSource", TriageDecision.SOURCE_HUMAN);
+            }
+            case IssueStateChanged e -> {
+                data.put("issueId", e.issueId().toString());
+                data.put("buildingId", e.buildingId().toString());
+                data.put("state", e.state().value());
+                data.put("version", e.issueVersion());
+                data.put("dispatchable", e.dispatchable());
+                // Undecided values are sent as null, never as a made-up default.
+                data.put("category", e.category().map(IssueCategory::value).orElse(null));
+                data.put("urgency", e.urgency().map(IssueUrgency::value).orElse(null));
+                data.put("areaLabel", e.areaLabel());
             }
             case TriageRequested e -> {
                 data.put("issueId", e.issueId().toString());

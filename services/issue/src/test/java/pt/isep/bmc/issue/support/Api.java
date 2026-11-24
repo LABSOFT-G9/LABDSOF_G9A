@@ -48,6 +48,19 @@ public final class Api {
         return send(request.build());
     }
 
+    /** A POST with extra headers, for example {@code If-Match}; a {@code null} value leaves the header out. */
+    public Response postWithHeaders(String path, String token, Map<String, String> headers, Object body) {
+        HttpRequest.Builder request = request(path, token)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body instanceof String s ? s : JSON.writeValueAsString(body)));
+        headers.forEach((name, value) -> {
+            if (value != null) {
+                request.header(name, value);
+            }
+        });
+        return send(request.build());
+    }
+
     public Response get(String path, String token) {
         return send(request(path, token).GET().build());
     }

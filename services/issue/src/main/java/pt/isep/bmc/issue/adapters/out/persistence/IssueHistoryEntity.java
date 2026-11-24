@@ -31,6 +31,9 @@ class IssueHistoryEntity {
     @Column(name = "actor_role", nullable = false)
     String actorRole;
 
+    @Column(name = "issue_version", nullable = false)
+    long issueVersion;
+
     @Column(name = "occurred_at", nullable = false)
     LocalDateTime occurredAt;
 
