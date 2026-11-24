@@ -16,6 +16,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { type HistoryEntry, KNOWN_HISTORY_TYPES, type KnownHistoryType } from "@/contracts/issue";
+import { signalText } from "@/features/issues/critical-signals";
 import { ORIGIN_ICONS } from "@/features/issues/origin-icons";
 import { t } from "@/shared/i18n";
 import { formatDateTime } from "@/shared/lib/format";
@@ -50,18 +51,18 @@ function describe(entry: HistoryEntry, type: KnownHistoryType | null): { label: 
 /**
  * The issue's history, oldest first. Each step has its own icon and words, so approval, the contractor's answer and
  * the booking (manual or confirmed with the calendar) never blur into one status (US-02). Internal entries, which only
- * administrators receive, say so. A suggestion recorded after a human decision is kept with its own source but changed
- * nothing (technical design §3.3), so it says it was not applied.
+ * administrators receive, say so. A suggestion the service did not apply (it named a version the issue had left, before
+ * or after a decision; technical design §3.3) is kept with its own source and says so, from its `applied` flag (#108).
+ * A critical-alert entry names its rule in words (#96).
  */
 export function IssueHistory({ entries }: { entries: readonly HistoryEntry[] }) {
   if (entries.length === 0) return <p className="text-muted-foreground text-sm">{t.issues.historyEmpty}</p>;
-  const firstDecision = entries.find((entry) => entry.type === "triage_decided")?.sequence;
   return (
     <ol className="space-y-4">
       {entries.map((entry) => {
         const type = isKnown(entry.type) ? entry.type : null;
         const { label, Icon } = describe(entry, type);
-        const late = type === "triage_suggested" && firstDecision !== undefined && entry.sequence > firstDecision;
+        const late = type === "triage_suggested" && entry.applied === false;
         return (
           <li key={entry.sequence} className="flex gap-3">
             <Icon className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden />
@@ -71,6 +72,7 @@ export function IssueHistory({ entries }: { entries: readonly HistoryEntry[] }) 
                 {t.issues.actors[entry.actorRole]} ·{" "}
                 <time dateTime={entry.occurredAt}>{formatDateTime(entry.occurredAt)}</time>
               </p>
+              {type === "critical_alert_raised" && entry.code ? <p>{signalText(entry.code)}</p> : null}
               {entry.category && entry.urgency ? (
                 <p>
                   {t.issues.categories[entry.category]} · {t.issues.urgency[entry.urgency]}

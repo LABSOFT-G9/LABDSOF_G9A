@@ -1,12 +1,13 @@
-import { Clock, Info, Siren, TriangleAlert } from "lucide-react";
+import { Clock, Info, ShieldQuestion, Siren, TriangleAlert } from "lucide-react";
 import { useId } from "react";
 import {
-  type CriticalAlert,
+  type CriticalCheck,
   type Issue,
   KNOWN_FAILURE_CODES,
   type KnownFailureCode,
   TRIAGE_PENDING_AFTER_MS,
 } from "@/contracts/issue";
+import { signalText } from "@/features/issues/critical-signals";
 import { ORIGIN_ICONS } from "@/features/issues/origin-icons";
 import { t } from "@/shared/i18n";
 import { formatDateTime, timeAgo } from "@/shared/lib/format";
@@ -133,45 +134,77 @@ export function SuggestionPanel({
 }
 
 /**
- * US-03/US-14: a critical alert stays in view whatever the suggestion says. It is Issue's own check, not the AI's, so
- * a lower suggested urgency is pointed out instead of hiding the alert. Static content, so a note, not a live alert.
+ * US-03/US-14: Issue's own critical check stays in view whatever the suggestion says. Every matched rule is listed; a
+ * lower suggested urgency is pointed out instead of hiding them. A check that has not finished says so in words, so it
+ * never reads as "nothing found" (#96). A finished check with no signals shows nothing. Static content, so a note, not
+ * a live alert.
  */
-export function CriticalAlertBanner({
-  alert,
+export function CriticalCheckBanner({
+  check,
   issue,
   now,
 }: {
-  alert: CriticalAlert;
+  check: CriticalCheck;
   issue: Pick<Issue, "triage" | "suggestion">;
   now: Date;
 }) {
+  const pending = check.status === "pending";
+  if (check.signals.length === 0) {
+    if (!pending) return null;
+    return (
+      <Alert role="note">
+        <ShieldQuestion aria-hidden />
+        <AlertTitle>{t.issues.critical.pendingTitle}</AlertTitle>
+        <AlertDescription>
+          <p>{t.issues.critical.pendingBody}</p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
   const suggested = !issue.triage ? issue.suggestion : null;
   return (
     <Alert role="note" variant="destructive" className="border-destructive">
       <Siren aria-hidden />
       <AlertTitle>{t.issues.critical.title}</AlertTitle>
       <AlertDescription>
-        <p className="text-foreground">{alert.reason}</p>
+        <ul className="text-foreground space-y-1">
+          {check.signals.map((signal) => (
+            <li key={`${signal.code}-${signal.raisedAt}`}>
+              {signalText(signal.code)}{" "}
+              <time className="text-xs opacity-80" dateTime={signal.raisedAt} title={formatDateTime(signal.raisedAt)}>
+                {t.issues.critical.raisedAt(timeAgo(signal.raisedAt, now))}
+              </time>
+            </li>
+          ))}
+        </ul>
         {suggested && suggested.urgency !== "critical" ? (
           <p>{t.issues.critical.disagrees(t.issues.urgency[suggested.urgency])}</p>
         ) : null}
         {!issue.triage ? <p>{t.issues.critical.review}</p> : null}
-        <p className="text-xs">
-          <time dateTime={alert.raisedAt} title={formatDateTime(alert.raisedAt)}>
-            {t.issues.critical.raisedAt(timeAgo(alert.raisedAt, now))}
-          </time>
-        </p>
+        {pending ? <p>{t.issues.critical.pendingBody}</p> : null}
+        {/* US-14-03: which rule set raised it, as the suggestion panel names its rules version. */}
+        {check.rulesVersion ? <p className="text-xs">{t.issues.suggestion.rules(check.rulesVersion)}</p> : null}
       </AlertDescription>
     </Alert>
   );
 }
 
-/** The list's short form of a critical alert: icon and words, never colour alone. */
-export function CriticalBadge() {
+/** The list's short form of the critical check: icon and words, never colour alone. Nothing when there is nothing. */
+export function CriticalBadge({ check }: { check: CriticalCheck | null | undefined }) {
+  if (!check) return null;
+  if (check.signals.length > 0) {
+    return (
+      <Badge variant="destructive">
+        <Siren aria-hidden />
+        {t.issues.critical.badge}
+      </Badge>
+    );
+  }
+  if (check.status !== "pending") return null;
   return (
-    <Badge variant="destructive">
-      <Siren aria-hidden />
-      {t.issues.critical.badge}
+    <Badge variant="outline">
+      <ShieldQuestion aria-hidden />
+      {t.issues.critical.pendingBadge}
     </Badge>
   );
 }

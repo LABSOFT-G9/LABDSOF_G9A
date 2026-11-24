@@ -150,6 +150,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         rulesVersion: null,
         modelVersion: "mock-model-v1",
       },
+      // Checked, nothing found: shows nothing.
+      criticalCheck: { status: "completed", rulesVersion: "critical-alerts-v1", signals: [] },
       reporterIds: [residentA1],
       history: [
         received(3),
@@ -161,6 +163,7 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           category: "electrical",
           urgency: "high",
           origin: "ai",
+          applied: true,
         }),
       ],
     },
@@ -173,6 +176,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       createdAt: at(20),
       triage: null,
       suggestion: null,
+      // The critical check has not finished: never read as "nothing found" (#96).
+      criticalCheck: { status: "pending", rulesVersion: null, signals: [] },
       reporterIds: [residentA2],
       history: [received(20)],
     },
@@ -212,6 +217,7 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           category: "plumbing",
           urgency: "low",
           origin: "ai",
+          applied: false,
         }),
         entry(4, {
           type: "intervention_approved",
@@ -287,12 +293,33 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         rulesVersion: "rules-v1",
         modelVersion: null,
       },
-      criticalAlert: { reason: "The report mentions smoke near an electrical socket.", raisedAt: at(1) },
+      criticalCheck: {
+        status: "completed",
+        rulesVersion: "critical-alerts-v1",
+        signals: [
+          { code: "smoke_or_fire", raisedAt: at(1) },
+          { code: "water_near_electrics", raisedAt: at(1) },
+        ],
+      },
       reporterIds: [residentB1],
       history: [
         received(1),
-        entry(2, { type: "critical_alert_raised", visibility: "internal", actorRole: "system", occurredAt: at(1) }),
+        // One internal entry per signal (#96).
+        entry(2, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "smoke_or_fire",
+        }),
         entry(3, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "water_near_electrics",
+        }),
+        entry(4, {
           type: "triage_suggested",
           visibility: "internal",
           actorRole: "system",
@@ -300,6 +327,7 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           category: "electrical",
           urgency: "normal",
           origin: "fallback",
+          applied: true,
         }),
       ],
     },
