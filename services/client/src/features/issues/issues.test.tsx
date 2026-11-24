@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Issue } from "@/contracts/issue";
+import type { Issue, TriageResult } from "@/contracts/issue";
 import { ApiError } from "@/shared/lib/errors";
 import { stubIssueApi } from "@/test/fakes";
 import { renderApp } from "@/test/render-app";
@@ -133,6 +133,103 @@ describe("triage (administrator)", () => {
     // The administrator's own choices are still in the form, to save on the new version if they still want to.
     expect(screen.getByRole("combobox", { name: "Category" })).toHaveDisplayValue("Plumbing");
     expect(screen.getByRole("textbox", { name: "Reason" })).toHaveValue("Water near a socket.");
+  });
+
+  it("decides on the version the form was opened on, even after a background refetch", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const opened: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "received",
+      version: 1,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const getIssue = vi
+      .fn<() => Promise<Issue>>()
+      .mockResolvedValueOnce(opened)
+      .mockResolvedValue({
+        ...opened,
+        state: "triaged",
+        version: 2,
+        triage: {
+          category: "lift",
+          urgency: "low",
+          reason: null,
+          decidedAt: "2026-11-24T10:05:00Z",
+          decisionSource: "human",
+        },
+      });
+    const triage = vi.fn(async () => {
+      throw new ApiError(409, "VERSION_CONFLICT", "Changed.", undefined, {
+        currentVersion: 2,
+        currentState: "triaged",
+      });
+    });
+    const { router } = renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), triage }) },
+    });
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Plumbing");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "High");
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Water near a socket.");
+
+    // A colleague decided meanwhile; a refetch (window focus, reconnect, stale time) brings version 2 in.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    await screen.findByText("Lift · Low");
+    expect(screen.getByText("This issue has changed since you opened it")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Someone changed this issue");
+    // Sent on version 1, the one the choices were made on: the service refuses it and nothing is replaced.
+    expect(triage).toHaveBeenCalledWith("i1", 1, expect.anything(), expect.any(String));
+  });
+
+  it("locks the fields while the decision is being saved, so its answer is never lost", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "received",
+      version: 1,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    let answer!: (result: TriageResult) => void;
+    const triage = vi.fn(
+      () =>
+        new Promise<TriageResult>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), triage }),
+      },
+    });
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Lift");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "Low");
+    const reason = screen.getByRole("textbox", { name: "Reason" });
+    await user.type(reason, "Check.");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+
+    await waitFor(() => expect(reason).toBeDisabled());
+    expect(screen.getByRole("combobox", { name: "Category" })).toBeDisabled();
+    await user.type(reason, " More.");
+    expect(reason).toHaveValue("Check.");
+
+    answer({ issueId: "i1", state: "triaged", version: 2, category: "lift", urgency: "low", decisionSource: "human" });
+    await screen.findByText("Decision saved.");
+    expect(triage).toHaveBeenCalledTimes(1);
   });
 
   it("explains when the issue can no longer be triaged", async () => {

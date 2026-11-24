@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { CircleCheck, Info, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 import { type FormEvent, useId, useRef, useState } from "react";
 import { useServices } from "@/app/context";
 import {
@@ -12,7 +12,7 @@ import {
   TriageRequestSchema,
   FieldViolationsSchema,
 } from "@/contracts/issue";
-import { issueKeys, triageMutation } from "@/features/issues/api";
+import { issueKeys, issueQuery, triageMutation } from "@/features/issues/api";
 import { ErrorState } from "@/shared/components/error-state";
 import { SubmitButton } from "@/shared/components/submit-button";
 import { t } from "@/shared/i18n";
@@ -51,10 +51,10 @@ const fromIssue = (issue: Issue): TriageDraft => ({
 });
 
 /**
- * US-02: the administrator's triage decision. The decision is made on the version the page shows (`If-Match`): if
- * someone else changed the issue first, the service refuses it (`409`) and nothing is overwritten. The form then says so,
- * keeps the administrator's choices, and offers to reload the issue. A suggestion can fill the form, but only saving
- * makes it a decision.
+ * US-02: the administrator's triage decision. The decision is sent with the version the form was opened on
+ * (`If-Match`), not whatever a background refetch brought in since: if someone else changed the issue first, the
+ * service refuses it (`409`) and nothing is overwritten. The form then says so, keeps the administrator's choices, and
+ * offers to reload the issue. A suggestion can fill the form, but only saving makes it a decision.
  */
 export function TriageForm({ issue }: { issue: Issue }) {
   const { issues } = useServices();
@@ -64,6 +64,12 @@ export function TriageForm({ issue }: { issue: Issue }) {
   const [draft, setDraft] = useState<TriageDraft>(() => fromIssue(issue));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [saved, setSaved] = useState(false);
+  /**
+   * The version the administrator's choices are based on. Moves only after a save (to the version it produced) or an
+   * explicit reload, never on a background refetch, so a colleague's decision is never replaced unseen. It also keeps a
+   * retry identical to the first attempt (same key, same `If-Match`), which the service replays instead of refusing.
+   */
+  const [basis, setBasis] = useState(issue.version);
   const idempotencyKey = useRef<string | null>(null);
 
   const fieldId = (field: Field) => `${id}-${field}`;
@@ -73,6 +79,8 @@ export function TriageForm({ issue }: { issue: Issue }) {
   };
 
   function change(patch: Partial<TriageDraft>) {
+    // The fields are disabled while the decision is being saved; its answer must not be thrown away.
+    if (mutation.isPending) return;
     idempotencyKey.current = null;
     setSaved(false);
     if (!isApiError(mutation.error, 409)) mutation.reset();
@@ -95,10 +103,11 @@ export function TriageForm({ issue }: { issue: Issue }) {
     setErrors({});
     idempotencyKey.current ??= randomId();
     mutation.mutate(
-      { version: issue.version, decision: parsed.data, idempotencyKey: idempotencyKey.current },
+      { version: basis, decision: parsed.data, idempotencyKey: idempotencyKey.current },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           idempotencyKey.current = null;
+          setBasis(result.version);
           setSaved(true);
           setDraft((current) => ({ ...current, reason: "" }));
         },
@@ -121,10 +130,15 @@ export function TriageForm({ issue }: { issue: Issue }) {
       queryClient.invalidateQueries({ queryKey: issueKeys.history(issue.issueId) }),
       queryClient.invalidateQueries({ queryKey: issueKeys.list() }),
     ]);
+    // The administrator has now seen the latest version: decide on it from here.
+    const latest = queryClient.getQueryData(issueQuery(issues, issue.issueId).queryKey);
+    if (latest) setBasis(latest.version);
   }
 
   const failure = mutation.isError && !serverFieldErrors(mutation.error) ? mutation.error : null;
   const conflict = isApiError(failure, 409) ? failure : null;
+  // A background refetch brought a newer version than the one the form is based on.
+  const changedMeanwhile = issue.version > basis && !conflict && !mutation.isPending;
   const describedBy = (field: Field, ...extra: string[]) =>
     [...extra, errors[field] ? `${fieldId(field)}-error` : null].filter(Boolean).join(" ") || undefined;
   const fieldError = (field: Field) =>
@@ -147,74 +161,91 @@ export function TriageForm({ issue }: { issue: Issue }) {
         </p>
       ) : null}
 
-      {issue.suggestion && !issue.triage ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => change({ category: issue.suggestion!.category, urgency: issue.suggestion!.urgency })}
-        >
-          <Sparkles aria-hidden />
-          {t.issues.useSuggestion}
-        </Button>
+      {/* Locked while the decision is being saved, so the answer always belongs to what is on screen. */}
+      <fieldset disabled={mutation.isPending} className="space-y-5">
+        {issue.suggestion && !issue.triage ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => change({ category: issue.suggestion!.category, urgency: issue.suggestion!.urgency })}
+          >
+            <Sparkles aria-hidden />
+            {t.issues.useSuggestion}
+          </Button>
+        ) : null}
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor={fieldId("category")}>{t.issues.category}</Label>
+            <NativeSelect
+              id={fieldId("category")}
+              value={draft.category}
+              onChange={(event) => change({ category: event.target.value as TriageDraft["category"] })}
+              aria-invalid={errors.category ? true : undefined}
+              aria-describedby={describedBy("category")}
+            >
+              <option value="">{t.issues.chooseCategory}</option>
+              {IssueCategorySchema.options.map((category) => (
+                <option key={category} value={category}>
+                  {t.issues.categories[category]}
+                </option>
+              ))}
+            </NativeSelect>
+            {fieldError("category")}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={fieldId("urgency")}>{t.issues.urgencyLabel}</Label>
+            <NativeSelect
+              id={fieldId("urgency")}
+              value={draft.urgency}
+              onChange={(event) => change({ urgency: event.target.value as TriageDraft["urgency"] })}
+              aria-invalid={errors.urgency ? true : undefined}
+              aria-describedby={describedBy("urgency")}
+            >
+              <option value="">{t.issues.chooseUrgency}</option>
+              {IssueUrgencySchema.options.map((urgency) => (
+                <option key={urgency} value={urgency}>
+                  {t.issues.urgency[urgency]}
+                </option>
+              ))}
+            </NativeSelect>
+            {fieldError("urgency")}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={fieldId("reason")}>{t.issues.reasonLabel}</Label>
+          <Textarea
+            id={fieldId("reason")}
+            value={draft.reason}
+            onChange={(event) => change({ reason: event.target.value })}
+            aria-invalid={errors.reason ? true : undefined}
+            aria-describedby={describedBy("reason", `${fieldId("reason")}-hint`, `${fieldId("reason")}-count`)}
+          />
+          <p id={`${fieldId("reason")}-hint`} className="text-muted-foreground text-sm">
+            {t.issues.reasonHint}
+          </p>
+          <p id={`${fieldId("reason")}-count`} className="text-muted-foreground text-sm">
+            {t.issues.reasonCount(reasonLength, TRIAGE_REASON_MAX)}
+          </p>
+          {fieldError("reason")}
+        </div>
+      </fieldset>
+
+      {changedMeanwhile ? (
+        <Alert>
+          <Info aria-hidden />
+          <AlertTitle>{t.issues.changedMeanwhileTitle}</AlertTitle>
+          <AlertDescription>
+            <p>{t.issues.changedMeanwhileBody}</p>
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void reload()}>
+              <RefreshCw aria-hidden />
+              {t.issues.reload}
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : null}
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor={fieldId("category")}>{t.issues.category}</Label>
-          <NativeSelect
-            id={fieldId("category")}
-            value={draft.category}
-            onChange={(event) => change({ category: event.target.value as TriageDraft["category"] })}
-            aria-invalid={errors.category ? true : undefined}
-            aria-describedby={describedBy("category")}
-          >
-            <option value="">{t.issues.chooseCategory}</option>
-            {IssueCategorySchema.options.map((category) => (
-              <option key={category} value={category}>
-                {t.issues.categories[category]}
-              </option>
-            ))}
-          </NativeSelect>
-          {fieldError("category")}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={fieldId("urgency")}>{t.issues.urgencyLabel}</Label>
-          <NativeSelect
-            id={fieldId("urgency")}
-            value={draft.urgency}
-            onChange={(event) => change({ urgency: event.target.value as TriageDraft["urgency"] })}
-            aria-invalid={errors.urgency ? true : undefined}
-            aria-describedby={describedBy("urgency")}
-          >
-            <option value="">{t.issues.chooseUrgency}</option>
-            {IssueUrgencySchema.options.map((urgency) => (
-              <option key={urgency} value={urgency}>
-                {t.issues.urgency[urgency]}
-              </option>
-            ))}
-          </NativeSelect>
-          {fieldError("urgency")}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={fieldId("reason")}>{t.issues.reasonLabel}</Label>
-        <Textarea
-          id={fieldId("reason")}
-          value={draft.reason}
-          onChange={(event) => change({ reason: event.target.value })}
-          aria-invalid={errors.reason ? true : undefined}
-          aria-describedby={describedBy("reason", `${fieldId("reason")}-hint`, `${fieldId("reason")}-count`)}
-        />
-        <p id={`${fieldId("reason")}-hint`} className="text-muted-foreground text-sm">
-          {t.issues.reasonHint}
-        </p>
-        <p id={`${fieldId("reason")}-count`} className="text-muted-foreground text-sm">
-          {t.issues.reasonCount(reasonLength, TRIAGE_REASON_MAX)}
-        </p>
-        {fieldError("reason")}
-      </div>
 
       {conflict ? (
         <Alert role="alert" variant="destructive">

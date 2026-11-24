@@ -62,8 +62,15 @@ describe("TriageRequestSchema", () => {
 
   it("refuses categories and urgencies the service does not know", () => {
     expect(reasons({ category: "garden", urgency: "medium", reason: "ok" })).toEqual([
-      "category:required",
-      "urgency:required",
+      "category:invalid",
+      "urgency:invalid",
+    ]);
+  });
+
+  it("refuses control characters in the reason, like the service", () => {
+    expect(reasons({ category: "lift", urgency: "low", reason: "Line one\nline two\tok" })).toEqual([]);
+    expect(reasons({ category: "lift", urgency: "low", reason: "Bell \u0007 here" })).toEqual([
+      "reason:invalid_characters",
     ]);
   });
 });

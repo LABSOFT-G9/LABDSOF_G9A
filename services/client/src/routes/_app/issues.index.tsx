@@ -7,7 +7,7 @@ import { issueListQuery, IssuesPage } from "@/features/issues";
  */
 export const Route = createFileRoute("/_app/issues/")({
   loader: ({ context }) => {
-    void context.queryClient.prefetchQuery(issueListQuery(context.services.issues));
+    void context.queryClient.prefetchInfiniteQuery(issueListQuery(context.services.issues));
   },
   component: IssuesPage,
 });

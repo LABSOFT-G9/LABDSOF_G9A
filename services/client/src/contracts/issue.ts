@@ -52,10 +52,20 @@ export type IssueState = z.infer<typeof IssueStateSchema>;
 export const IssueUrgencySchema = z.enum(["low", "normal", "high", "critical"]);
 export type IssueUrgency = z.infer<typeof IssueUrgencySchema>;
 
+/**
+ * Control characters other than tab and line breaks, and lone UTF-16 surrogates: the service rejects both. Spreading a
+ * string yields whole code points, so an emoji arrives as one pair-free character and only an unpaired half is caught.
+ */
+const isForbiddenCodePoint = (codePoint: number) =>
+  (codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) ||
+  (codePoint >= 0x7f && codePoint <= 0x9f) ||
+  (codePoint >= 0xd800 && codePoint <= 0xdfff);
+const hasForbiddenCharacter = (text: string) => [...text].some((char) => isForbiddenCodePoint(char.codePointAt(0)!));
+
 /*
  * Issues, triage and history (US-02). The operations are in technical design §4.2 and contract examples §1.2; the
- * read shapes are NOT defined yet (US-02-01, #87). Every field marked ASSUMPTION is the client's proposal, posted on
- * #87 for the Issue service to confirm or change.
+ * shapes match the Issue service's pull request #140 (US-02-01), as answered on #87. Check them again if #140 changes
+ * before it merges. Only what #140 does not define yet is marked ASSUMPTION.
  */
 
 /** Categories from the US-02 story and contract examples §1.2. */
@@ -64,7 +74,7 @@ export type IssueCategory = z.infer<typeof IssueCategorySchema>;
 
 /**
  * The administrator's decision. Only a human decision is a decision; a suggestion is never shown as one (US-02).
- * ASSUMPTION: `reason` is internal, so it is `null` for residents and in lists.
+ * `reason` is internal: `null` for residents, and in `GET /issues` for everyone.
  */
 export const TriageDecisionSchema = z.object({
   category: IssueCategorySchema,
@@ -89,10 +99,7 @@ export const TriageSuggestionSchema = z.object({
 });
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
 
-/**
- * One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role.
- * ASSUMPTION: the whole shape (#87).
- */
+/** One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role. */
 export const IssueSchema = z.object({
   issueId: z.string(),
   buildingId: z.string(),
@@ -107,20 +114,26 @@ export const IssueSchema = z.object({
   suggestion: TriageSuggestionSchema.nullable(),
 });
 export type Issue = z.infer<typeof IssueSchema>;
-/** Kept for the list's name; a list row is the same projection. */
-export type IssueSummary = Issue;
-export const IssueSummarySchema = IssueSchema;
 
-/** `GET /issues`: issues of administered buildings, and the issues of the caller's own reports. ASSUMPTION: no paging. */
-export const IssueListSchema = z.array(IssueSchema);
+/**
+ * `GET /issues?buildingId&page&size`: issues of administered buildings, and the issues of the caller's own reports,
+ * newest first, one page at a time. `triage.reason` is always `null` here.
+ */
+export const IssuePageSchema = z.object({
+  items: z.array(IssueSchema),
+  page: z.number().int(),
+  size: z.number().int(),
+  hasMore: z.boolean(),
+});
+export type IssuePage = z.infer<typeof IssuePageSchema>;
 
 export const HistoryVisibilitySchema = z.enum(["public", "internal"]);
 export const HistoryActorSchema = z.enum(["resident", "administrator", "contractor", "system"]);
 export type HistoryActor = z.infer<typeof HistoryActorSchema>;
 
 /**
- * Entry types the client explains. `report_received` exists in the service; the others are ASSUMPTION names for the
- * triage decisions and the Dispatch events Issue projects into history (technical design §3.3). Any other type is
+ * Entry types the client explains. The first three exist in the service (#140); the others are ASSUMPTION names for the
+ * Dispatch events Issue projects into history (technical design §3.3). Any other type is
  * still shown, as a generic update, so a new type never breaks the page.
  */
 export const KNOWN_HISTORY_TYPES = [
@@ -139,7 +152,7 @@ export const KNOWN_HISTORY_TYPES = [
 ] as const;
 export type KnownHistoryType = (typeof KNOWN_HISTORY_TYPES)[number];
 
-/** One entry of `GET /issues/{id}/history`. Residents receive `public` entries only. ASSUMPTION: the shape (#87). */
+/** One entry of `GET /issues/{id}/history`, oldest first. Residents receive `public` entries only, without reasons. */
 export const HistoryEntrySchema = z.object({
   sequence: z.number().int(),
   type: z.string(),
@@ -157,10 +170,14 @@ export type History = z.infer<typeof HistorySchema>;
 
 export const TRIAGE_REASON_MAX = 500;
 
+/** Nothing chosen is `required`; a value the service does not know is `invalid`, as the service answers. */
+const choice = (issue: { input?: unknown }) =>
+  issue.input === undefined || issue.input === "" ? "required" : "invalid";
+
 /** Body of `POST /issues/{id}/triage` (contract examples §1.2): category, urgency and a reason of 1-500 characters. */
 export const TriageRequestSchema = z.object({
-  category: z.enum(IssueCategorySchema.options, { error: "required" }),
-  urgency: z.enum(IssueUrgencySchema.options, { error: "required" }),
+  category: z.enum(IssueCategorySchema.options, { error: choice }),
+  urgency: z.enum(IssueUrgencySchema.options, { error: choice }),
   reason: z
     .string()
     .trim()
@@ -168,6 +185,7 @@ export const TriageRequestSchema = z.object({
       const length = codePointLength(reason);
       if (length === 0) ctx.addIssue({ code: "custom", message: "required" });
       else if (length > TRIAGE_REASON_MAX) ctx.addIssue({ code: "custom", message: "too_long" });
+      else if (hasForbiddenCharacter(reason)) ctx.addIssue({ code: "custom", message: "invalid_characters" });
     }),
 });
 export type TriageRequest = z.infer<typeof TriageRequestSchema>;
@@ -203,16 +221,6 @@ export const AreaListSchema = z.array(AreaSchema);
 
 export const REPORT_TEXT_MIN = 10;
 export const REPORT_TEXT_MAX = 4_000;
-
-/**
- * Control characters other than tab and line breaks, and lone UTF-16 surrogates: the service rejects both. Spreading a
- * string yields whole code points, so an emoji arrives as one pair-free character and only an unpaired half is caught.
- */
-const isForbiddenCodePoint = (codePoint: number) =>
-  (codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) ||
-  (codePoint >= 0x7f && codePoint <= 0x9f) ||
-  (codePoint >= 0xd800 && codePoint <= 0xdfff);
-const hasForbiddenCharacter = (text: string) => [...text].some((char) => isForbiddenCodePoint(char.codePointAt(0)!));
 
 /**
  * Validation failure reasons, shared by this schema and the service's `400 VALIDATION_FAILED` `errors[].reason`, so

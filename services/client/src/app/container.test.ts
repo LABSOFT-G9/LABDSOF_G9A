@@ -25,12 +25,12 @@ describe("createContainer", () => {
   it("lets one port differ from the rest", async () => {
     const services = createContainer({ ...testConfig, adapters: "http" }, {}, { issues: "mock" });
     // Issues mocked while sign-in is real: no persona to filter by, so every synthetic issue is listed.
-    await expect(services.issues.list()).resolves.toHaveLength(4);
+    await expect(services.issues.list({})).resolves.toMatchObject({ items: { length: 4 } });
     expect(services.devPersonas).toBeUndefined();
   });
 
   it("lets tests replace any port", async () => {
-    const issues = stubIssueApi({ list: async () => [] });
+    const issues = stubIssueApi({ list: async () => ({ items: [], page: 0, size: 20, hasMore: false }) });
     expect(createContainer(testConfig, { issues }, {}).issues).toBe(issues);
   });
 });

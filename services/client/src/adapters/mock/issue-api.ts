@@ -103,13 +103,18 @@ export function mockIssueApi(
   }
 
   return {
-    list: () =>
+    list: ({ buildingId, page = 0 }) =>
       runtime.call(() => {
         const me = caller();
-        return issues
-          .filter((issue) => mayReadIssue(me, issue))
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-          .map((issue) => project(me, issue));
+        const visible = issues
+          .filter((issue) => mayReadIssue(me, issue) && (!buildingId || issue.buildingId === buildingId))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const items = visible.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((record): Issue => {
+          const issue = project(me, record);
+          // Lists never carry the reason, not even to administrators: it is read on the issue itself.
+          return { ...issue, triage: issue.triage && { ...issue.triage, reason: null } };
+        });
+        return { items, page, size: PAGE_SIZE, hasMore: visible.length > (page + 1) * PAGE_SIZE };
       }),
 
     listAreas: (buildingId) =>
@@ -228,8 +233,10 @@ export function mockIssueApi(
       runtime.call(() => {
         const me = caller();
         const issue = findIssue(me, issueId);
-        // Residents who may follow the issue still may not decide on it: outside their scope, like any other change.
-        if (!administers(me, issue.buildingId)) throw notFound();
+        // Residents who may follow the issue still may not decide on it. They can see it, so the answer is 403, not 404.
+        if (!administers(me, issue.buildingId)) {
+          throw new ApiError(403, "FORBIDDEN", "Only the building's administrators may triage.", "mock-correlation-id");
+        }
         const parsed = TriageRequestSchema.safeParse(decision);
         if (!parsed.success) throw validationError(parsed.error.issues);
 

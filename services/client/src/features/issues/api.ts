@@ -1,4 +1,4 @@
-import { mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { TriageRequest } from "@/contracts/issue";
 import type { IssueApi } from "@/ports/issue-api";
 
@@ -12,9 +12,11 @@ export const issueKeys = {
 
 /** One `queryOptions` per resource, shared by the route loader and the component. */
 export const issueListQuery = (issues: IssueApi) =>
-  queryOptions({
+  infiniteQueryOptions({
     queryKey: issueKeys.list(),
-    queryFn: ({ signal }) => issues.list(signal),
+    queryFn: ({ pageParam, signal }) => issues.list({ page: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   });
 
 export const issueQuery = (issues: IssueApi, issueId: string) =>

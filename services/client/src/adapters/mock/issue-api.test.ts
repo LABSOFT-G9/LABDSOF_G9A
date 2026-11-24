@@ -15,23 +15,26 @@ function signedInAs(personaId: string | null) {
 
 describe("mockIssueApi", () => {
   it("shows a resident only the issues of their building, like the real service", async () => {
-    const issues = await mockIssueApi(signedInAs("resident-a1"), runtime, clock, true).list();
+    const { items: issues } = await mockIssueApi(signedInAs("resident-a1"), runtime, clock, true).list({});
     expect(issues.length).toBeGreaterThan(0);
     expect(issues.every((issue) => issue.buildingId === BUILDINGS.a.buildingId)).toBe(true);
   });
 
   it("shows an administrator only the building they administer", async () => {
-    const issues = await mockIssueApi(signedInAs("administrator-b"), runtime, clock, true).list();
+    const { items: issues } = await mockIssueApi(signedInAs("administrator-b"), runtime, clock, true).list({});
     expect(issues.length).toBeGreaterThan(0);
     expect(issues.every((issue) => issue.buildingId === BUILDINGS.b.buildingId)).toBe(true);
   });
 
   it("shows a contractor nothing (no membership)", async () => {
-    await expect(mockIssueApi(signedInAs("contractor"), runtime, clock, true).list()).resolves.toEqual([]);
+    await expect(mockIssueApi(signedInAs("contractor"), runtime, clock, true).list({})).resolves.toMatchObject({
+      items: [],
+      hasMore: false,
+    });
   });
 
   it("answers 401 without a persona when auth is mocked", async () => {
-    await expect(mockIssueApi(signedInAs(null), runtime, clock, true).list()).rejects.toMatchObject({ status: 401 });
+    await expect(mockIssueApi(signedInAs(null), runtime, clock, true).list({})).rejects.toMatchObject({ status: 401 });
   });
 });
 
@@ -144,11 +147,25 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
 
   it("lists the administered buildings' issues, and residents the issues of their own reports", async () => {
     const { as } = world();
-    const ids = async (persona: string) => (await as(persona).list()).map((i) => i.issueId).sort();
+    const ids = async (persona: string) => (await as(persona).list({})).items.map((i) => i.issueId).sort();
     expect(await ids("administrator-a")).toEqual([suggested, pending, scheduled].sort());
     expect(await ids("administrator-b")).toEqual([roof]);
     expect(await ids("resident-a1")).toEqual([suggested, scheduled].sort());
     expect(await ids("resident-a2")).toEqual([pending]);
+  });
+
+  it("pages the list, and never puts the triage reason in it", async () => {
+    const { as } = world();
+    const first = await as("administrator-a").list({ page: 0 });
+    expect(first).toMatchObject({ page: 0, size: 20, hasMore: false });
+    expect(first.items.find((i) => i.issueId === scheduled)?.triage).toMatchObject({
+      category: "plumbing",
+      reason: null,
+    });
+    // The administrator still reads the reason on the issue itself.
+    expect((await as("administrator-a").getIssue(scheduled)).triage?.reason).toEqual(expect.any(String));
+    expect((await as("administrator-a").list({ page: 1 })).items).toEqual([]);
+    expect((await as("administrator-a").list({ buildingId: BUILDINGS.b.buildingId })).items).toEqual([]);
   });
 
   it("never shows residents a suggestion, a reason or an internal entry", async () => {
@@ -204,7 +221,11 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
 
   it("lets only the building's administrators decide", async () => {
     const { as } = world();
-    await expect(as("resident-a1").triage(suggested, 2, decision, "k")).rejects.toMatchObject({ status: 404 });
+    // The resident can see the issue, so the refusal is 403; another building's administrator cannot, so 404.
+    await expect(as("resident-a1").triage(suggested, 2, decision, "k")).rejects.toMatchObject({
+      status: 403,
+      code: "FORBIDDEN",
+    });
     await expect(as("administrator-b").triage(suggested, 2, decision, "k")).rejects.toMatchObject({ status: 404 });
     await expect(as("administrator-b").getIssue(suggested)).rejects.toMatchObject({ status: 404 });
   });
