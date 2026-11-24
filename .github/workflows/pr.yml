@@ -133,6 +133,21 @@ jobs:
           dir: ${{ matrix.service.dir }}
           language: ${{ matrix.service.language }}
 
+  # Shared code under platform/ has no image, so it is not in services.json.
+  # Its integration tests start MySQL 8.4 and RabbitMQ 4.4 with Testcontainers.
+  platform:
+    name: Build and test (messaging starter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-test
+        with:
+          dir: platform/bmc-messaging-spring-boot-starter
+          language: maven
+
   hadolint:
     name: hadolint (${{ matrix.service.name }})
     needs: services
@@ -171,7 +186,7 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    needs: [services, secrets-scan, codeql, contracts, build-test, hadolint, image-build]
+    needs: [services, secrets-scan, codeql, contracts, build-test, platform, hadolint, image-build]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
