@@ -9,25 +9,45 @@
 #     (tagged ghcr.io/labsoft-g9/labdsof-<service>:local, never pushed);
 #   - adds MySQL 8.4, the same image as the database host, with the four
 #     databases and users (local/mysql/init.sh); data in the volume `mysql`;
-#   - points the services at it (DB_HOST=mysql).
-# Only Traefik publishes a port (80), as on the hosts. MySQL is reachable only
+#   - points the services at it (DB_HOST=mysql);
+#   - keeps plain HTTP on port 80: Let's Encrypt cannot issue a certificate for
+#     localhost, and browsers treat http://localhost as a secure context.
+# Only Traefik publishes a port (80). MySQL is reachable only
 # on the `database` network; use `docker compose exec mysql mysql -uroot -p`.
 # Start again from an empty database: `docker compose ... down -v`.
 
 services:
+  # HTTP only: replaces compose.yaml's command and ports (HTTPS, Let's Encrypt).
+  traefik:
+    command: !override
+      - --entrypoints.web.address=:80
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=bmc_edge
+      - --api.dashboard=false
+    ports: !override
+      - "80:80"
+
   client:
     build: services/client
+    labels:
+      traefik.http.routers.client.entrypoints: web
 
   issue:
     build: services/issue
+    labels:
+      traefik.http.routers.issue.entrypoints: web
     networks: [database]
     environment:
       DB_HOST: mysql
+      BMC_SEED_SYNTHETIC: "true"
     depends_on:
       mysql: { condition: service_healthy }
 
   dispatch:
     build: services/dispatch
+    labels:
+      traefik.http.routers.dispatch.entrypoints: web
     networks: [database]
     environment:
       DB_HOST: mysql
@@ -36,6 +56,8 @@ services:
 
   notification:
     build: services/notification
+    labels:
+      traefik.http.routers.notification.entrypoints: web
     networks: [database]
     environment:
       DB_HOST: mysql

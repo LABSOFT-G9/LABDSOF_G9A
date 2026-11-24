@@ -78,7 +78,7 @@ Traefik is the only container with a published port. Every public route, its ups
 
 | Boundary | What crosses it | Control (proposed, not verified) |
 |---|---|---|
-| Internet → `traefik` | Browser requests on 443 | TLS at Traefik (certificate source open, ADR-004); `HttpOnly`, `Secure`, `SameSite=Strict` session cookie; custom header on state-changing requests (ADR-005) |
+| Internet → `traefik` | Browser requests on 443 | TLS at Traefik (Let's Encrypt, HTTP-01, for the environment's public name; port 80 redirects to HTTPS; ADR-004); `HttpOnly`, `Secure`, `SameSite=Strict` session cookie; custom header on state-changing requests (ADR-005) |
 | `traefik` → services | Requests with `Authorization: Bearer <access token>` added by the OIDC plugin | Signature, issuer, audience and expiry checked in each service; membership or assignment check in the owning service |
 | Services → `rabbitmq`; services → `mysql`, `garage` over the private link to the database host | AMQP; SQL and S3 | One database user, one broker user and one storage key per service; no shared superuser; each broker user may publish only under its own routing-key prefix (topic permissions, E85) (ADR-003, ADR-005, ADR-010) |
 | Host → outside | AI provider calls from `ai-triage`; Google Calendar calls from `dispatch`; later a real SMTP server | Only the `egress` network reaches the internet, and only `ai-triage` and `dispatch` join it; an allow-list proxy is open for EN-01-04 (ADR-004) |
