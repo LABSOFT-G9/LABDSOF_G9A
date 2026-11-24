@@ -123,11 +123,17 @@ export function mockIssueApi(
     submitReport: (input, idempotencyKey) =>
       runtime.call(() => {
         const me = caller();
+        // In the service's order: identifiers first, then membership (404, whatever the text), then the text.
         const parsed = SubmitReportSchema.safeParse(input);
-        if (!parsed.success) throw validationError(parsed.error.issues);
-        const report = parsed.data;
-        const role = roleIn(me, report.buildingId);
+        const invalid = (fields: readonly string[]) => {
+          const issues = (parsed.error?.issues ?? []).filter((issue) => fields.includes(String(issue.path[0])));
+          if (issues.length > 0) throw validationError(issues);
+        };
+        invalid(["buildingId", "areaId"]);
+        const role = roleIn(me, input.buildingId);
         if (!role) throw notFound();
+        invalid(["text"]);
+        const report = parsed.data!;
         const area = AREAS[report.buildingId]?.find((a) => a.areaId === report.areaId);
         if (!area) {
           throw new ApiError(400, "INVALID_AREA", "The area does not exist in the selected building.", undefined, {

@@ -71,6 +71,8 @@ export function ReportForm() {
   };
 
   function change(patch: Partial<SubmitReport>) {
+    // The fields are disabled while a request is in flight; its answer must not be thrown away (nor its key).
+    if (mutation.isPending) return;
     idempotencyKey.current = null;
     mutation.reset();
     setValues((current) => ({ ...current, ...patch }));
@@ -184,70 +186,73 @@ export function ReportForm() {
         </p>
       ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor={fieldId("buildingId")}>{t.reports.building}</Label>
-        <NativeSelect
-          id={fieldId("buildingId")}
-          value={values.buildingId}
-          onChange={(event) => change({ buildingId: event.target.value, areaId: "" })}
-          aria-invalid={errors.buildingId ? true : undefined}
-          aria-describedby={describedBy("buildingId")}
-        >
-          <option value="">{t.reports.chooseBuilding}</option>
-          {buildings.map((m) => (
-            <option key={m.buildingId} value={m.buildingId}>
-              {m.buildingName}
-            </option>
-          ))}
-        </NativeSelect>
-        {fieldError("buildingId")}
-      </div>
+      {/* Locked while the report is being sent, so the answer always belongs to what is on screen. */}
+      <fieldset disabled={mutation.isPending} className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor={fieldId("buildingId")}>{t.reports.building}</Label>
+          <NativeSelect
+            id={fieldId("buildingId")}
+            value={values.buildingId}
+            onChange={(event) => change({ buildingId: event.target.value, areaId: "" })}
+            aria-invalid={errors.buildingId ? true : undefined}
+            aria-describedby={describedBy("buildingId")}
+          >
+            <option value="">{t.reports.chooseBuilding}</option>
+            {buildings.map((m) => (
+              <option key={m.buildingId} value={m.buildingId}>
+                {m.buildingName}
+              </option>
+            ))}
+          </NativeSelect>
+          {fieldError("buildingId")}
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={fieldId("areaId")}>{t.reports.area}</Label>
-        <NativeSelect
-          id={fieldId("areaId")}
-          value={values.areaId}
-          onChange={(event) => change({ areaId: event.target.value })}
-          disabled={values.buildingId === "" || !areas.isSuccess}
-          aria-invalid={errors.areaId ? true : undefined}
-          aria-describedby={describedBy("areaId", `${fieldId("areaId")}-hint`)}
-        >
-          <option value="">{t.reports.chooseArea}</option>
-          {areas.data?.map((area) => (
-            <option key={area.areaId} value={area.areaId}>
-              {area.label} ({t.reports.areaKinds[area.kind]})
-            </option>
-          ))}
-        </NativeSelect>
-        <p id={`${fieldId("areaId")}-hint`} className="text-muted-foreground text-sm">
-          {values.buildingId === "" ? t.reports.chooseBuildingFirst : areas.isPending ? t.reports.loadingAreas : null}
-        </p>
-        {areas.isError ? <ErrorState error={areas.error} onRetry={() => void areas.refetch()} /> : null}
-        {fieldError("areaId")}
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor={fieldId("areaId")}>{t.reports.area}</Label>
+          <NativeSelect
+            id={fieldId("areaId")}
+            value={values.areaId}
+            onChange={(event) => change({ areaId: event.target.value })}
+            disabled={values.buildingId === "" || !areas.isSuccess}
+            aria-invalid={errors.areaId ? true : undefined}
+            aria-describedby={describedBy("areaId", `${fieldId("areaId")}-hint`)}
+          >
+            <option value="">{t.reports.chooseArea}</option>
+            {areas.data?.map((area) => (
+              <option key={area.areaId} value={area.areaId}>
+                {area.label} ({t.reports.areaKinds[area.kind]})
+              </option>
+            ))}
+          </NativeSelect>
+          <p id={`${fieldId("areaId")}-hint`} className="text-muted-foreground text-sm">
+            {values.buildingId === "" ? t.reports.chooseBuildingFirst : areas.isPending ? t.reports.loadingAreas : null}
+          </p>
+          {areas.isError ? <ErrorState error={areas.error} onRetry={() => void areas.refetch()} /> : null}
+          {fieldError("areaId")}
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={fieldId("text")}>{t.reports.text}</Label>
-        <Textarea
-          id={fieldId("text")}
-          className="min-h-32"
-          value={values.text}
-          onChange={(event) => change({ text: event.target.value })}
-          aria-invalid={errors.text ? true : undefined}
-          aria-describedby={describedBy("text", `${fieldId("text")}-hint`, `${fieldId("text")}-count`)}
-        />
-        <p id={`${fieldId("text")}-hint`} className="text-muted-foreground text-sm">
-          {t.reports.textHint}
-        </p>
-        <p
-          id={`${fieldId("text")}-count`}
-          className={cn("text-sm", textLength > REPORT_TEXT_MAX ? "text-destructive" : "text-muted-foreground")}
-        >
-          {t.reports.textCount(textLength, REPORT_TEXT_MAX)}
-        </p>
-        {fieldError("text")}
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor={fieldId("text")}>{t.reports.text}</Label>
+          <Textarea
+            id={fieldId("text")}
+            className="min-h-32"
+            value={values.text}
+            onChange={(event) => change({ text: event.target.value })}
+            aria-invalid={errors.text ? true : undefined}
+            aria-describedby={describedBy("text", `${fieldId("text")}-hint`, `${fieldId("text")}-count`)}
+          />
+          <p id={`${fieldId("text")}-hint`} className="text-muted-foreground text-sm">
+            {t.reports.textHint}
+          </p>
+          <p
+            id={`${fieldId("text")}-count`}
+            className={cn("text-sm", textLength > REPORT_TEXT_MAX ? "text-destructive" : "text-muted-foreground")}
+          >
+            {t.reports.textCount(textLength, REPORT_TEXT_MAX)}
+          </p>
+          {fieldError("text")}
+        </div>
+      </fieldset>
 
       {notSaved ? (
         <Alert role="alert" variant="destructive">
