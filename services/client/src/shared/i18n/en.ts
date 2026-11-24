@@ -143,10 +143,21 @@ export const en = {
     },
     critical: {
       badge: "Critical alert",
+      pendingBadge: "Critical check pending",
       title: "Critical alert",
       review: "Review it yourself: no suggestion can clear or lower this alert.",
       disagrees: (urgency: string) => `The suggestion says ${urgency}, but the alert still stands.`,
       raisedAt: (when: string) => `Raised ${when}`,
+      pendingTitle: "Critical check not finished",
+      pendingBody: "Review the report yourself for danger. This is not the same as “nothing found”.",
+      // ASSUMPTION codes until the critical-alerts-v1 rule set is agreed (#96); `other` words any unknown code.
+      signals: {
+        smoke_or_fire: "The report mentions smoke or fire.",
+        gas_smell: "The report mentions a smell of gas.",
+        exposed_wiring: "The report mentions exposed wiring.",
+        water_near_electrics: "The report mentions water near electrics.",
+        other: "A critical-alert rule matched this report.",
+      },
     },
     save: "Save decision",
     saving: "Saving…",
@@ -171,6 +182,8 @@ export const en = {
     changedMeanwhileTitle: "This issue has changed since you opened it",
     changedMeanwhileBody:
       "Saving now would be refused, so nothing is overwritten. Reload to see the change; your choices stay in the form.",
+    suggestionArrivedTitle: "A suggestion arrived while you were deciding",
+    suggestionArrivedBody: "Reload to decide on the current version; your choices stay in the form.",
     reload: "Reload the issue",
     history: "History",
     historyEmpty: "Nothing has happened yet.",
@@ -203,7 +216,7 @@ export const en = {
       rules: "Triage suggested by the rules (not a decision)",
       fallback: "Triage suggested by the rules: AI unavailable (not a decision)",
     },
-    lateSuggestion: "Arrived after the decision: not applied",
+    lateSuggestion: "Not applied: the issue had already moved on",
     shared: {
       badge: "Shared",
       title: "Shared with the building",

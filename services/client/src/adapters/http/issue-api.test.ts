@@ -121,7 +121,7 @@ describe("httpIssueApi (US-01 reports)", () => {
     expect(lastCall(history.fetcher).url).toBe("/api/issue/issues/i1/history");
   });
 
-  it("reads the suggestion details and a critical alert when the service sends them (US-03-02)", async () => {
+  it("reads the suggestion details and the critical check when the service sends them (US-03-02)", async () => {
     const issue = {
       issueId: "i1",
       buildingId: "b1",
@@ -140,7 +140,11 @@ describe("httpIssueApi (US-01 reports)", () => {
         failureCode: "timeout",
         suggestedAt: "2026-11-24T10:00:30Z",
       },
-      criticalAlert: { reason: "Smoke near a socket.", raisedAt: "2026-11-24T10:00:01Z" },
+      criticalCheck: {
+        status: "completed",
+        rulesVersion: "critical-alerts-v1",
+        signals: [{ code: "smoke_or_fire", raisedAt: "2026-11-24T10:00:01Z" }],
+      },
     };
     await expect(setup(issue).api.getIssue("i1")).resolves.toEqual(issue);
   });

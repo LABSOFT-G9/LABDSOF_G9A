@@ -71,7 +71,7 @@ export function IssuesPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {issue.criticalAlert ? <CriticalBadge /> : null}
+                      <CriticalBadge check={issue.criticalCheck} />
                       {issue.summary ? <SharedBadge /> : null}
                       <TriageBadge issue={issue} />
                       <IssueStateBadge state={issue.state} />

@@ -103,10 +103,11 @@ export const KNOWN_FAILURE_CODES = ["timeout", "provider_error", "invalid_output
 export type KnownFailureCode = (typeof KNOWN_FAILURE_CODES)[number];
 
 /**
- * An unconfirmed suggestion, administrators only. `category`, `urgency` and `origin` are in the Issue service (#140).
- * The rest is ASSUMPTION for US-03-03 (#108), named after `TriageSuggested` (technical design §4.4) and optional, so
- * the service as it is today still parses:
- * - `rationale`: the short explanation (1-240 characters). Model output: shown as plain text, never as markup.
+ * An unconfirmed suggestion, administrators only, and `null` once a decision exists. `category`, `urgency` and `origin`
+ * are in the Issue service (#140); the rest is agreed on #108 for US-03-03, named after `TriageSuggested` (technical
+ * design §4.4), and optional until that ships:
+ * - `rationale`: the short explanation (1-240 characters). Model output: shown as plain text, never as markup. `null`
+ *   in `GET /issues`, because it is written from the private report text; read it on the issue itself.
  * - `needsReview`: the suggester itself asks for a careful look.
  * - `failureCode`: why the AI result was not used, on `fallback` only.
  * - `suggestedAt`: when the suggestion was recorded.
@@ -128,16 +129,31 @@ export const TriageSuggestionSchema = z.object({
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
 
 /**
- * A critical alert from Issue's own `critical-alerts-v1` checks (US-14-02 #96), administrators only. Independent of
- * the AI: no suggestion or retry can clear or lower it, only the administrator's review. ASSUMPTION: shape to agree on
- * #96; optional, so the service as it is today still parses.
+ * Rule codes of the critical check that the client words. ASSUMPTION: the codes come with the `critical-alerts-v1`
+ * rule set, which is not agreed yet (#96). Any other code is still shown, in general words.
  */
-export const CriticalAlertSchema = z.object({
-  /** Which check matched, in words. Never the report text. */
-  reason: z.string(),
+export const KNOWN_SIGNAL_CODES = ["smoke_or_fire", "gas_smell", "exposed_wiring", "water_near_electrics"] as const;
+export type KnownSignalCode = (typeof KNOWN_SIGNAL_CODES)[number];
+
+/** One rule of the critical check that matched a report. A fact about the report: it never clears. */
+export const CriticalSignalSchema = z.object({
+  code: z.string(),
   raisedAt: z.iso.datetime({ offset: true }),
 });
-export type CriticalAlert = z.infer<typeof CriticalAlertSchema>;
+export type CriticalSignal = z.infer<typeof CriticalSignalSchema>;
+
+/**
+ * Issue's own critical check (US-14-02, shape agreed on #96; technical design §2.1 `criticalSignals`,
+ * `criticalRulesVersion`, `criticalCheckStatus`). Administrators only, `null` for residents; absent before US-14-02.
+ * Independent of the AI: no suggestion, retry or decision removes a signal. `pending` with no signals means "not
+ * checked", never "nothing found".
+ */
+export const CriticalCheckSchema = z.object({
+  status: z.enum(["pending", "completed"]),
+  rulesVersion: z.string().nullish(),
+  signals: z.array(CriticalSignalSchema),
+});
+export type CriticalCheck = z.infer<typeof CriticalCheckSchema>;
 
 /**
  * With no suggestion after this long, the administrator is told "triage pending — classify manually" (technical
@@ -209,7 +225,7 @@ export const IssueSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   triage: TriageDecisionSchema.nullable(),
   suggestion: TriageSuggestionSchema.nullable(),
-  criticalAlert: CriticalAlertSchema.nullish(),
+  criticalCheck: CriticalCheckSchema.nullish(),
   /** Published to the building's residents (US-04). Absent or `null` while unpublished. */
   summary: SharedSummarySchema.nullish(),
   /** With a published summary: the impact count, and whether the caller confirmed. */
@@ -270,8 +286,15 @@ export const HistoryEntrySchema = z.object({
   urgency: IssueUrgencySchema.nullable().optional(),
   /** Internal: administrators only. */
   reason: z.string().nullable().optional(),
-  /** `triage_suggested` only: who suggested it. ASSUMPTION for US-03-03 (#108), from `TriageSuggested.origin`. */
+  /** `triage_suggested` only: who suggested it (agreed on #108, from `TriageSuggested.origin`). */
   origin: SuggestionOriginSchema.nullish(),
+  /**
+   * `triage_suggested` only: whether the suggestion was applied. `false` when it named a version the issue had already
+   * left, before or after a decision (agreed on #108; technical design §3.3).
+   */
+  applied: z.boolean().optional(),
+  /** `critical_alert_raised` only: the matched rule's code (agreed on #96), worded by the client. */
+  code: z.string().nullish(),
 });
 export type HistoryEntry = z.infer<typeof HistoryEntrySchema>;
 export const HistorySchema = z.object({ items: z.array(HistoryEntrySchema) });

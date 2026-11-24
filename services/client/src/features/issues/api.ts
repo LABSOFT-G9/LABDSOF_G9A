@@ -19,10 +19,23 @@ export const issueListQuery = (issues: IssueApi) =>
     getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   });
 
+/** How often an issue still waiting on background processing is asked again. */
+export const PROCESSING_POLL_MS = 10_000;
+
+/**
+ * Still waiting on background work the administrator is watching for: a suggestion (US-03) or the critical check
+ * (US-14). Asking again also re-renders, which moves "waiting" to "triage pending" after 2 minutes.
+ */
+export const isProcessing = (issue: Issue | undefined) =>
+  !!issue &&
+  !issue.triage &&
+  ((issue.state === "received" && !issue.suggestion) || issue.criticalCheck?.status === "pending");
+
 export const issueQuery = (issues: IssueApi, issueId: string) =>
   queryOptions({
     queryKey: issueKeys.detail(issueId),
     queryFn: ({ signal }) => issues.getIssue(issueId, signal),
+    refetchInterval: (query) => (isProcessing(query.state.data) ? PROCESSING_POLL_MS : false),
   });
 
 export const historyQuery = (issues: IssueApi, issueId: string) =>
