@@ -152,6 +152,31 @@ describe("report form (mock Issue service)", () => {
     expect(submitReport.mock.calls[1]![1]).not.toBe(submitReport.mock.calls[0]![1]);
   });
 
+  it("locks the fields while the report is being sent, so its receipt is never lost", async () => {
+    const user = userEvent.setup();
+    let answer!: (receipt: ReportReceipt) => void;
+    const submitReport = vi.fn(
+      () =>
+        new Promise<ReportReceipt>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderApp("/reports/new", { services: { issues: stubIssueApi({ listAreas: async () => areas, submitReport }) } });
+    await fillForm(user);
+    await user.click(screen.getByRole("button", { name: "Send report" }));
+
+    const text = screen.getByRole("textbox", { name: "What is wrong?" });
+    await waitFor(() => expect(text).toBeDisabled());
+    expect(screen.getByRole("combobox", { name: "Where is the fault?" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Building" })).toBeDisabled();
+    await user.type(text, " Since Monday.");
+    expect(text).toHaveValue(TEXT);
+
+    answer(receipt);
+    await screen.findByRole("heading", { level: 2, name: "Report received" });
+    expect(submitReport).toHaveBeenCalledTimes(1);
+  });
+
   it("does not claim the report was lost when the server never answered", async () => {
     const user = userEvent.setup();
     const submitReport = async (): Promise<ReportReceipt> => {

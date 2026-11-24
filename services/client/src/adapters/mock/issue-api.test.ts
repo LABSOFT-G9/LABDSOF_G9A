@@ -89,6 +89,10 @@ describe("mockIssueApi reports (same rules as the Issue service)", () => {
   it("answers 404 for a building the caller does not belong to", async () => {
     const { as } = world();
     await expect(as("resident-b1").submitReport(report, "k")).rejects.toMatchObject({ status: 404 });
+    // Membership is checked before the text, as in the service: a non-member never learns the text rules apply.
+    await expect(as("resident-b1").submitReport({ ...report, text: "short" }, "k")).rejects.toMatchObject({
+      status: 404,
+    });
     await expect(as("resident-b1").listAreas(BUILDINGS.a.buildingId)).rejects.toMatchObject({ status: 404 });
     await expect(as("resident-a1").listAreas(BUILDINGS.a.buildingId)).resolves.toHaveLength(3);
   });
