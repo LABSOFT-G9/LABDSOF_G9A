@@ -226,7 +226,10 @@ keyboard pass each UI story records in its PR.
   `needsReview`, `failureCode` (and its values) and `suggestedAt` (US-03-03, #108), and the issue's `criticalAlert`
   (US-14-02, #96). All are optional, so the service as it is today still parses. "Triage pending — classify
   manually" is worked out in the client from `createdAt` (2 minutes, technical design §5).
-- `/me` has no email, platform roles or contractor link yet (EN-02-04, #80).
-- The CSRF header name, the login `redirect` parameter and the edge paths are placeholders (EN01-U6, spike item 3).
+- `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
+  HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
+- The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
+  (#80). The CSRF header and the edge paths match EN-02-04 (#139) but are untested against the real edge until it
+  reaches dev.
 - `npm audit` reports moderate advisories in `glob`/`minimatch` under `workbox-build`, a build-time dependency of
   vite-plugin-pwa 2.0.0. The production dependencies report none.
