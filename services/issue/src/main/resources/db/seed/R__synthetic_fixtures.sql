@@ -2,10 +2,14 @@
 -- Loaded only when BMC_SEED_SYNTHETIC=true (local and dev, never production).
 -- Two buildings and every role needed by the US-01 tests (resident, another
 -- resident of the same building, a resident of another building, one
--- administrator per building, and a contractor account with no membership).
+-- administrator per building, a contractor account and a platform staff
+-- account, both with no membership).
 -- IDs follow the contract annex convention (…0101 resident, …0201
--- administrator, …0301 contractor account, …b001 building). User IDs are the
--- Keycloak `sub` values that the synthetic realm (EN-02-04, #80) must assign.
+-- administrator, …0301 contractor account, …0401 platform staff, …b001
+-- building). User IDs are the Keycloak `sub` values of the synthetic accounts
+-- in infra/keycloak/realm/bmc-users-0.json: keep the two files in step.
+-- A migration writes no events: the service announces these memberships to
+-- the outbox at start (SeededMembershipAnnouncer).
 -- Repeatable migration: re-runs when this file changes, so every statement is
 -- an upsert.
 
@@ -32,7 +36,8 @@ INSERT INTO users (id, display_name) VALUES
   ('0199f2a0-0000-7000-8000-000000000111', 'Synthetic Resident B1'),
   ('0199f2a0-0000-7000-8000-000000000201', 'Synthetic Administrator A'),
   ('0199f2a0-0000-7000-8000-000000000202', 'Synthetic Administrator B'),
-  ('0199f2a0-0000-7000-8000-000000000301', 'Synthetic Contractor')
+  ('0199f2a0-0000-7000-8000-000000000301', 'Synthetic Contractor'),
+  ('0199f2a0-0000-7000-8000-000000000401', 'Synthetic Platform Staff')
 ON DUPLICATE KEY UPDATE display_name = VALUES(display_name);
 
 INSERT INTO memberships (id, user_id, building_id, role, status, valid_from, valid_until, version) VALUES

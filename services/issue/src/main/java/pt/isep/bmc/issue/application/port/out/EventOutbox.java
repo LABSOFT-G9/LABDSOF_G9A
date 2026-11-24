@@ -8,4 +8,12 @@ package pt.isep.bmc.issue.application.port.out;
 public interface EventOutbox {
 
     void append(OutboxEvent event);
+
+    /**
+     * Appends the event unless one with the same {@code eventId} was already
+     * written (pending or sent).
+     *
+     * @return true if the event was written
+     */
+    boolean appendIfAbsent(OutboxEvent event);
 }

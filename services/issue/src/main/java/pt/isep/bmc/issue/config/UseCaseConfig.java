@@ -3,6 +3,7 @@ package pt.isep.bmc.issue.config;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import pt.isep.bmc.issue.application.command.MembershipAnnouncementService;
 import pt.isep.bmc.issue.application.command.PurgeExpiredIdempotencyKeysService;
 import pt.isep.bmc.issue.application.command.SubmitReportService;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
@@ -48,6 +49,12 @@ class UseCaseConfig {
             TransactionRunner transactions, IdempotencyStore idempotency, Clock clock) {
         return new PurgeExpiredIdempotencyKeysService(
                 transactions, idempotency, clock, PurgeExpiredIdempotencyKeysService.DEFAULT_BATCH_SIZE);
+    }
+
+    @Bean
+    MembershipAnnouncementService membershipAnnouncementService(
+            TransactionRunner transactions, MembershipRepository memberships, EventOutbox outbox, Clock clock) {
+        return new MembershipAnnouncementService(transactions, memberships, outbox, clock);
     }
 
     @Bean
