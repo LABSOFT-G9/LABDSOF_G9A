@@ -1,4 +1,15 @@
-import type { Area, IssueSummary, Report, ReportPage, ReportReceipt, SubmitReport } from "@/contracts/issue";
+import type {
+  Area,
+  History,
+  Issue,
+  IssueSummary,
+  Report,
+  ReportPage,
+  ReportReceipt,
+  SubmitReport,
+  TriageRequest,
+  TriageResult,
+} from "@/contracts/issue";
 
 export interface ReportListParams {
   /** Only this building's reports. Omit for all the caller may see. */
@@ -29,4 +40,16 @@ export interface IssueApi {
 
   /** Own reports plus every report of the buildings the caller administers, newest first. */
   listReports(params: ReportListParams, signal?: AbortSignal): Promise<ReportPage>;
+
+  /** One issue, projected for the caller's role (US-02); `404` outside the caller's scope. */
+  getIssue(issueId: string, signal?: AbortSignal): Promise<Issue>;
+
+  /** The issue's history: every entry for its administrators, `public` entries only for residents (US-02). */
+  getHistory(issueId: string, signal?: AbortSignal): Promise<History>;
+
+  /**
+   * Record the administrator's triage decision (US-02). `version` is the issue version the decision was made on, sent
+   * as `If-Match`: if someone changed the issue since, the service answers `409 VERSION_CONFLICT` and nothing changes.
+   */
+  triage(issueId: string, version: number, decision: TriageRequest, idempotencyKey: string): Promise<TriageResult>;
 }

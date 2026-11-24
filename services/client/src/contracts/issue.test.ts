@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SubmitReportSchema } from "@/contracts/issue";
+import { SubmitReportSchema, TriageRequestSchema } from "@/contracts/issue";
 
 const valid = { buildingId: "b", areaId: "a", text: "The garage door does not close." };
 const reasons = (input: unknown) => {
@@ -36,5 +36,34 @@ describe("SubmitReportSchema", () => {
     expect(reasons({ ...valid, text: "Bell \u0007 in the text" })).toEqual(["text:invalid_characters"]);
     expect(reasons({ ...valid, text: "C1 control \u0085 here" })).toEqual(["text:invalid_characters"]);
     expect(reasons({ ...valid, text: "Broken \uD800 character" })).toEqual(["text:invalid_characters"]);
+  });
+});
+
+describe("TriageRequestSchema", () => {
+  const reasons = (input: unknown) => {
+    const result = TriageRequestSchema.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => `${String(issue.path[0])}:${issue.message}`);
+  };
+
+  it("needs a category, an urgency and a reason", () => {
+    expect(reasons({ category: "", urgency: "", reason: "  " })).toEqual([
+      "category:required",
+      "urgency:required",
+      "reason:required",
+    ]);
+  });
+
+  it("trims the reason and allows up to 500 characters", () => {
+    const ok = TriageRequestSchema.parse({ category: "lift", urgency: "critical", reason: "  Stuck  " });
+    expect(ok.reason).toBe("Stuck");
+    expect(reasons({ category: "lift", urgency: "low", reason: "x".repeat(500) })).toEqual([]);
+    expect(reasons({ category: "lift", urgency: "low", reason: "x".repeat(501) })).toEqual(["reason:too_long"]);
+  });
+
+  it("refuses categories and urgencies the service does not know", () => {
+    expect(reasons({ category: "garden", urgency: "medium", reason: "ok" })).toEqual([
+      "category:required",
+      "urgency:required",
+    ]);
   });
 });

@@ -10,6 +10,9 @@ export function stubIssueApi(overrides: Partial<IssueApi> = {}): IssueApi {
     submitReport: unused("submitReport"),
     getReport: unused("getReport"),
     listReports: unused("listReports"),
+    getIssue: unused("getIssue"),
+    getHistory: unused("getHistory"),
+    triage: unused("triage"),
     ...overrides,
   };
 }

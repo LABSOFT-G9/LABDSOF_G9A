@@ -1,4 +1,4 @@
-import type { Area, IssueSummary } from "@/contracts/issue";
+import type { Area, HistoryEntry, Issue } from "@/contracts/issue";
 import type { Persona, Session } from "@/ports/auth-session";
 
 /*
@@ -109,47 +109,141 @@ export const PERSONAS: readonly MockPersona[] = [
 
 const hoursAgo = (now: Date, hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
 
-export function seedIssues(now: Date): IssueSummary[] {
+/** An issue as the mock Issue service stores it: the full record, before projecting it for the caller. */
+export interface MockIssueRecord extends Issue {
+  /** Users whose reports belong to this issue: they may follow it. */
+  readonly reporterIds: readonly string[];
+  readonly history: readonly HistoryEntry[];
+}
+
+const issueId = (suffix: string) => `0199f2a1-0000-7000-8000-${suffix}`;
+const residentA1 = id("000000000101");
+const residentA2 = id("000000000102");
+const residentB1 = id("000000000111");
+
+/**
+ * Issues in every situation the US-02 screens must tell apart: an unconfirmed AI suggestion, no decision yet, and
+ * human decisions followed by approval, contractor acceptance and booking (manual and synchronised) as separate steps.
+ */
+export function seedIssues(now: Date): MockIssueRecord[] {
+  const at = (hours: number) => hoursAgo(now, hours);
+  const entry = (sequence: number, rest: Omit<HistoryEntry, "sequence">): HistoryEntry => ({ sequence, ...rest });
+  const received = (hours: number) =>
+    entry(1, { type: "report_received", visibility: "public", actorRole: "resident", occurredAt: at(hours) });
   return [
     {
-      id: "0190a1b2-0000-7000-8000-000000000101",
-      buildingId: BUILDINGS.a.buildingId,
-      title: "Lift stuck between floors 3 and 4",
-      state: "triaged",
-      category: "lift",
-      urgency: "critical",
-      createdAt: hoursAgo(now, 3),
-      version: 3,
+      issueId: issueId("000000002001"),
+      ...BUILDINGS.a,
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: at(3),
+      triage: null,
+      suggestion: { category: "electrical", urgency: "high", origin: "ai" },
+      reporterIds: [residentA1],
+      history: [
+        received(3),
+        entry(2, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(2.9),
+          category: "electrical",
+          urgency: "high",
+        }),
+      ],
     },
     {
-      id: "0190a1b2-0000-7000-8000-000000000102",
-      buildingId: BUILDINGS.a.buildingId,
-      title: "Garage door does not close",
+      issueId: issueId("000000002002"),
+      ...BUILDINGS.a,
+      areaLabel: "Garage level -1",
       state: "received",
-      category: null,
-      urgency: null,
-      createdAt: hoursAgo(now, 20),
       version: 1,
+      createdAt: at(20),
+      triage: null,
+      suggestion: null,
+      reporterIds: [residentA2],
+      history: [received(20)],
     },
     {
-      id: "0190a1b2-0000-7000-8000-000000000103",
-      buildingId: BUILDINGS.a.buildingId,
-      title: "Stairwell light flickering on floor 2",
+      issueId: issueId("000000002003"),
+      ...BUILDINGS.a,
+      areaLabel: "Unit 2B",
       state: "scheduled",
-      category: "electrical",
-      urgency: "low",
-      createdAt: hoursAgo(now, 72),
-      version: 5,
+      version: 6,
+      createdAt: at(72),
+      triage: {
+        category: "plumbing",
+        urgency: "normal",
+        reason: "Slow leak under the kitchen sink. No electrical risk.",
+        decidedAt: at(70),
+        decisionSource: "human",
+      },
+      suggestion: null,
+      reporterIds: [residentA1],
+      history: [
+        received(72),
+        entry(2, {
+          type: "triage_decided",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(70),
+          category: "plumbing",
+          urgency: "normal",
+          reason: "Slow leak under the kitchen sink. No electrical risk.",
+        }),
+        entry(3, {
+          type: "intervention_approved",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(60),
+        }),
+        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
+        entry(5, {
+          type: "booking_confirmed_manually",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(40),
+        }),
+      ],
     },
     {
-      id: "0190a1b2-0000-7000-8000-000000000104",
-      buildingId: BUILDINGS.b.buildingId,
-      title: "Water leak in the entrance hall",
+      issueId: issueId("000000002004"),
+      ...BUILDINGS.b,
+      areaLabel: "Roof terrace",
       state: "in_progress",
-      category: "plumbing",
-      urgency: "high",
-      createdAt: hoursAgo(now, 30),
-      version: 6,
+      version: 7,
+      createdAt: at(30),
+      triage: {
+        category: "structural",
+        urgency: "high",
+        reason: "Loose tiles above the terrace door.",
+        decidedAt: at(29),
+        decisionSource: "human",
+      },
+      suggestion: null,
+      reporterIds: [residentB1],
+      history: [
+        received(30),
+        entry(2, {
+          type: "triage_decided",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(29),
+          category: "structural",
+          urgency: "high",
+          reason: "Loose tiles above the terrace door.",
+        }),
+        entry(3, {
+          type: "intervention_approved",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(28),
+        }),
+        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(27) }),
+        entry(5, { type: "booking_confirmed", visibility: "public", actorRole: "system", occurredAt: at(26) }),
+        entry(6, { type: "intervention_started", visibility: "public", actorRole: "contractor", occurredAt: at(2) }),
+      ],
     },
   ];
 }

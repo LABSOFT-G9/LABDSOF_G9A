@@ -31,11 +31,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Label } from "@/shared/ui/label";
+import { NativeSelect } from "@/shared/ui/native-select";
 import { Textarea } from "@/shared/ui/textarea";
-
-/** The look of `Input`, for a native `<select>`: native keeps keyboard and screen-reader behaviour for free. */
-const SELECT_CLASS =
-  "h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none md:text-sm dark:bg-input/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20";
 
 /**
  * US-01: report a fault (building, area, text). Validated by the same schema the service applies, with each error tied
@@ -189,9 +186,8 @@ export function ReportForm() {
 
       <div className="space-y-2">
         <Label htmlFor={fieldId("buildingId")}>{t.reports.building}</Label>
-        <select
+        <NativeSelect
           id={fieldId("buildingId")}
-          className={SELECT_CLASS}
           value={values.buildingId}
           onChange={(event) => change({ buildingId: event.target.value, areaId: "" })}
           aria-invalid={errors.buildingId ? true : undefined}
@@ -203,15 +199,14 @@ export function ReportForm() {
               {m.buildingName}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {fieldError("buildingId")}
       </div>
 
       <div className="space-y-2">
         <Label htmlFor={fieldId("areaId")}>{t.reports.area}</Label>
-        <select
+        <NativeSelect
           id={fieldId("areaId")}
-          className={SELECT_CLASS}
           value={values.areaId}
           onChange={(event) => change({ areaId: event.target.value })}
           disabled={values.buildingId === "" || !areas.isSuccess}
@@ -224,7 +219,7 @@ export function ReportForm() {
               {area.label} ({t.reports.areaKinds[area.kind]})
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <p id={`${fieldId("areaId")}-hint`} className="text-muted-foreground text-sm">
           {values.buildingId === "" ? t.reports.chooseBuildingFirst : areas.isPending ? t.reports.loadingAreas : null}
         </p>

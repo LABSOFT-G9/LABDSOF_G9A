@@ -217,8 +217,9 @@ keyboard pass each UI story records in its PR.
 
 ## Known limits
 
-- `/me`, the report endpoints and `/buildings/{id}/areas` match the Issue service (US-01-01). `/issues` is still an
-  assumption until US-02-01 (#87) defines it.
+- `/me`, the report endpoints and `/buildings/{id}/areas` match the Issue service (US-01-01). The issue, history and
+  triage shapes (`GET /issues`, `GET /issues/{id}`, `GET /issues/{id}/history`) are the client's proposal, marked
+  `ASSUMPTION` in `src/contracts/issue.ts` and posted on US-02-01 (#87) for the service to confirm.
 - `/me` has no email, platform roles or contractor link yet (EN-02-04, #80).
 - The CSRF header name, the login `redirect` parameter and the edge paths are placeholders (EN01-U6, spike item 3).
 - `npm audit` reports moderate advisories in `glob`/`minimatch` under `workbox-build`, a build-time dependency of

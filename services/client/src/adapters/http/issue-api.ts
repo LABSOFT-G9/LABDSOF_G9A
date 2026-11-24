@@ -1,10 +1,13 @@
 import type { HttpClient } from "@/adapters/http/client";
 import {
   AreaListSchema,
+  HistorySchema,
   IssueListSchema,
+  IssueSchema,
   ReportPageSchema,
   ReportReceiptSchema,
   ReportSchema,
+  TriageResultSchema,
 } from "@/contracts/issue";
 import type { IssueApi } from "@/ports/issue-api";
 
@@ -25,5 +28,14 @@ export function httpIssueApi(http: HttpClient): IssueApi {
       if (buildingId) query.set("buildingId", buildingId);
       return http.get(`${PREFIX}/reports?${query.toString()}`, ReportPageSchema, signal);
     },
+    getIssue: (issueId, signal) => http.get(`${PREFIX}/issues/${segment(issueId)}`, IssueSchema, signal),
+    getHistory: (issueId, signal) => http.get(`${PREFIX}/issues/${segment(issueId)}/history`, HistorySchema, signal),
+    triage: (issueId, version, decision, idempotencyKey) =>
+      http.request("POST", `${PREFIX}/issues/${segment(issueId)}/triage`, {
+        schema: TriageResultSchema,
+        body: decision,
+        ifMatch: version,
+        idempotencyKey,
+      }),
   };
 }
