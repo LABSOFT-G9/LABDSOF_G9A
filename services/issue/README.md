@@ -6,6 +6,7 @@ Implemented so far:
 
 - US-01-01 ([#85](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/85)): report submission and queries, with building permissions and 24-hour idempotency.
 - US-02-01 ([#87](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/87)): manual triage with `If-Match`, the triage rows of the state table, issue queries and history projected by role.
+- US-04-01 ([#89](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/89)): the shared summary an administrator publishes, who sees a shared issue, impact confirmations and subscriptions.
 
 ## Architecture
 
@@ -47,20 +48,23 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | `GET /reports/{id}` | The author, or an administrator of the building | Text, area, source, `authoredByMe` and the issue's `{state, version}`. Never the author's identity |
 | `GET /reports?buildingId=&page=&size=` | Any user | Own reports, plus every report of the buildings the caller administers, newest first. No text |
 | `GET /me` | Any user | Profile and active memberships, with building names |
-| `GET /issues?buildingId=&page=&size=` | Any user | Issues of the buildings the caller administers, plus the issues the caller reported, newest first. Each item: `{issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage, suggestion}`. No report text, no triage reason |
-| `GET /issues/{id}` | Administrators of the building; the resident who reported it | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is `null` until US-03-03 |
+| `GET /issues?buildingId=&page=&size=` | Any user | Issues of the buildings the caller administers, the issues the caller reported, and the issues with a published summary in the buildings the caller belongs to, newest first. Each item: `{issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage, suggestion, summary, impact, subscribed}`. No report text, no triage reason |
+| `GET /issues/{id}` | Administrators of the building; whoever reported it; once a summary is published, every member of the building | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is `null` until US-03-03. `summary` is `null` until published, else `{text, publishedAt}`. `impact` is `null` until published, else `{count, mine}`. `subscribed` is the caller's own choice |
 | `GET /issues/{id}/history` | The same | `{items: [{sequence, type, visibility, actorRole, occurredAt, category, urgency, reason}]}`, oldest first. Residents get public entries only, without reasons. Roles, never identities |
 | `POST /issues/{id}/triage` + `If-Match: "<version>"` + `Idempotency-Key` | Administrators of the building | Body `{category, urgency, reason}`. `200`, `ETag` with the new version, `{issueId, state: "triaged", version, category, urgency, decisionSource: "human"}` |
+| `POST /issues/{id}/publication` + `If-Match: "<version>"` + `Idempotency-Key` | Administrators of the building | Body `{summary}`. `200`, `ETag` with the new version, `{issueId, version, summary: {text, publishedAt}}`. Publishing again replaces the summary |
+| `PUT` / `DELETE /issues/{id}/impact` | Residents of the building, for themselves, once a summary is published | `200`, `{count, mine}`. Safe to repeat |
+| `PUT` / `DELETE /issues/{id}/subscription` | Anyone who may see the issue, for themselves | `200`, `{subscribed}`. Safe to repeat |
 | `GET /buildings/{id}/areas` | Members of the building | Areas for the report form |
 
 - **Errors** are `application/problem+json` with `code` and `correlationId`:
   - `400 VALIDATION_FAILED` (with `errors[]`) or `INVALID_AREA`
   - `401 UNAUTHENTICATED`
-  - `403 FORBIDDEN`, when the caller can see an issue but may not triage it
+  - `403 FORBIDDEN`, when the caller can see an issue but may not do this to it: triage or publish as a resident, confirm impact as an administrator
   - `403 CSRF_HEADER_REQUIRED`, for a state-changing request without the CSRF header
   - `404 NOT_FOUND`, for anything unknown or outside the caller's scope
   - `405` for any attempt to modify a report, or to set an issue's state directly
-  - `409 VERSION_CONFLICT` (with `currentVersion`, `currentState`) or `INVALID_TRANSITION` (with `currentState`)
+  - `409 VERSION_CONFLICT` (with `currentVersion`, `currentState`), `INVALID_TRANSITION` (with `currentState`) or `NOT_PUBLISHED` (impact on an issue with no summary yet)
   - `422 IDEMPOTENCY_KEY_REUSED`
   - `503 DEPENDENCY_UNAVAILABLE`, which never comes with a receipt
 
@@ -72,6 +76,12 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
   - `If-Match` is the quoted version the administrator was looking at. If the issue changed since: `409 VERSION_CONFLICT`, and nothing is overwritten. Of several decisions based on the same version, exactly one wins.
   - The decision, the issue's next version, the history entry and the `IssueTriaged` and `IssueStateChanged` outbox rows are one transaction. Events never carry the reason.
   - Works without AI. A suggestion never sets category or urgency, and a late one changes nothing (`Issue.suggestTriage`); recording suggestions is US-03-03 ([#108](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/108)).
+- **Sharing with the building** (US-04, access matrix).
+  - **Summary.** Plain text, trimmed, 10 to 500 characters; reasons `required`, `too_short`, `too_long`, `invalid_characters`. Only an administrator of the building publishes it. It is the only text about an issue that residents see; the report text stays private. Every published summary is kept.
+  - **Version.** Publishing raises the issue's version and nothing else: state, category and urgency stay. `If-Match` and `Idempotency-Key` work as for triage. The summary, the issue's next version, a public `summary_published` history entry and the `IssueSummaryPublished` and `IssueStateChanged` outbox rows are one transaction. Events carry the summary's ID, never its text.
+  - **Visibility.** A published summary makes the issue visible to every member of its building, with what a reporter sees: no reason, no suggestion, public history only. Other buildings, contractors and revoked members get `404`.
+  - **Impact.** At most one confirmation per resident and issue; only the count is shown, never who. It changes neither the issue nor its version, and produces no event or history entry. Reporting is not a confirmation. Administrators see the count and get `403` if they try to confirm.
+  - **Subscription.** The caller's own choice, off by default and separate from impact. Turning it off removes no access. Nothing reads it yet: recipients are chosen in US-10-03 ([#110](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/110)).
 - **One transaction per report.** The report, the issue, the first history entry, both outbox rows (`ReportSubmitted`, `TriageRequested`, as CloudEvents JSON, status `pending`) and the key are committed together. The request waits for neither AI nor the broker. The publisher that sends outbox rows to RabbitMQ is part of EN-02-02 ([#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)).
 
 ## Configuration
