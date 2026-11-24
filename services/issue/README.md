@@ -2,7 +2,10 @@
 
 Bounded context **Issue** of BMC ([technical design §2.1](../../documents/07-technical-design.md#21-issue-service)): buildings, areas, memberships, reports, issues and their history. Spring Boot 4.1 on Java 25, MySQL 8.4 with Flyway ([ADR-002](../../documents/adr/ADR-002-technology-stack.md)).
 
-Implemented so far: US-01-01 ([#85](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/85)), meaning report submission and queries, with building permissions and 24-hour idempotency.
+Implemented so far:
+
+- US-01-01 ([#85](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/85)): report submission and queries, with building permissions and 24-hour idempotency.
+- US-02-01 ([#87](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/87)): manual triage with `If-Match`, the triage rows of the state table, issue queries and history projected by role.
 
 ## Architecture
 
@@ -14,14 +17,15 @@ pt.isep.bmc.issue
 │   ├── building/      BuildingId, Area, AreaKind
 │   ├── membership/    Membership, UserId (Keycloak sub), BuildingAccess (access matrix rules)
 │   ├── report/        Report, ReportText (10–4,000 code points), ReportIntake (domain service)
-│   ├── issue/         Issue, IssueState, IssueHistoryEntry, CriticalCheckStatus
-│   ├── event/         DomainEvent: ReportSubmitted, TriageRequested
-│   └── shared/        DomainException (sealed): ValidationException, InvalidAreaException, AccessDeniedException
+│   ├── issue/         Issue, IssueState, IssueTriage (domain service), TriageDecision, TriageReason, IssueHistoryEntry
+│   ├── event/         DomainEvent: ReportSubmitted, TriageRequested, IssueTriaged, IssueStateChanged
+│   └── shared/        DomainException (sealed): validation, invalid area, access denied, forbidden, version conflict, invalid transition
 ├── application/       use cases and ports; depends only on domain
-│   ├── port/in/       SubmitReportUseCase, GetReportQuery, ListReportsQuery, GetProfileQuery, ...
+│   ├── port/in/       SubmitReportUseCase, DecideTriageUseCase, GetReportQuery, GetIssueQuery, GetProfileQuery, ...
 │   ├── port/out/      repositories, EventOutbox, IdempotencyStore, TransactionRunner, IdGenerator, read models
-│   ├── command/       SubmitReportService, PurgeExpiredIdempotencyKeysService
-│   ├── query/         ReportQueryService, ProfileQueryService, BuildingAreasQueryService
+│   ├── command/       SubmitReportService, DecideTriageService, PurgeExpiredIdempotencyKeysService
+│   ├── query/         ReportQueryService, IssueQueryService, ProfileQueryService, BuildingAreasQueryService
+│   ├── idempotency/   IdempotencyKey, IdempotentExecutor (one effect per key)
 │   └── error/         NotFoundException, IdempotencyKeyReusedException, StorageUnavailableException
 ├── adapters/in/       driving: REST controllers + DTOs, problem+json mapping, correlation ID, scheduled purge
 ├── adapters/out/      driven: JPA (aggregates), JDBC (idempotency keys, read models), outbox, UUIDv7
@@ -43,20 +47,31 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | `GET /reports/{id}` | The author, or an administrator of the building | Text, area, source, `authoredByMe` and the issue's `{state, version}`. Never the author's identity |
 | `GET /reports?buildingId=&page=&size=` | Any user | Own reports, plus every report of the buildings the caller administers, newest first. No text |
 | `GET /me` | Any user | Profile and active memberships, with building names |
+| `GET /issues?buildingId=&page=&size=` | Any user | Issues of the buildings the caller administers, plus the issues the caller reported, newest first. Each item: `{issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage, suggestion}`. No report text, no triage reason |
+| `GET /issues/{id}` | Administrators of the building; the resident who reported it | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is `null` until US-03-03 |
+| `GET /issues/{id}/history` | The same | `{items: [{sequence, type, visibility, actorRole, occurredAt, category, urgency, reason}]}`, oldest first. Residents get public entries only, without reasons. Roles, never identities |
+| `POST /issues/{id}/triage` + `If-Match: "<version>"` + `Idempotency-Key` | Administrators of the building | Body `{category, urgency, reason}`. `200`, `ETag` with the new version, `{issueId, state: "triaged", version, category, urgency, decisionSource: "human"}` |
 | `GET /buildings/{id}/areas` | Members of the building | Areas for the report form |
 
 - **Errors** are `application/problem+json` with `code` and `correlationId`:
   - `400 VALIDATION_FAILED` (with `errors[]`) or `INVALID_AREA`
   - `401 UNAUTHENTICATED`
+  - `403 FORBIDDEN`, when the caller can see an issue but may not triage it
   - `403 CSRF_HEADER_REQUIRED`, for a state-changing request without the CSRF header
   - `404 NOT_FOUND`, for anything unknown or outside the caller's scope
-  - `405` for any attempt to modify a report
+  - `405` for any attempt to modify a report, or to set an issue's state directly
+  - `409 VERSION_CONFLICT` (with `currentVersion`, `currentState`) or `INVALID_TRANSITION` (with `currentState`)
   - `422 IDEMPOTENCY_KEY_REUSED`
   - `503 DEPENDENCY_UNAVAILABLE`, which never comes with a receipt
 
-  Error bodies never contain the report text.
+  Error bodies never contain the report text or a triage reason.
 - **CSRF** ([ADR-005](../../documents/adr/ADR-005-authentication-authorisation.md#csrf)). Every `POST`, `PUT`, `PATCH` or `DELETE` must carry the custom header named by `CSRF_HEADER` (default `X-BMC-CSRF`), with any non-blank value. A cross-origin page cannot add it without a CORS pre-flight, and there is no CORS. Reads need no header. The check runs before token validation, so such a request gets `403` even without a token.
 - **Idempotency.** The key is scoped per user and operation and kept for 24 hours. The same key and body replay the original `201`, including when several retries run at the same time. The same key with a different body gets `422`.
+- **Triage** (technical design 3.1 and 3.3). Categories: `plumbing`, `electrical`, `lift`, `cleaning`, `structural`, `other`. Urgencies: `low`, `normal`, `high`, `critical`. Reason: 1 to 500 characters, internal.
+  - From `received`, `in_triage` or `triaged` to `triaged`; a decision can be corrected by deciding again, and every decision is kept. From any later state: `409 INVALID_TRANSITION`.
+  - `If-Match` is the quoted version the administrator was looking at. If the issue changed since: `409 VERSION_CONFLICT`, and nothing is overwritten. Of several decisions based on the same version, exactly one wins.
+  - The decision, the issue's next version, the history entry and the `IssueTriaged` and `IssueStateChanged` outbox rows are one transaction. Events never carry the reason.
+  - Works without AI. A suggestion never sets category or urgency, and a late one changes nothing (`Issue.suggestTriage`); recording suggestions is US-03-03 ([#108](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/108)).
 - **One transaction per report.** The report, the issue, the first history entry, both outbox rows (`ReportSubmitted`, `TriageRequested`, as CloudEvents JSON, status `pending`) and the key are committed together. The request waits for neither AI nor the broker. The publisher that sends outbox rows to RabbitMQ is part of EN-02-02 ([#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)).
 
 ## Configuration
