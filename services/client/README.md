@@ -13,6 +13,9 @@ the real API is one line (see [Switch mock → HTTP](#switch-mock--http)).
 
 ## Commands
 
+Needs Node 20.19+ or 22.12+ (Vite 8). On an older Node, `npm ci` silently skips the bundler's native binary and the
+build and tests fail with "Cannot find native binding".
+
 ```bash
 npm ci               # install (exact versions from package-lock.json)
 npm run dev          # http://localhost:5173, mock adapters, ?mockFail=<status> enabled
@@ -35,8 +38,7 @@ src/
   app/          composition root: config.ts (env), container.ts (ports → adapters), router.tsx, query-client.ts,
                 context.tsx (ServicesProvider, useServices, useAppContext), loaders.ts (routeData)
   contracts/    zod schemas + inferred types, one file per backend service; problem.ts (RFC 9457 errors)
-  ports/        interfaces (and the models they return) the UI depends on: AuthSession, IssueApi, ExampleApi,
-                Clock; services.ts bundles them
+  ports/        interfaces (and the models they return) the UI depends on: AuthSession, IssueApi, Clock; services.ts bundles them
   adapters/
     http/       client.ts (the one fetch wrapper) + one adapter per port, over /api/<service>/…
     mock/       in-memory adapters, synthetic personas and data, simulated latency and failures
@@ -100,6 +102,15 @@ The root route resolves the session before any guard runs:
 - it reuses the session for 5 minutes, then asks again on the next navigation;
 - a network blip keeps the known session;
 - an unusable `/me` shows on the login page, with a sign-out button.
+
+`/me` is the Issue service's `ProfileResponse` (`ProfileSchema`, US-01-01). The HTTP auth adapter maps it to the
+client's `Session` model (`src/ports/auth-session.ts`), so the UI never depends on wire names. `/me` does not yet carry
+an email, platform roles or a contractor link (asked on EN-02-04, #80), so over HTTP these are empty and the admin and
+contractor areas do not appear.
+
+**Mock personas** are the Issue service's synthetic seed users (`R__synthetic_fixtures.sql`), with the same IDs, names
+and buildings: Residents A1, A2 and B1, Administrators A and B, and the contractor account. Platform staff is mock only,
+because the seed has no such account. Switching a port to HTTP against the seeded local stack shows the same people.
 
 `watchSession` reacts when a background refetch finds the session ended, or a different account: it wipes the previous
 person's cached data and re-runs the guards.
@@ -181,20 +192,6 @@ Copy `.env.example` to `.env.local`. `VITE_*` values are compiled into the bundl
 
 A bad value fails at start-up (`src/app/config.ts`).
 
-## Reference pieces to delete later
-
-`src/features/example`, `src/ports/example-api.ts`, `src/contracts/example.ts`, `src/adapters/*/example-api.ts` (and
-its test), the `/example` routes, the `/api/example` proxy entry in `vite.config.ts` and the People nav item. Together
-they are a complete worked example against [DummyJSON](https://dummyjson.com/docs/users)'s synthetic people:
-
-- a search kept in the URL and validated with zod (`?q=`, `loaderDeps`);
-- a list, and a detail page whose API 404 becomes the not-found page;
-- a create form validated with the request's own schema;
-- the adapter mapping the wire DTO to the UI model, with avatars rewritten to same-origin URLs for the CSP.
-
-DummyJSON fakes writes, so a created person appears in the list but its detail page is "not found" in HTTP mode.
-The `/admin` page is a placeholder for the role-guard example.
-
 ## Delivery
 
 `Dockerfile` builds with Node and serves `dist/` with nginx (`nginx.conf`):
@@ -211,9 +208,17 @@ server needs inline scripts. `test/static.test.ts` checks that:
 - the CSP is present;
 - nginx and `vite preview` send the same CSP string.
 
+## Accessibility
+
+`src/app/a11y.test.tsx` renders every shell page and runs axe-core (`vitest-axe`) over it. Every new page adds a case
+there. Two rules are off because the test DOM applies no CSS: `color-contrast`, and `landmark-unique`, since the
+sidebar and the bottom bar are both "Main" navigation and CSS shows one at a time. axe does not replace the manual
+keyboard pass each UI story records in its PR.
+
 ## Known limits
 
-- The `/me` and `/issues` contracts are assumptions until the Issue service defines them.
+- `/me` matches the Issue service. `/issues` is still an assumption until US-02-01 (#87) defines it.
+- `/me` has no email, platform roles or contractor link yet (EN-02-04, #80).
 - The CSRF header name, the login `redirect` parameter and the edge paths are placeholders (EN01-U6, spike item 3).
 - `npm audit` reports moderate advisories in `glob`/`minimatch` under `workbox-build`, a build-time dependency of
   vite-plugin-pwa 2.0.0. The production dependencies report none.
