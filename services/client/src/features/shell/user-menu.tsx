@@ -34,7 +34,7 @@ export function UserMenu({ session }: { session: Session }) {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="font-normal">
           <span className="block truncate text-sm font-medium">{session.name}</span>
-          <span className="text-muted-foreground block truncate text-xs">{session.email}</span>
+          {session.email ? <span className="text-muted-foreground block truncate text-xs">{session.email}</span> : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <SignOutButton />

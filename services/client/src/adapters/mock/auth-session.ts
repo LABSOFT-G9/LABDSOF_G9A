@@ -1,12 +1,11 @@
 import { PERSONAS } from "@/adapters/mock/data";
 import type { MockRuntime } from "@/adapters/mock/runtime";
-import type { Me } from "@/contracts/issue";
-import type { AuthSession, DevPersonas } from "@/ports/auth-session";
+import type { AuthSession, DevPersonas, Session } from "@/ports/auth-session";
 
 const STORAGE_KEY = "bmc-mock-persona";
 
 export interface MockIdentity {
-  current(): Me | null;
+  current(): Session | null;
 }
 
 /** Remembers the chosen persona in localStorage (no token, no secret: a persona id), so a reload keeps it. */
@@ -19,7 +18,7 @@ export function createMockIdentity(storage: Pick<Storage, "getItem" | "setItem" 
     }
   };
   return {
-    current: (): Me | null => PERSONAS.find((p) => p.id === read())?.session ?? null,
+    current: (): Session | null => PERSONAS.find((p) => p.id === read())?.session ?? null,
     set(personaId: string | null) {
       try {
         if (personaId) storage.setItem(STORAGE_KEY, personaId);

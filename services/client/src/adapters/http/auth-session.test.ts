@@ -2,13 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { httpAuthSession } from "@/adapters/http/auth-session";
 import { createHttpClient } from "@/adapters/http/client";
 
+/** `GET /me` exactly as the Issue service answers it (ProfileResponse, services/issue README). */
 const me = {
-  sub: "u1",
-  name: "Demo",
-  email: "demo@bmc.test",
-  memberships: [],
-  platformRoles: [],
-  contractor: null,
+  userId: "0199f2a0-0000-7000-8000-000000000101",
+  displayName: "Synthetic Resident A1",
+  memberships: [
+    {
+      membershipId: "0199f2a0-0000-7000-8000-00000000d001",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      role: "resident",
+    },
+  ],
 };
 
 function setup(response: Response) {
@@ -23,10 +28,27 @@ function setup(response: Response) {
 }
 
 describe("httpAuthSession (BFF at the edge)", () => {
-  it("loads the session from GET /api/issue/me", async () => {
+  it("loads the session from GET /api/issue/me and maps it to the session model", async () => {
     const { auth, fetcher } = setup(Response.json(me));
-    await expect(auth.me()).resolves.toEqual(me);
+    await expect(auth.me()).resolves.toEqual({
+      sub: me.userId,
+      name: me.displayName,
+      email: null,
+      memberships: [{ ...me.memberships[0], unit: null }],
+      platformRoles: [],
+      contractor: null,
+    });
     expect(fetcher).toHaveBeenCalledWith("/api/issue/me", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("rejects a /me that breaks the contract instead of guessing", async () => {
+    const { auth } = setup(Response.json({ sub: "u1", name: "Old shape", memberships: [] }));
+    await expect(auth.me()).rejects.toMatchObject({ name: "ContractError" });
+  });
+
+  it("rejects an unknown building role", async () => {
+    const { auth } = setup(Response.json({ ...me, memberships: [{ ...me.memberships[0], role: "owner" }] }));
+    await expect(auth.me()).rejects.toMatchObject({ name: "ContractError" });
   });
 
   it("treats 401 as no session", async () => {

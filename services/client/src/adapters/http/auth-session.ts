@@ -1,6 +1,6 @@
 import type { HttpClient } from "@/adapters/http/client";
-import { MeSchema } from "@/contracts/issue";
-import type { AuthSession } from "@/ports/auth-session";
+import { type Profile, ProfileSchema } from "@/contracts/issue";
+import type { AuthSession, Session } from "@/ports/auth-session";
 import { isApiError } from "@/shared/lib/errors";
 
 export interface EdgeAuthConfig {
@@ -9,6 +9,18 @@ export interface EdgeAuthConfig {
   /** The edge OIDC plugin's logout path. */
   readonly logoutUri: string;
   readonly navigate?: (url: string) => void;
+}
+
+/** The wire profile as the client's session model. Fields `/me` does not carry yet get their "none" value. */
+export function toSession(profile: Profile): Session {
+  return {
+    sub: profile.userId,
+    name: profile.displayName,
+    email: null,
+    memberships: profile.memberships.map((m) => ({ ...m, unit: null })),
+    platformRoles: [],
+    contractor: null,
+  };
 }
 
 /**
@@ -23,7 +35,7 @@ export function httpAuthSession(http: HttpClient, config: EdgeAuthConfig): AuthS
   return {
     async me() {
       try {
-        return await http.get("/api/issue/me", MeSchema);
+        return toSession(await http.get("/api/issue/me", ProfileSchema));
       } catch (error) {
         if (isApiError(error, 401)) return null;
         throw error;

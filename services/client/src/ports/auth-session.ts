@@ -1,7 +1,30 @@
-import type { Me } from "@/contracts/issue";
+import type { BuildingRole, PlatformRole } from "@/contracts/issue";
 
-/** Who is signed in, as the client sees it. Today it is exactly the Issue service's `/me`. */
-export type Session = Me;
+/** One building the signed-in person belongs to, and their role there. */
+export interface SessionMembership {
+  readonly membershipId: string;
+  readonly buildingId: string;
+  readonly buildingName: string;
+  /** Not in the Issue service's `/me` yet, so always `null` over HTTP. */
+  readonly unit: string | null;
+  readonly role: BuildingRole;
+}
+
+/**
+ * Who is signed in, as the client sees it. Built from the Issue service's `GET /me` (`ProfileSchema`) by the auth
+ * adapter. `/me` does not yet say whether the person is platform staff or a contractor, nor give an email (asked on
+ * EN-02-04 #80), so over HTTP `email` is `null`, `platformRoles` is empty and `contractor` is `null`; the mock
+ * personas fill them so those screens can be built.
+ */
+export interface Session {
+  /** The identity provider's subject; the Issue service calls it `userId`. */
+  readonly sub: string;
+  readonly name: string;
+  readonly email: string | null;
+  readonly memberships: readonly SessionMembership[];
+  readonly platformRoles: readonly PlatformRole[];
+  readonly contractor: { readonly id: string; readonly status: "pending" | "active" | "suspended" } | null;
+}
 
 /**
  * The authentication facade (ADR-005, ADR-009). The browser never holds a token: with the BFF at the edge, the

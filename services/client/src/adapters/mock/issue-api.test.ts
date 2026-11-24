@@ -15,16 +15,15 @@ function signedInAs(personaId: string | null) {
 
 describe("mockIssueApi", () => {
   it("shows a resident only the issues of their building, like the real service", async () => {
-    const issues = await mockIssueApi(signedInAs("resident"), runtime, clock, true).list();
+    const issues = await mockIssueApi(signedInAs("resident-a1"), runtime, clock, true).list();
     expect(issues.length).toBeGreaterThan(0);
     expect(issues.every((issue) => issue.buildingId === BUILDINGS.a.buildingId)).toBe(true);
   });
 
-  it("shows an administrator of two buildings both", async () => {
-    const issues = await mockIssueApi(signedInAs("administrator"), runtime, clock, true).list();
-    expect(new Set(issues.map((issue) => issue.buildingId))).toEqual(
-      new Set([BUILDINGS.a.buildingId, BUILDINGS.b.buildingId]),
-    );
+  it("shows an administrator only the building they administer", async () => {
+    const issues = await mockIssueApi(signedInAs("administrator-b"), runtime, clock, true).list();
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.buildingId === BUILDINGS.b.buildingId)).toBe(true);
   });
 
   it("shows a contractor nothing (no membership)", async () => {

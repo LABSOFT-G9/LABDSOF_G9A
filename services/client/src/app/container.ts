@@ -1,16 +1,14 @@
 import { httpAuthSession } from "@/adapters/http/auth-session";
 import { createHttpClient } from "@/adapters/http/client";
-import { httpExampleApi } from "@/adapters/http/example-api";
 import { httpIssueApi } from "@/adapters/http/issue-api";
 import { createMockIdentity, mockAuthSession } from "@/adapters/mock/auth-session";
-import { mockExampleApi } from "@/adapters/mock/example-api";
 import { mockIssueApi } from "@/adapters/mock/issue-api";
 import { createMockRuntime } from "@/adapters/mock/runtime";
 import { systemClock } from "@/adapters/system-clock";
 import type { AdapterMode, AppConfig } from "@/app/config";
 import type { Services } from "@/ports/services";
 
-type SwitchablePort = "auth" | "issues" | "example";
+type SwitchablePort = "auth" | "issues";
 
 /**
  * Per-port override of VITE_ADAPTERS. Uncomment a line to wire one port differently from the rest, e.g. the real
@@ -45,7 +43,6 @@ export function createContainer(
   const services: Services = {
     auth,
     issues: modeOf("issues") === "mock" ? mockIssueApi(identity, runtime, clock, authIsMocked) : httpIssueApi(http),
-    example: modeOf("example") === "mock" ? mockExampleApi(runtime) : httpExampleApi(http),
     clock,
     ...(authIsMocked ? { devPersonas: mockAuth } : {}),
   };

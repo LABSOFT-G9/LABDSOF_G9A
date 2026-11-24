@@ -15,7 +15,7 @@ const catchThrown = (fn: () => unknown) => {
 
 describe("guards", () => {
   it("requireSession returns the session when signed in", () => {
-    const session = persona("resident");
+    const session = persona("resident-a1");
     expect(requireSession({ context: { auth: { kind: "signed-in", session } }, location: { href: "/x" } })).toBe(
       session,
     );
@@ -33,12 +33,12 @@ describe("guards", () => {
   });
 
   it("requirePlatformRole answers not-found, never forbidden", () => {
-    expect(isNotFound(catchThrown(() => requirePlatformRole(persona("administrator"), "platform_staff")))).toBe(true);
+    expect(isNotFound(catchThrown(() => requirePlatformRole(persona("administrator-a"), "platform_staff")))).toBe(true);
     expect(catchThrown(() => requirePlatformRole(persona("platform-staff"), "platform_staff"))).toBeUndefined();
   });
 
   it("hasBuildingRole is per building", () => {
-    const resident = persona("resident");
+    const resident = persona("resident-a1");
     const building = resident.memberships[0]!.buildingId;
     expect(hasBuildingRole(resident, building, "resident")).toBe(true);
     expect(hasBuildingRole(resident, building, "administrator")).toBe(false);

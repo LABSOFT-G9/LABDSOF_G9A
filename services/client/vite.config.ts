@@ -24,13 +24,6 @@ export default defineConfig(({ mode }) => {
   // first-party and there is no CORS (ADR-005).
   const edge: ProxyOptions = { target, changeOrigin: false };
   const proxy: Record<string, ProxyOptions> = {
-    // Reference feature only (src/features/example): DummyJSON's synthetic people (and their avatars) behind our own
-    // /api prefix, so the HTTP adapter is written exactly like a real one. Must come before "/api" (first match wins).
-    "/api/example": {
-      target: "https://dummyjson.com",
-      changeOrigin: true,
-      rewrite: (path) => path.replace(/^\/api\/example/, ""),
-    },
     ...Object.fromEntries(EDGE_PATHS.map((path) => [path, edge])),
   };
 

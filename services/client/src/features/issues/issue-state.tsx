@@ -5,6 +5,7 @@ import {
   CircleSlash,
   Hammer,
   Inbox,
+  ListChecks,
   type LucideIcon,
   Route,
   Tags,
@@ -20,6 +21,7 @@ const ICONS: Record<IssueState, LucideIcon> = {
   in_coordination: Route,
   scheduled: CalendarClock,
   in_progress: Hammer,
+  awaiting_validation: ListChecks,
   resolved: CircleCheck,
   cancelled: CircleSlash,
 };

@@ -6,8 +6,11 @@ describe("createContainer", () => {
   it("wires mock adapters and offers dev personas in mock mode", () => {
     const services = createContainer(testConfig, {}, {});
     expect(services.devPersonas?.list().map((p) => p.id)).toEqual([
-      "resident",
-      "administrator",
+      "resident-a1",
+      "resident-a2",
+      "resident-b1",
+      "administrator-a",
+      "administrator-b",
       "contractor",
       "platform-staff",
     ]);
@@ -19,8 +22,9 @@ describe("createContainer", () => {
   });
 
   it("lets one port differ from the rest", async () => {
-    const services = createContainer({ ...testConfig, adapters: "http" }, {}, { example: "mock" });
-    await expect(services.example.listPeople({})).resolves.toHaveLength(6);
+    const services = createContainer({ ...testConfig, adapters: "http" }, {}, { issues: "mock" });
+    // Issues mocked while sign-in is real: no persona to filter by, so every synthetic issue is listed.
+    await expect(services.issues.list()).resolves.toHaveLength(4);
     expect(services.devPersonas).toBeUndefined();
   });
 

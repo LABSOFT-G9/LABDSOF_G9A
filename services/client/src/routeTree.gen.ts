@@ -16,8 +16,6 @@ import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppIssuesRouteImport } from './routes/_app/issues'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
-import { Route as AppExampleIndexRouteImport } from './routes/_app/example.index'
-import { Route as AppExamplePersonIdRouteImport } from './routes/_app/example.$personId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,16 +51,6 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
-const AppExampleIndexRoute = AppExampleIndexRouteImport.update({
-  id: '/example/',
-  path: '/example/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppExamplePersonIdRoute = AppExamplePersonIdRouteImport.update({
-  id: '/example/$personId',
-  path: '/example/$personId',
-  getParentRoute: () => AppRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -71,8 +59,6 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
-  '/example/$personId': typeof AppExamplePersonIdRoute
-  '/example/': typeof AppExampleIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -81,8 +67,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
-  '/example/$personId': typeof AppExamplePersonIdRoute
-  '/example': typeof AppExampleIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -93,30 +77,12 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/issues': typeof AppIssuesRoute
   '/_app/settings': typeof AppSettingsRoute
-  '/_app/example/$personId': typeof AppExamplePersonIdRoute
-  '/_app/example/': typeof AppExampleIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/login'
-    | '/admin'
-    | '/dashboard'
-    | '/issues'
-    | '/settings'
-    | '/example/$personId'
-    | '/example/'
+  fullPaths: '/' | '/login' | '/admin' | '/dashboard' | '/issues' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/login'
-    | '/admin'
-    | '/dashboard'
-    | '/issues'
-    | '/settings'
-    | '/example/$personId'
-    | '/example'
+  to: '/' | '/login' | '/admin' | '/dashboard' | '/issues' | '/settings'
   id:
     | '__root__'
     | '/'
@@ -126,8 +92,6 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/issues'
     | '/_app/settings'
-    | '/_app/example/$personId'
-    | '/_app/example/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -187,20 +151,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/example/': {
-      id: '/_app/example/'
-      path: '/example'
-      fullPath: '/example/'
-      preLoaderRoute: typeof AppExampleIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/example/$personId': {
-      id: '/_app/example/$personId'
-      path: '/example/$personId'
-      fullPath: '/example/$personId'
-      preLoaderRoute: typeof AppExamplePersonIdRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
@@ -209,8 +159,6 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppIssuesRoute: typeof AppIssuesRoute
   AppSettingsRoute: typeof AppSettingsRoute
-  AppExamplePersonIdRoute: typeof AppExamplePersonIdRoute
-  AppExampleIndexRoute: typeof AppExampleIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -218,8 +166,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppIssuesRoute: AppIssuesRoute,
   AppSettingsRoute: AppSettingsRoute,
-  AppExamplePersonIdRoute: AppExamplePersonIdRoute,
-  AppExampleIndexRoute: AppExampleIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

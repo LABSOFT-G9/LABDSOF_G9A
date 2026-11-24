@@ -13,36 +13,36 @@ describe("app (mock adapters)", () => {
     await screen.findByRole("heading", { name: "Sign in to BMC" });
     expect(router.state.location.search).toMatchObject({ redirect: "/issues" });
 
-    await user.click(screen.getByRole("button", { name: /Resident/ }));
+    await user.click(screen.getByRole("button", { name: /Resident A1/ }));
 
     await screen.findByRole("heading", { level: 1, name: "Issues" });
     expect(router.state.location.pathname).toBe("/issues");
     expect(await screen.findByText("Lift stuck between floors 3 and 4")).toBeInTheDocument();
-    // Membership filtering: Demo Building B's issue is not the resident's.
+    // Membership filtering: Synthetic Building B's issue is not the resident's.
     expect(screen.queryByText("Water leak in the entrance hall")).not.toBeInTheDocument();
   });
 
   it("returns to a target with a query and a hash after sign-in", async () => {
     const user = userEvent.setup();
-    const { router } = renderApp("/example?q=demo#results");
+    const { router } = renderApp("/issues?building=a#results");
 
     await screen.findByRole("heading", { name: "Sign in to BMC" });
-    await user.click(screen.getByRole("button", { name: /Resident/ }));
+    await user.click(screen.getByRole("button", { name: /Resident A1/ }));
 
-    const heading = await screen.findByRole("heading", { level: 1, name: "People" });
+    const heading = await screen.findByRole("heading", { level: 1, name: "Issues" });
     await waitFor(() => expect(heading).toHaveFocus()); // focus follows the sign-in navigation too
-    expect(router.state.location.pathname).toBe("/example");
-    expect(router.state.location.search).toEqual({ q: "demo" });
+    expect(router.state.location.pathname).toBe("/issues");
+    expect(router.state.location.search).toEqual({ building: "a" });
     expect(router.state.location.hash).toBe("results");
   });
 
   it("titles each page and moves focus to its heading after navigating", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("bmc-mock-persona", "resident");
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
     renderApp("/dashboard");
 
-    await screen.findByRole("heading", { level: 1, name: "Hello, Demo" });
-    await waitFor(() => expect(document.title).toBe("Hello, Demo · BMC"));
+    await screen.findByRole("heading", { level: 1, name: "Hello, Synthetic" });
+    await waitFor(() => expect(document.title).toBe("Hello, Synthetic · BMC"));
 
     const nav = screen.getAllByRole("navigation", { name: "Main" })[0]!;
     await user.click(within(nav).getByRole("link", { name: "Settings" }));
@@ -52,46 +52,8 @@ describe("app (mock adapters)", () => {
     expect(document.title).toBe("Settings · BMC");
   });
 
-  it("gives the error page a heading and a title, and focuses it", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem("bmc-mock-persona", "resident");
-    const example = {
-      listPeople: async () => {
-        throw new ApiError(409, "INVALID_TRANSITION", "Boom.");
-      },
-      getPerson: async () => {
-        throw new Error("unused");
-      },
-      createPerson: async () => {
-        throw new Error("unused");
-      },
-    };
-    renderApp("/dashboard", { services: { example } });
-    await screen.findByRole("heading", { level: 1, name: "Hello, Demo" });
-
-    const nav = screen.getAllByRole("navigation", { name: "Main" })[0]!;
-    await user.click(within(nav).getByRole("link", { name: "People" }));
-
-    const heading = await screen.findByRole("heading", { level: 1, name: "Something went wrong" });
-    await waitFor(() => expect(heading).toHaveFocus());
-    expect(document.title).toBe("Something went wrong · BMC");
-  });
-
-  it("keeps focus in the search field after searching", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem("bmc-mock-persona", "resident");
-    const { router } = renderApp("/example");
-
-    const field = await screen.findByRole("searchbox", { name: "Search people" });
-    await user.type(field, "bea{Enter}");
-
-    await waitFor(() => expect(router.state.location.search).toEqual({ q: "bea" }));
-    expect(await screen.findByText("Bea Sample")).toBeInTheDocument();
-    expect(screen.getByRole("searchbox", { name: "Search people" })).toHaveFocus();
-  });
-
   it("hides the admin area from non-staff as not found", async () => {
-    localStorage.setItem("bmc-mock-persona", "resident");
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
     renderApp("/admin");
     await screen.findByText("Page not found");
   });
@@ -104,10 +66,10 @@ describe("app (mock adapters)", () => {
 
   it("signs out to the login page", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("bmc-mock-persona", "administrator");
+    localStorage.setItem("bmc-mock-persona", "administrator-a");
     const { router } = renderApp("/dashboard");
 
-    await screen.findByRole("heading", { level: 1, name: "Hello, Demo" });
+    await screen.findByRole("heading", { level: 1, name: "Hello, Synthetic" });
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
 
@@ -117,7 +79,7 @@ describe("app (mock adapters)", () => {
   });
 
   it("ends the session globally when any request answers 401", async () => {
-    localStorage.setItem("bmc-mock-persona", "resident");
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
     const issues = {
       list: async () => {
         throw new ApiError(401, "UNAUTHENTICATED", "Session expired.");
@@ -130,7 +92,7 @@ describe("app (mock adapters)", () => {
   });
 
   it("shows a failed request in place, with its reference and a retry", async () => {
-    localStorage.setItem("bmc-mock-persona", "resident");
+    localStorage.setItem("bmc-mock-persona", "resident-a1");
     const issues = {
       list: async () => {
         throw new ApiError(409, "INVALID_TRANSITION", "That change is no longer possible.", "corr-42");
