@@ -1,0 +1,11 @@
+# Accepted container-scan findings (dev.yml, Trivy). One finding per line, each
+# with the reason, who accepted it and an expiry date (`exp:`): after that date
+# Trivy reports it again. Review every addition (DevOps approval).
+#
+# CVE-2026-102554 (HIGH): Guava 33.6.0, bundled inside the stock Keycloak
+# 26.8.2 image (infra/keycloak). Keycloak 26.8.2 is the latest release
+# (2026-11-05) and has no fixed build yet; the jar cannot be swapped without
+# breaking Keycloak's build index. Denial of service on deserialising untrusted
+# data, not a data leak. Found by the local Trivy run for EN-02-04 on
+# 2026-11-24. Remove when a Keycloak release bundles Guava 33.7.2 or later.
+CVE-2026-102554 exp:2026-12-22

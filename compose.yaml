@@ -8,11 +8,19 @@
 #                           for the TLS certificate (and Keycloak's issuer, EN-02-04)
 #   DB_HOST, DB_PORT        the database host (MySQL 8.4, one database per service)
 #   <NAME>_DB_PASSWORD      ISSUE_, DISPATCH_, NOTIFICATION_, KEYCLOAK_
-# Secrets never live in this file or in Git.
+#   KEYCLOAK_ADMIN_PASSWORD Keycloak's bootstrap administrator (first start only)
+#   BMC_EDGE_CLIENT_SECRET  secret of the Keycloak client `bmc-edge`
+#   OIDC_PLUGIN_SECRET      32 characters; encrypts the browser session cookie
+#   BMC_SEED_SYNTHETIC      "true" only on dev (never prod): synthetic buildings
+#                           in Issue and synthetic accounts in Keycloak
+#   BMC_SYNTHETIC_USER_PASSWORD  password of the synthetic accounts, 12
+#                           characters or more; needed with the line above
+# Secrets never live in this file or in Git. A missing one stops the deploy
+# (`:?`), so nothing starts with a default secret.
 #
-# First version: Traefik and the six services, ADR-004's routes. Keycloak,
-# RabbitMQ, Mailpit, the OIDC middleware and the egress network are added when
-# the services use them. Pins: images by digest, read 2026-11-21.
+# Traefik, Keycloak, Mailpit and the six services, ADR-004's routes. RabbitMQ
+# and the egress network are added when the services use them. Pins: images by
+# digest, read 2026-11-21 (Mailpit: 2026-11-24).
 name: bmc
 
 services:
@@ -41,6 +49,11 @@ services:
       - --providers.docker.network=bmc_edge
       # Never route the Traefik API (ADR-004).
       - --api.dashboard=false
+      # Browser session (ADR-005): the community plugin traefik-oidc-auth,
+      # fetched by Traefik at start by module name and pinned version.
+      # v0.24.0 fixes an open redirect (GHSA-h448-jxrw-w73v); read 2026-11-24.
+      - --experimental.plugins.traefik-oidc-auth.modulename=github.com/sevensolutions/traefik-oidc-auth
+      - --experimental.plugins.traefik-oidc-auth.version=v0.24.0
     ports:
       - "80:80"
       - "443:443"
@@ -48,6 +61,102 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
     networks: [edge]
+    labels:
+      traefik.enable: "true"
+      # The `oidc` middleware: the Backend-for-Frontend session. The browser
+      # holds only an encrypted HttpOnly cookie; the API routers below use this
+      # middleware, which answers 401 without a session (never a redirect) and
+      # otherwise adds the access token for the service to validate itself.
+      # Discovery goes straight to Keycloak on the `edge` network; the issuer
+      # in the tokens is still the public one (KC_HOSTNAME).
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Secret: ${OIDC_PLUGIN_SECRET:?}
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.Url: http://keycloak:8080/auth/realms/bmc
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.ClientId: bmc-edge
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.ClientSecret: ${BMC_EDGE_CLIENT_SECRET:?}
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.UsePkce: "true"
+      # The plugin checks the token it forwards: the access token, with the
+      # audience the services require.
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.TokenValidation: AccessToken
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Provider.ValidAudience: ${OIDC_AUDIENCE:-bmc-api}
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Scopes: openid,profile,email
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.UnauthenticatedBehavior: Unauthorized
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.LoginUri: /oidc/login
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.CallbackUri: /oidc/callback
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.LogoutUri: /logout
+      # After sign-in the browser always lands on `/`: redirect-URI wildcards
+      # stay off (TOA_ENABLE_REDIRECT_URI_WILDCARDS unset), so the client keeps
+      # the page to return to itself.
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.PostLoginRedirectUri: /
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.PostLogoutRedirectUri: /
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.SessionCookie.SameSite: strict
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Headers[0].Name: Authorization
+      traefik.http.middlewares.oidc.plugin.traefik-oidc-auth.Headers[0].Value: "Bearer {{ .accessToken }}"
+      # The plugin's own paths: sign-in, the callback from Keycloak, sign-out.
+      # The middleware answers them; nothing is forwarded.
+      traefik.http.routers.oidc.rule: PathPrefix(`/oidc/`) || Path(`/logout`)
+      traefik.http.routers.oidc.entrypoints: websecure
+      traefik.http.routers.oidc.middlewares: oidc
+      traefik.http.routers.oidc.service: noop@internal
+
+  # Identity provider (ADR-005): accounts, credentials, sign-up and the coarse
+  # realm roles. Realm `bmc` is in the image (infra/keycloak) and is imported
+  # on the first start only. Its database is `keycloak` on the database host.
+  keycloak:
+    image: ghcr.io/labsoft-g9/labdsof-keycloak:${BMC_TAG:?}
+    restart: unless-stopped
+    # Base memory is about 1250 MB and the heap is 70% of the limit (E28).
+    mem_limit: 1250m
+    networks: [edge, internal]
+    environment:
+      KC_DB_URL: jdbc:mysql://${DB_HOST:-}:${DB_PORT:-3306}/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      # The public address, behind Traefik (which terminates TLS and sets
+      # X-Forwarded-*). Calls that come straight from the internal networks
+      # (the edge plugin, the services' key fetch) are answered on the
+      # internal name, with the same public issuer in every token.
+      KC_HOSTNAME: https://${BMC_PUBLIC_HOST:?}/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_BOOTSTRAP_ADMIN_USERNAME: bmc-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      # Filled into the realm at its first import (infra/keycloak/realm).
+      BMC_PUBLIC_URL: https://${BMC_PUBLIC_HOST:?}
+      BMC_EDGE_CLIENT_SECRET: ${BMC_EDGE_CLIENT_SECRET:?}
+      BMC_SMTP_HOST: mailpit
+      BMC_SMTP_PORT: "1025"
+      BMC_SMTP_FROM: no-reply@${BMC_PUBLIC_HOST:?}
+      # Synthetic accounts; "true" only on local and dev.
+      BMC_SEED_SYNTHETIC: ${BMC_SEED_SYNTHETIC:-false}
+      BMC_SYNTHETIC_USER_PASSWORD: ${BMC_SYNTHETIC_USER_PASSWORD:-}
+    healthcheck:
+      # The image has no curl: plain bash on the management port (never routed).
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q 'HTTP/1.1 200' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    labels:
+      traefik.enable: "true"
+      # Only what sign-in needs (Keycloak's reverse-proxy guidance): the realm
+      # endpoints and their static resources. The admin console (/auth/admin),
+      # health and metrics are never routed; reach the console through SSM
+      # port forwarding.
+      traefik.http.routers.keycloak.rule: PathPrefix(`/auth/realms/`) || PathPrefix(`/auth/resources/`)
+      traefik.http.routers.keycloak.entrypoints: websecure
+      traefik.http.services.keycloak.loadbalancer.server.port: "8080"
+
+  # Captures every email Keycloak sends (address verification, password
+  # reset). Internal only, never routed (ADR-004): read it through a tunnel to
+  # port 8025. axllent/mailpit:v1.32.
+  mailpit:
+    image: axllent/mailpit:v1.32@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      MP_MAX_MESSAGES: "500"
+    networks: [internal]
 
   client:
     image: ghcr.io/labsoft-g9/labdsof-client:${BMC_TAG:?}
@@ -70,10 +179,11 @@ services:
       DB_NAME: issue
       DB_USER: issue
       DB_PASSWORD: ${ISSUE_DB_PASSWORD:-}
-      # Token validation (ADR-005). Until Keycloak runs (EN-02-04), an empty
-      # issuer makes every API call answer 401: the service fails closed.
-      OIDC_ISSUER_URI: ${OIDC_ISSUER_URI:-}
-      OIDC_JWK_SET_URI: ${OIDC_JWK_SET_URI:-}
+      # Token validation (ADR-005): the issuer is Keycloak's public address;
+      # the signing keys are fetched on the internal network, not through the
+      # edge. The service validates every token itself.
+      OIDC_ISSUER_URI: https://${BMC_PUBLIC_HOST:?}/auth/realms/bmc
+      OIDC_JWK_SET_URI: http://keycloak:8080/auth/realms/bmc/protocol/openid-connect/certs
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-bmc-api}
       # Synthetic buildings and accounts; "true" only on local and dev.
       BMC_SEED_SYNTHETIC: ${BMC_SEED_SYNTHETIC:-false}
@@ -81,7 +191,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.issue.rule: PathPrefix(`/api/issue`)
       traefik.http.routers.issue.entrypoints: websecure
-      traefik.http.routers.issue.middlewares: issue-strip
+      traefik.http.routers.issue.middlewares: oidc,issue-strip
       traefik.http.middlewares.issue-strip.stripprefix.prefixes: /api/issue
       traefik.http.services.issue.loadbalancer.server.port: "8080"
 
@@ -99,7 +209,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.dispatch.rule: PathPrefix(`/api/dispatch`)
       traefik.http.routers.dispatch.entrypoints: websecure
-      traefik.http.routers.dispatch.middlewares: dispatch-strip
+      traefik.http.routers.dispatch.middlewares: oidc,dispatch-strip
       traefik.http.middlewares.dispatch-strip.stripprefix.prefixes: /api/dispatch
       traefik.http.services.dispatch.loadbalancer.server.port: "8080"
 
@@ -117,7 +227,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.notification.rule: PathPrefix(`/api/notifications`)
       traefik.http.routers.notification.entrypoints: websecure
-      traefik.http.routers.notification.middlewares: notification-strip
+      traefik.http.routers.notification.middlewares: oidc,notification-strip
       traefik.http.middlewares.notification-strip.stripprefix.prefixes: /api/notifications
       traefik.http.services.notification.loadbalancer.server.port: "8080"
 
