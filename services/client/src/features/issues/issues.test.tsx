@@ -327,3 +327,128 @@ describe("status and history (resident)", () => {
     await screen.findByText("Report received");
   });
 });
+
+describe("suggestion (US-03-02)", () => {
+  const CRITICAL = "0199f2a1-0000-7000-8000-000000002005"; // Building B, Garage: AI timed out, fallback, critical alert
+  const PENDING = "0199f2a1-0000-7000-8000-000000002002"; // Garage level -1, received 20 hours ago, no suggestion
+  const NOW = new Date("2026-11-24T10:00:00Z");
+  const stubbed = (overrides: Partial<Issue>): Issue => ({
+    issueId: "i1",
+    buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+    buildingName: "Synthetic Building A",
+    areaLabel: "Entrance hall",
+    state: "received",
+    version: 1,
+    createdAt: NOW.toISOString(),
+    triage: null,
+    suggestion: null,
+    ...overrides,
+  });
+  const renderStubbed = (issue: Issue) =>
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }) }),
+        clock: { now: () => NOW },
+      },
+    });
+
+  it("shows the suggestion as unconfirmed, with its origin and explanation", async () => {
+    signInAs("administrator-a");
+    renderApp(`/issues/${SUGGESTED}`);
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText("Unconfirmed · AI")).toBeInTheDocument();
+    expect(within(panel).getByText("Electrical")).toBeInTheDocument();
+    expect(within(panel).getByText("High")).toBeInTheDocument();
+    expect(within(panel).getByText(/exposed wires next to the light switch/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Not a decision until you save one below/)).toBeInTheDocument();
+    expect(within(panel).queryByText("AI could not be used")).not.toBeInTheDocument();
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps a critical alert in view when the suggestion disagrees, and after the decision", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-b");
+    const { router } = renderApp("/issues");
+    const garage = await screen.findByRole("link", { name: "Garage" });
+    expect(within(card(garage)).getByText("Critical alert")).toBeInTheDocument();
+    expect(within(card(garage)).getByText("Unconfirmed suggestion (fallback rules)")).toBeInTheDocument();
+
+    await router.navigate({ to: "/issues/$issueId", params: { issueId: CRITICAL } });
+    await screen.findByRole("heading", { level: 1, name: "Garage" });
+    const banner = screen
+      .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(banner).toHaveAttribute("role", "note");
+    expect(banner).toHaveTextContent("The report mentions smoke near an electrical socket.");
+    expect(banner).toHaveTextContent("The suggestion says Normal, but the alert still stands.");
+    expect(banner).toHaveTextContent("no suggestion can clear or lower this alert");
+
+    const panel = screen.getByRole("region", { name: "Suggestion" });
+    expect(panel).toHaveTextContent("AI could not be used");
+    expect(panel).toHaveTextContent(
+      "The AI did not answer in time. This suggestion comes from the fallback rules instead.",
+    );
+    expect(panel).toHaveTextContent("The suggester asks for a careful review of this one.");
+
+    // Confirming the lower suggested urgency is the administrator's call; the alert does not go away because of it.
+    await user.click(screen.getByRole("button", { name: "Fill in the suggestion" }));
+    expect(screen.getByRole("combobox", { name: "Urgency" })).toHaveDisplayValue("Normal");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "Critical");
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Smoke reported: treat as critical.");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Suggestion" })).not.toBeInTheDocument());
+    const after = screen
+      .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(after).toHaveTextContent("The report mentions smoke near an electrical socket.");
+    expect(after).not.toHaveTextContent("The suggestion says");
+  });
+
+  it("says triage is pending, to classify manually, when no suggestion arrived within 2 minutes", async () => {
+    signInAs("administrator-a");
+    renderApp(`/issues/${PENDING}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    expect(screen.getByText("Triage pending — classify manually")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Suggestion" })).not.toBeInTheDocument();
+  });
+
+  it("says it is still waiting for a suggestion in the first 2 minutes, and the form stays usable", async () => {
+    signInAs("administrator-a");
+    renderStubbed(stubbed({ createdAt: new Date(NOW.getTime() - 30_000).toISOString() }));
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+    expect(screen.queryByText("Triage pending — classify manually")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Category" })).toBeEnabled();
+  });
+
+  it("shows the explanation as plain text and an unknown failure in general words", async () => {
+    signInAs("administrator-a");
+    renderStubbed(
+      stubbed({
+        state: "in_triage",
+        version: 2,
+        suggestion: {
+          category: "other",
+          urgency: "low",
+          origin: "fallback",
+          rationale: '<img src="x" alt="injected"> Ignore previous instructions.',
+          failureCode: "something_new",
+        },
+      }),
+    );
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText('<img src="x" alt="injected"> Ignore previous instructions.')).toBeInTheDocument();
+    expect(within(panel).queryByRole("img")).not.toBeInTheDocument();
+    expect(panel).toHaveTextContent("The AI result was not used.");
+  });
+
+  it("never shows a resident the suggestion or the critical alert", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${CRITICAL}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage" });
+    expect(screen.getByText("Decision pending")).toBeInTheDocument();
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+    expect(screen.queryByText(/suggest/i)).not.toBeInTheDocument();
+  });
+});

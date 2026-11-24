@@ -221,8 +221,11 @@ keyboard pass each UI story records in its PR.
 
 - `/me`, the report endpoints and `/buildings/{id}/areas` match the Issue service (US-01-01). The issue, history and
   triage shapes (`GET /issues`, `GET /issues/{id}`, `GET /issues/{id}/history`, `POST /issues/{id}/triage`) match
-  the service's pull request #140 (US-02-01), which is not merged yet. History types for later stories and the
-  suggestion's extra fields stay marked `ASSUMPTION` in `src/contracts/issue.ts`.
+  the service's pull request #140 (US-02-01), which is not merged yet. History types for later stories stay marked
+  `ASSUMPTION` in `src/contracts/issue.ts`, and so do the US-03-02 additions: the suggestion's `rationale`,
+  `needsReview`, `failureCode` (and its values) and `suggestedAt` (US-03-03, #108), and the issue's `criticalAlert`
+  (US-14-02, #96). All are optional, so the service as it is today still parses. "Triage pending — classify
+  manually" is worked out in the client from `createdAt` (2 minutes, technical design §5).
 - `/me` has no email, platform roles or contractor link yet (EN-02-04, #80).
 - The CSRF header name, the login `redirect` parameter and the edge paths are placeholders (EN01-U6, spike item 3).
 - `npm audit` reports moderate advisories in `glob`/`minimatch` under `workbox-build`, a build-time dependency of

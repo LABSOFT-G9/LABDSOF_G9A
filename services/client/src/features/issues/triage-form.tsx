@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, Info, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
-import { type FormEvent, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useRef, useState } from "react";
 import { useServices } from "@/app/context";
 import {
   codePointLength,
@@ -56,7 +56,14 @@ const fromIssue = (issue: Issue): TriageDraft => ({
  * service refuses it (`409`) and nothing is overwritten. The form then says so, keeps the administrator's choices, and
  * offers to reload the issue. A suggestion can fill the form, but only saving makes it a decision.
  */
-export function TriageForm({ issue }: { issue: Issue }) {
+export function TriageForm({
+  issue,
+  intro,
+}: {
+  issue: Issue;
+  /** Shown under the form's heading, before the fields: what the administrator decides from (the suggestion). */
+  intro?: ReactNode;
+}) {
   const { issues } = useServices();
   const queryClient = useQueryClient();
   const mutation = useMutation(triageMutation(issues, queryClient, issue.issueId));
@@ -154,6 +161,8 @@ export function TriageForm({ issue }: { issue: Issue }) {
       <h2 id={`${id}-title`} className="text-base font-semibold">
         {issue.triage ? t.issues.triageEditTitle : t.issues.triageTitle}
       </h2>
+
+      {intro}
 
       {Object.keys(errors).length > 0 ? (
         <p role="alert" className="text-destructive text-sm font-medium">

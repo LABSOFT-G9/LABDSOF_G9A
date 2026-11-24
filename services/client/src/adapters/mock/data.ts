@@ -139,7 +139,15 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       version: 2,
       createdAt: at(3),
       triage: null,
-      suggestion: { category: "electrical", urgency: "high", origin: "ai" },
+      suggestion: {
+        category: "electrical",
+        urgency: "high",
+        origin: "ai",
+        rationale: "Mentions exposed wires next to the light switch by the main door.",
+        needsReview: false,
+        failureCode: null,
+        suggestedAt: at(2.9),
+      },
       reporterIds: [residentA1],
       history: [
         received(3),
@@ -243,6 +251,39 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(27) }),
         entry(5, { type: "booking_confirmed", visibility: "public", actorRole: "system", occurredAt: at(26) }),
         entry(6, { type: "intervention_started", visibility: "public", actorRole: "contractor", occurredAt: at(2) }),
+      ],
+    },
+    {
+      // US-03/US-14: the AI timed out, so the fallback rules answered with a lower urgency than Issue's own critical
+      // check. The alert stays; the administrator decides.
+      issueId: issueId("000000002005"),
+      ...BUILDINGS.b,
+      areaLabel: "Garage",
+      state: "in_triage",
+      version: 2,
+      createdAt: at(1),
+      triage: null,
+      suggestion: {
+        category: "electrical",
+        urgency: "normal",
+        origin: "fallback",
+        rationale: "Rules matched “socket” and “sparks”: electrical.",
+        needsReview: true,
+        failureCode: "timeout",
+        suggestedAt: at(0.95),
+      },
+      criticalAlert: { reason: "The report mentions smoke near an electrical socket.", raisedAt: at(1) },
+      reporterIds: [residentB1],
+      history: [
+        received(1),
+        entry(2, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(0.95),
+          category: "electrical",
+          urgency: "normal",
+        }),
       ],
     },
   ];

@@ -7,6 +7,7 @@ import { hasBuildingRole, useSession } from "@/features/auth";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
+import { CriticalAlertBanner, SuggestionPanel } from "@/features/issues/suggestion-panel";
 import { TriageForm } from "@/features/issues/triage-form";
 import { TriageBadge } from "@/features/issues/triage-status";
 import { ErrorState } from "@/shared/components/error-state";
@@ -31,6 +32,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
   const { data: issue } = useSuspenseQuery(issueQuery(issues, issueId));
   const history = useQuery(historyQuery(issues, issueId));
   const isAdministrator = hasBuildingRole(session, issue.buildingId, "administrator");
+  const now = clock.now();
 
   return (
     <>
@@ -44,6 +46,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,22rem)]">
         <div className="space-y-6">
+          {issue.criticalAlert ? <CriticalAlertBanner alert={issue.criticalAlert} issue={issue} now={now} /> : null}
           <Card>
             <CardContent>
               <dl className="grid gap-3 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
@@ -56,7 +59,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
                   <TriageBadge issue={issue} />
                   <p className="text-muted-foreground">
                     {issue.triage
-                      ? `${t.issues.decided} · ${t.issues.decidedAt(timeAgo(issue.triage.decidedAt, clock.now()))}`
+                      ? `${t.issues.decided} · ${t.issues.decidedAt(timeAgo(issue.triage.decidedAt, now))}`
                       : issue.suggestion
                         ? t.issues.suggestedHint
                         : t.issues.pendingHint}
@@ -79,7 +82,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
           {isAdministrator && TRIAGEABLE.includes(issue.state) ? (
             <Card>
               <CardContent>
-                <TriageForm issue={issue} />
+                <TriageForm issue={issue} intro={<SuggestionPanel issue={issue} now={now} />} />
               </CardContent>
             </Card>
           ) : null}

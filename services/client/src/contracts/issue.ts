@@ -95,14 +95,51 @@ export const SuggestionOriginSchema = z.enum(["ai", "rules", "fallback"]);
 export type SuggestionOrigin = z.infer<typeof SuggestionOriginSchema>;
 
 /**
- * An unconfirmed suggestion, administrators only. ASSUMPTION: US-03-02 (#94) adds rationale and processing status.
+ * Why the AI result was not used, on a `fallback` suggestion (`TriageSuggested.failureCode`, technical design §4.4).
+ * ASSUMPTION: the values are not agreed yet (US-03-03 #108, US-14-01 #95). Any other code is still shown, as a
+ * generic "AI could not be used", so a new code never breaks the page.
+ */
+export const KNOWN_FAILURE_CODES = ["timeout", "provider_error", "invalid_output", "quota_exceeded"] as const;
+export type KnownFailureCode = (typeof KNOWN_FAILURE_CODES)[number];
+
+/**
+ * An unconfirmed suggestion, administrators only. `category`, `urgency` and `origin` are in the Issue service (#140).
+ * The rest is ASSUMPTION for US-03-03 (#108), named after `TriageSuggested` (technical design §4.4) and optional, so
+ * the service as it is today still parses:
+ * - `rationale`: the short explanation (1-240 characters). Model output: shown as plain text, never as markup.
+ * - `needsReview`: the suggester itself asks for a careful look.
+ * - `failureCode`: why the AI result was not used, on `fallback` only.
+ * - `suggestedAt`: when the suggestion was recorded.
+ * There is deliberately no confidence value: a model's confidence must not be shown as a reliable probability (US-03).
  */
 export const TriageSuggestionSchema = z.object({
   category: IssueCategorySchema,
   urgency: IssueUrgencySchema,
   origin: SuggestionOriginSchema,
+  rationale: z.string().nullish(),
+  needsReview: z.boolean().optional(),
+  failureCode: z.string().nullish(),
+  suggestedAt: z.iso.datetime({ offset: true }).nullish(),
 });
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
+
+/**
+ * A critical alert from Issue's own `critical-alerts-v1` checks (US-14-02 #96), administrators only. Independent of
+ * the AI: no suggestion or retry can clear or lower it, only the administrator's review. ASSUMPTION: shape to agree on
+ * #96; optional, so the service as it is today still parses.
+ */
+export const CriticalAlertSchema = z.object({
+  /** Which check matched, in words. Never the report text. */
+  reason: z.string(),
+  raisedAt: z.iso.datetime({ offset: true }),
+});
+export type CriticalAlert = z.infer<typeof CriticalAlertSchema>;
+
+/**
+ * With no suggestion after this long, the administrator is told "triage pending — classify manually" (technical
+ * design §5, 2 minutes). The client works it out from `createdAt`; nothing changes on the issue.
+ */
+export const TRIAGE_PENDING_AFTER_MS = 2 * 60_000;
 
 /** One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role. */
 export const IssueSchema = z.object({
@@ -117,6 +154,7 @@ export const IssueSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   triage: TriageDecisionSchema.nullable(),
   suggestion: TriageSuggestionSchema.nullable(),
+  criticalAlert: CriticalAlertSchema.nullish(),
 });
 export type Issue = z.infer<typeof IssueSchema>;
 

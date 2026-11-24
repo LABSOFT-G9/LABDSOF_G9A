@@ -69,10 +69,15 @@ export function mockIssueApi(
   const mayReadIssue = (me: Session | null, issue: IssueRecord) =>
     administers(me, issue.buildingId) || (!!me && issue.reporterIds.includes(me.sub));
 
-  /** What a role may see of an issue: residents get no suggestion and no reason. */
+  /** What a role may see of an issue: residents get no suggestion, no critical alert and no reason. */
   function project(me: Session | null, { reporterIds: _r, history: _h, ...issue }: IssueRecord): Issue {
     if (administers(me, issue.buildingId)) return issue;
-    return { ...issue, suggestion: null, triage: issue.triage && { ...issue.triage, reason: null } };
+    return {
+      ...issue,
+      suggestion: null,
+      criticalAlert: null,
+      triage: issue.triage && { ...issue.triage, reason: null },
+    };
   }
 
   const findIssue = (me: Session | null, issueId: string) => {

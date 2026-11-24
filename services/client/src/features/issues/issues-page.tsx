@@ -4,6 +4,7 @@ import { Wrench } from "lucide-react";
 import { useServices } from "@/app/context";
 import { issueListQuery } from "@/features/issues/api";
 import { IssueStateBadge } from "@/features/issues/issue-state";
+import { CriticalBadge } from "@/features/issues/suggestion-panel";
 import { TriageBadge } from "@/features/issues/triage-status";
 import { ErrorState } from "@/shared/components/error-state";
 import { PageHeader } from "@/shared/components/page-header";
@@ -69,6 +70,7 @@ export function IssuesPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {issue.criticalAlert ? <CriticalBadge /> : null}
                       <TriageBadge issue={issue} />
                       <IssueStateBadge state={issue.state} />
                     </div>
