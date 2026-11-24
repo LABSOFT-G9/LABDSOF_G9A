@@ -71,4 +71,64 @@ describe("httpIssueApi (US-01 reports)", () => {
       extensions: { errors: [{ field: "text", reason: "too_short" }] },
     });
   });
+
+  it("records a triage decision with If-Match, the caller's key and the CSRF header", async () => {
+    const result = {
+      issueId: "i1",
+      state: "triaged",
+      version: 3,
+      category: "plumbing",
+      urgency: "high",
+      decisionSource: "human",
+    };
+    const { api, fetcher } = setup(result);
+    const decision = { category: "plumbing", urgency: "high", reason: "Water near an electrical fitting" } as const;
+    await expect(api.triage("i1", 2, decision, "key-7")).resolves.toEqual(result);
+    const { url, init, headers } = lastCall(fetcher);
+    expect(url).toBe("/api/issue/issues/i1/triage");
+    expect(init.method).toBe("POST");
+    expect(headers.get("If-Match")).toBe('"2"');
+    expect(headers.get("Idempotency-Key")).toBe("key-7");
+    expect(headers.get("X-BMC-CSRF")).toBeTruthy();
+    expect(JSON.parse(init.body as string)).toEqual(decision);
+  });
+
+  it("reads an issue and its history", async () => {
+    const issue = {
+      issueId: "i1",
+      buildingId: "b1",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "received",
+      version: 1,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const one = setup(issue);
+    await expect(one.api.getIssue("i1")).resolves.toEqual(issue);
+    expect(lastCall(one.fetcher).url).toBe("/api/issue/issues/i1");
+
+    const entry = {
+      sequence: 1,
+      type: "report_received",
+      visibility: "public",
+      actorRole: "resident",
+      occurredAt: "2026-11-24T10:00:00Z",
+    };
+    const history = setup({ items: [entry] });
+    await expect(history.api.getHistory("i1")).resolves.toEqual({ items: [entry] });
+    expect(lastCall(history.fetcher).url).toBe("/api/issue/issues/i1/history");
+  });
+
+  it("keeps the conflict details of a 409", async () => {
+    const problem = { code: "VERSION_CONFLICT", currentVersion: 3, currentState: "triaged", correlationId: "c-1" };
+    const { api } = setup(problem, 409);
+    await expect(api.triage("i1", 2, { category: "lift", urgency: "low", reason: "r" }, "k")).rejects.toMatchObject({
+      status: 409,
+      code: "VERSION_CONFLICT",
+      correlationId: "c-1",
+      extensions: { currentVersion: 3, currentState: "triaged" },
+    });
+  });
 });

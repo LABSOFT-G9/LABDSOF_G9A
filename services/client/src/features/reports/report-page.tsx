@@ -51,6 +51,11 @@ export function ReportPage({ reportId }: { reportId: string }) {
             </h2>
             <p className="text-sm break-words whitespace-pre-wrap">{report.text}</p>
           </section>
+          <Button asChild variant="outline">
+            <Link to="/issues/$issueId" params={{ issueId: report.issueId }}>
+              {t.issues.followIssue}
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </>

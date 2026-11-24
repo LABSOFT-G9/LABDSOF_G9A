@@ -37,7 +37,9 @@ describe("accessibility (axe)", () => {
 
   it.each([
     ["/dashboard", "administrator-a", "Hello, Synthetic"],
-    ["/issues", "resident-a1", "Issues"],
+    ["/issues", "administrator-a", "Issues"],
+    ["/issues/0199f2a1-0000-7000-8000-000000002001", "administrator-a", "Entrance hall"],
+    ["/issues/0199f2a1-0000-7000-8000-000000002003", "resident-a1", "Unit 2B"],
     ["/reports", "resident-a1", "Reports"],
     ["/reports/new", "resident-a1", "Report a fault"],
     ["/settings", "resident-a1", "Settings"],

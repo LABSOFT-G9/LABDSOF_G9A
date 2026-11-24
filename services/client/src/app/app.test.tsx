@@ -18,9 +18,10 @@ describe("app (mock adapters)", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Issues" });
     expect(router.state.location.pathname).toBe("/issues");
-    expect(await screen.findByText("Lift stuck between floors 3 and 4")).toBeInTheDocument();
-    // Membership filtering: Synthetic Building B's issue is not the resident's.
-    expect(screen.queryByText("Water leak in the entrance hall")).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Entrance hall" })).toBeInTheDocument();
+    // Scope filtering: Resident A1 follows only the issues of their own reports, never Building B's.
+    expect(screen.queryByRole("link", { name: "Roof terrace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Garage level -1" })).not.toBeInTheDocument();
   });
 
   it("returns to a target with a query and a hash after sign-in", async () => {

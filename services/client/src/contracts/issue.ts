@@ -6,6 +6,9 @@ import { z } from "zod";
  * times are RFC 3339 in UTC.
  */
 
+/** Counted as Unicode code points, like the service (`ReportText`), so an emoji counts as one character. */
+export const codePointLength = (text: string) => [...text].length;
+
 export const BuildingRoleSchema = z.enum(["resident", "administrator"]);
 export type BuildingRole = z.infer<typeof BuildingRoleSchema>;
 
@@ -49,20 +52,160 @@ export type IssueState = z.infer<typeof IssueStateSchema>;
 export const IssueUrgencySchema = z.enum(["low", "normal", "high", "critical"]);
 export type IssueUrgency = z.infer<typeof IssueUrgencySchema>;
 
-/** One row of `GET /issues`. ASSUMPTION: field names to align with the Issue service's list projection. */
-export const IssueSummarySchema = z.object({
-  id: z.string(),
-  buildingId: z.string(),
-  title: z.string(),
-  state: IssueStateSchema,
-  category: z.string().nullable(),
-  urgency: IssueUrgencySchema.nullable(),
-  createdAt: z.iso.datetime({ offset: true }),
-  version: z.number().int(),
-});
-export type IssueSummary = z.infer<typeof IssueSummarySchema>;
+/**
+ * Control characters other than tab and line breaks, and lone UTF-16 surrogates: the service rejects both. Spreading a
+ * string yields whole code points, so an emoji arrives as one pair-free character and only an unpaired half is caught.
+ */
+const isForbiddenCodePoint = (codePoint: number) =>
+  (codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) ||
+  (codePoint >= 0x7f && codePoint <= 0x9f) ||
+  (codePoint >= 0xd800 && codePoint <= 0xdfff);
+const hasForbiddenCharacter = (text: string) => [...text].some((char) => isForbiddenCodePoint(char.codePointAt(0)!));
 
-export const IssueListSchema = z.array(IssueSummarySchema);
+/*
+ * Issues, triage and history (US-02). The operations are in technical design §4.2 and contract examples §1.2; the
+ * shapes match the Issue service's pull request #140 (US-02-01), as answered on #87. Check them again if #140 changes
+ * before it merges. Only what #140 does not define yet is marked ASSUMPTION.
+ */
+
+/** Categories from the US-02 story and contract examples §1.2. */
+export const IssueCategorySchema = z.enum(["plumbing", "electrical", "lift", "cleaning", "structural", "other"]);
+export type IssueCategory = z.infer<typeof IssueCategorySchema>;
+
+/**
+ * The administrator's decision. Only a human decision is a decision; a suggestion is never shown as one (US-02).
+ * `reason` is internal: `null` for residents, and in `GET /issues` for everyone.
+ */
+export const TriageDecisionSchema = z.object({
+  category: IssueCategorySchema,
+  urgency: IssueUrgencySchema,
+  reason: z.string().nullable(),
+  decidedAt: z.iso.datetime({ offset: true }),
+  decisionSource: z.literal("human"),
+});
+export type TriageDecision = z.infer<typeof TriageDecisionSchema>;
+
+/** Where a suggestion came from (`TriageSuggested.origin`, technical design §4.4). */
+export const SuggestionOriginSchema = z.enum(["ai", "rules", "fallback"]);
+export type SuggestionOrigin = z.infer<typeof SuggestionOriginSchema>;
+
+/**
+ * An unconfirmed suggestion, administrators only. ASSUMPTION: US-03-02 (#94) adds rationale and processing status.
+ */
+export const TriageSuggestionSchema = z.object({
+  category: IssueCategorySchema,
+  urgency: IssueUrgencySchema,
+  origin: SuggestionOriginSchema,
+});
+export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
+
+/** One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role. */
+export const IssueSchema = z.object({
+  issueId: z.string(),
+  buildingId: z.string(),
+  buildingName: z.string(),
+  /** The area of the first report: what the issue is about, without exposing anyone's text. */
+  areaLabel: z.string(),
+  state: IssueStateSchema,
+  /** Sent back as `If-Match` on every change. */
+  version: z.number().int(),
+  createdAt: z.iso.datetime({ offset: true }),
+  triage: TriageDecisionSchema.nullable(),
+  suggestion: TriageSuggestionSchema.nullable(),
+});
+export type Issue = z.infer<typeof IssueSchema>;
+
+/**
+ * `GET /issues?buildingId&page&size`: issues of administered buildings, and the issues of the caller's own reports,
+ * newest first, one page at a time. `triage.reason` is always `null` here.
+ */
+export const IssuePageSchema = z.object({
+  items: z.array(IssueSchema),
+  page: z.number().int(),
+  size: z.number().int(),
+  hasMore: z.boolean(),
+});
+export type IssuePage = z.infer<typeof IssuePageSchema>;
+
+export const HistoryVisibilitySchema = z.enum(["public", "internal"]);
+export const HistoryActorSchema = z.enum(["resident", "administrator", "contractor", "system"]);
+export type HistoryActor = z.infer<typeof HistoryActorSchema>;
+
+/**
+ * Entry types the client explains. The first three exist in the service (#140); the others are ASSUMPTION names for the
+ * Dispatch events Issue projects into history (technical design §3.3). Any other type is
+ * still shown, as a generic update, so a new type never breaks the page.
+ */
+export const KNOWN_HISTORY_TYPES = [
+  "report_received",
+  "triage_suggested",
+  "triage_decided",
+  "intervention_approved",
+  "contractor_accepted",
+  "contractor_declined",
+  "booking_confirmed",
+  "booking_confirmed_manually",
+  "intervention_started",
+  "completion_reported",
+  "resolved",
+  "cancelled",
+] as const;
+export type KnownHistoryType = (typeof KNOWN_HISTORY_TYPES)[number];
+
+/** One entry of `GET /issues/{id}/history`, oldest first. Residents receive `public` entries only, without reasons. */
+export const HistoryEntrySchema = z.object({
+  sequence: z.number().int(),
+  type: z.string(),
+  visibility: HistoryVisibilitySchema,
+  actorRole: HistoryActorSchema,
+  occurredAt: z.iso.datetime({ offset: true }),
+  category: IssueCategorySchema.nullable().optional(),
+  urgency: IssueUrgencySchema.nullable().optional(),
+  /** Internal: administrators only. */
+  reason: z.string().nullable().optional(),
+});
+export type HistoryEntry = z.infer<typeof HistoryEntrySchema>;
+export const HistorySchema = z.object({ items: z.array(HistoryEntrySchema) });
+export type History = z.infer<typeof HistorySchema>;
+
+export const TRIAGE_REASON_MAX = 500;
+
+/** Nothing chosen is `required`; a value the service does not know is `invalid`, as the service answers. */
+const choice = (issue: { input?: unknown }) =>
+  issue.input === undefined || issue.input === "" ? "required" : "invalid";
+
+/** Body of `POST /issues/{id}/triage` (contract examples §1.2): category, urgency and a reason of 1-500 characters. */
+export const TriageRequestSchema = z.object({
+  category: z.enum(IssueCategorySchema.options, { error: choice }),
+  urgency: z.enum(IssueUrgencySchema.options, { error: choice }),
+  reason: z
+    .string()
+    .trim()
+    .superRefine((reason, ctx) => {
+      const length = codePointLength(reason);
+      if (length === 0) ctx.addIssue({ code: "custom", message: "required" });
+      else if (length > TRIAGE_REASON_MAX) ctx.addIssue({ code: "custom", message: "too_long" });
+      else if (hasForbiddenCharacter(reason)) ctx.addIssue({ code: "custom", message: "invalid_characters" });
+    }),
+});
+export type TriageRequest = z.infer<typeof TriageRequestSchema>;
+/** The form's own values: nothing chosen yet is `""`. */
+export interface TriageDraft {
+  category: IssueCategory | "";
+  urgency: IssueUrgency | "";
+  reason: string;
+}
+
+/** `200` of `POST /issues/{id}/triage` (contract examples §1.2). */
+export const TriageResultSchema = z.object({
+  issueId: z.string(),
+  state: IssueStateSchema,
+  version: z.number().int(),
+  category: IssueCategorySchema,
+  urgency: IssueUrgencySchema,
+  decisionSource: z.literal("human"),
+});
+export type TriageResult = z.infer<typeof TriageResultSchema>;
 
 /*
  * Reports (US-01-01, implemented: services/issue README "API"). Paths under /api/issue.
@@ -78,19 +221,6 @@ export const AreaListSchema = z.array(AreaSchema);
 
 export const REPORT_TEXT_MIN = 10;
 export const REPORT_TEXT_MAX = 4_000;
-
-/** Counted as Unicode code points, like the service (`ReportText`), so an emoji counts as one character. */
-export const codePointLength = (text: string) => [...text].length;
-
-/**
- * Control characters other than tab and line breaks, and lone UTF-16 surrogates: the service rejects both. Spreading a
- * string yields whole code points, so an emoji arrives as one pair-free character and only an unpaired half is caught.
- */
-const isForbiddenCodePoint = (codePoint: number) =>
-  (codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) ||
-  (codePoint >= 0x7f && codePoint <= 0x9f) ||
-  (codePoint >= 0xd800 && codePoint <= 0xdfff);
-const hasForbiddenCharacter = (text: string) => [...text].some((char) => isForbiddenCodePoint(char.codePointAt(0)!));
 
 /**
  * Validation failure reasons, shared by this schema and the service's `400 VALIDATION_FAILED` `errors[].reason`, so

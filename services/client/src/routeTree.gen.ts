@@ -14,8 +14,9 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppAdminRouteImport } from './routes/_app/admin'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as AppIssuesRouteImport } from './routes/_app/issues'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppIssuesIndexRouteImport } from './routes/_app/issues.index'
+import { Route as AppIssuesIssueIdRouteImport } from './routes/_app/issues.$issueId'
 import { Route as AppReportsIndexRouteImport } from './routes/_app/reports.index'
 import { Route as AppReportsReportIdRouteImport } from './routes/_app/reports.$reportId'
 import { Route as AppReportsNewRouteImport } from './routes/_app/reports.new'
@@ -44,14 +45,19 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
-const AppIssuesRoute = AppIssuesRouteImport.update({
-  id: '/issues',
-  path: '/issues',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIssuesIndexRoute = AppIssuesIndexRouteImport.update({
+  id: '/issues/',
+  path: '/issues/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIssuesIssueIdRoute = AppIssuesIssueIdRouteImport.update({
+  id: '/issues/$issueId',
+  path: '/issues/$issueId',
   getParentRoute: () => AppRoute,
 } as any)
 const AppReportsIndexRoute = AppReportsIndexRouteImport.update({
@@ -75,10 +81,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
-  '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/reports/$reportId': typeof AppReportsReportIdRoute
   '/reports/new': typeof AppReportsNewRoute
+  '/issues/': typeof AppIssuesIndexRoute
   '/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -86,10 +93,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
-  '/issues': typeof AppIssuesRoute
   '/settings': typeof AppSettingsRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/reports/$reportId': typeof AppReportsReportIdRoute
   '/reports/new': typeof AppReportsNewRoute
+  '/issues': typeof AppIssuesIndexRoute
   '/reports': typeof AppReportsIndexRoute
 }
 export interface FileRoutesById {
@@ -99,10 +107,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/admin': typeof AppAdminRoute
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/issues': typeof AppIssuesRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/_app/reports/$reportId': typeof AppReportsReportIdRoute
   '/_app/reports/new': typeof AppReportsNewRoute
+  '/_app/issues/': typeof AppIssuesIndexRoute
   '/_app/reports/': typeof AppReportsIndexRoute
 }
 export interface FileRouteTypes {
@@ -112,10 +121,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin'
     | '/dashboard'
-    | '/issues'
     | '/settings'
+    | '/issues/$issueId'
     | '/reports/$reportId'
     | '/reports/new'
+    | '/issues/'
     | '/reports/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -123,10 +133,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/admin'
     | '/dashboard'
-    | '/issues'
     | '/settings'
+    | '/issues/$issueId'
     | '/reports/$reportId'
     | '/reports/new'
+    | '/issues'
     | '/reports'
   id:
     | '__root__'
@@ -135,10 +146,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/admin'
     | '/_app/dashboard'
-    | '/_app/issues'
     | '/_app/settings'
+    | '/_app/issues/$issueId'
     | '/_app/reports/$reportId'
     | '/_app/reports/new'
+    | '/_app/issues/'
     | '/_app/reports/'
   fileRoutesById: FileRoutesById
 }
@@ -185,18 +197,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/issues': {
-      id: '/_app/issues'
-      path: '/issues'
-      fullPath: '/issues'
-      preLoaderRoute: typeof AppIssuesRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/issues/': {
+      id: '/_app/issues/'
+      path: '/issues'
+      fullPath: '/issues/'
+      preLoaderRoute: typeof AppIssuesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/issues/$issueId': {
+      id: '/_app/issues/$issueId'
+      path: '/issues/$issueId'
+      fullPath: '/issues/$issueId'
+      preLoaderRoute: typeof AppIssuesIssueIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/reports/': {
@@ -226,20 +245,22 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
   AppDashboardRoute: typeof AppDashboardRoute
-  AppIssuesRoute: typeof AppIssuesRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppIssuesIssueIdRoute: typeof AppIssuesIssueIdRoute
   AppReportsReportIdRoute: typeof AppReportsReportIdRoute
   AppReportsNewRoute: typeof AppReportsNewRoute
+  AppIssuesIndexRoute: typeof AppIssuesIndexRoute
   AppReportsIndexRoute: typeof AppReportsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
   AppDashboardRoute: AppDashboardRoute,
-  AppIssuesRoute: AppIssuesRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppIssuesIssueIdRoute: AppIssuesIssueIdRoute,
   AppReportsReportIdRoute: AppReportsReportIdRoute,
   AppReportsNewRoute: AppReportsNewRoute,
+  AppIssuesIndexRoute: AppIssuesIndexRoute,
   AppReportsIndexRoute: AppReportsIndexRoute,
 }
 
