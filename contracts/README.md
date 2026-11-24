@@ -64,6 +64,7 @@ The version in the package (`v1`) is the envelope's `schemaversion` (1).
 | Times | `google.protobuf.Timestamp` | RFC 3339 in JSON. |
 | A value that may be missing | `optional` | Absent, never a made-up default. JSON `null` is read as absent. |
 | Default values | Producers also print fields that hold the default (`false`, `0`, `""`); consumers read an absent field as its default | Printers leave defaults out unless told otherwise (Java `alwaysPrintFieldsWithNoPresence()`, Python `always_print_fields_with_no_presence=True`). |
+| Unknown fields | Consumers ignore a field they do not know | The JSON parsers refuse unknown fields unless told otherwise (Java `JsonFormat.parser().ignoringUnknownFields()`, Python `ignore_unknown_fields=True`). Without it, adding a field to an event breaks every consumer with older generated code. |
 | Private data | Only `TriageRequested` carries report text and only an invitation's `NotificationRequested` carries an address | Technical design 4.4. Payloads are never logged. |
 
 A comment marked `OPEN` names a value set the design has not fixed yet and the story that settles it.
