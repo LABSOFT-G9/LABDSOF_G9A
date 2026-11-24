@@ -9,7 +9,7 @@ const read = (path: string) => readFileSync(resolve(import.meta.dirname, "..", p
 describe("static delivery", () => {
   it("index.html has no inline script, so script-src 'self' holds", () => {
     const html = read("index.html");
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)];
     expect(scripts.length).toBeGreaterThan(0);
     for (const [, attributes, body] of scripts) {
       expect(attributes).toMatch(/\bsrc="\//);

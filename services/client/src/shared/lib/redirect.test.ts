@@ -13,7 +13,8 @@ describe("safeRedirect", () => {
     "/\t/evil.test",
     "/\n/evil.test",
     "/\r/evil.test",
-    "/%09/evil.test".replace("%09", "\t"),
+    // What the router hands over after decoding `?redirect=/%09/evil.test`.
+    decodeURIComponent("/%09/evil.test"),
     "/a\\b",
     "/€",
     "issues",
