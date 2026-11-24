@@ -365,6 +365,81 @@ describe("suggestion (US-03-02)", () => {
     expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
   });
 
+  it("never reads an unfinished critical check as nothing found", async () => {
+    signInAs("administrator-a");
+    const { router } = renderApp("/issues");
+    const garage = await screen.findByRole("link", { name: "Garage level -1" });
+    expect(within(card(garage)).getByText("Critical check pending")).toBeInTheDocument();
+    // Entrance hall's check finished with no signals: nothing to show.
+    const hall = screen.getByRole("link", { name: "Entrance hall" });
+    expect(within(card(hall)).queryByText(/Critical/)).not.toBeInTheDocument();
+
+    await router.navigate({ to: "/issues/$issueId", params: { issueId: PENDING } });
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    const note = screen
+      .getByText("Critical check not finished", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(note).toHaveTextContent("Review the report yourself for danger.");
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+  });
+
+  it("words an unknown critical rule code in general terms", async () => {
+    signInAs("administrator-a");
+    renderStubbed(
+      stubbed({
+        criticalCheck: {
+          status: "completed",
+          rulesVersion: "critical-alerts-v2",
+          signals: [{ code: "something_new", raisedAt: NOW.toISOString() }],
+        },
+      }),
+    );
+    await screen.findByText("A critical-alert rule matched this report.");
+  });
+
+  it("says when the suggestion arrived while the administrator was deciding, and decides on it after reload", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const waiting = stubbed({ createdAt: new Date(NOW.getTime() - 30_000).toISOString() });
+    const arrived: Issue = {
+      ...waiting,
+      state: "in_triage",
+      version: 2,
+      suggestion: { category: "lift", urgency: "high", origin: "ai", rationale: "Mentions the lift." },
+    };
+    const getIssue = vi.fn<() => Promise<Issue>>().mockResolvedValueOnce(waiting).mockResolvedValue(arrived);
+    const triage = vi.fn(async () => ({
+      issueId: "i1",
+      state: "triaged" as const,
+      version: 3,
+      category: "plumbing" as const,
+      urgency: "high" as const,
+      decisionSource: "human" as const,
+    }));
+    const { router } = renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), triage }),
+        clock: { now: () => NOW },
+      },
+    });
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Plumbing");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "High");
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Water on the floor.");
+
+    // The poll (or any refetch) brings the suggestion and version 2.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    await screen.findByText("A suggestion arrived while you were deciding");
+    expect(screen.getByText(/Reload to decide on the current version; your choices stay in the form./)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Reload the issue" }));
+    await waitFor(() => expect(screen.queryByText("A suggestion arrived while you were deciding")).toBeNull());
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveDisplayValue("Plumbing");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+    expect(triage).toHaveBeenCalledWith("i1", 2, expect.anything(), expect.any(String));
+  });
+
   it("keeps a critical alert in view when the suggestion disagrees, and after the decision", async () => {
     const user = userEvent.setup();
     signInAs("administrator-b");
@@ -379,7 +454,8 @@ describe("suggestion (US-03-02)", () => {
       .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
       .closest("[data-slot=alert]") as HTMLElement;
     expect(banner).toHaveAttribute("role", "note");
-    expect(banner).toHaveTextContent("The report mentions smoke near an electrical socket.");
+    expect(banner).toHaveTextContent("The report mentions smoke or fire.");
+    expect(banner).toHaveTextContent("The report mentions water near electrics.");
     expect(banner).toHaveTextContent("The suggestion says Normal, but the alert still stands.");
     expect(banner).toHaveTextContent("no suggestion can clear or lower this alert");
 
@@ -402,7 +478,7 @@ describe("suggestion (US-03-02)", () => {
     const after = screen
       .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
       .closest("[data-slot=alert]") as HTMLElement;
-    expect(after).toHaveTextContent("The report mentions smoke near an electrical socket.");
+    expect(after).toHaveTextContent("The report mentions smoke or fire.");
     expect(after).not.toHaveTextContent("The suggestion says");
   });
 

@@ -169,6 +169,18 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     expect((await as("administrator-a").list({ buildingId: BUILDINGS.b.buildingId })).items).toEqual([]);
   });
 
+  it("keeps the suggestion's explanation out of the list, and drops the suggestion once decided (#108)", async () => {
+    const { as } = world();
+    const listed = (await as("administrator-a").list({})).items.find((i) => i.issueId === suggested);
+    expect(listed?.suggestion).toMatchObject({ category: "electrical", rationale: null });
+    expect((await as("administrator-a").getIssue(suggested)).suggestion?.rationale).toEqual(expect.any(String));
+
+    await as("administrator-a").triage(suggested, 2, decision, "k");
+    expect((await as("administrator-a").getIssue(suggested)).suggestion).toBeNull();
+    const history = await as("administrator-a").getHistory(suggested);
+    expect(history.items.map((e) => e.type)).toContain("triage_suggested");
+  });
+
   it("never shows residents a suggestion, a reason or an internal entry", async () => {
     const { as } = world();
     const issue = await as("resident-a1").getIssue(suggested);
@@ -176,9 +188,10 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     const decided = await as("resident-a1").getIssue(scheduled);
     expect(decided.triage).toMatchObject({ category: "plumbing", reason: null });
     const alerted = await as("resident-b1").getIssue(critical);
-    expect(alerted).toMatchObject({ suggestion: null, criticalAlert: null });
-    expect((await as("administrator-b").getIssue(critical)).criticalAlert).toMatchObject({
-      reason: expect.any(String),
+    expect(alerted).toMatchObject({ suggestion: null, criticalCheck: null });
+    expect((await as("administrator-b").getIssue(critical)).criticalCheck).toMatchObject({
+      status: "completed",
+      signals: [{ code: "smoke_or_fire" }, { code: "water_near_electrics" }],
     });
 
     const history = await as("resident-a1").getHistory(suggested);

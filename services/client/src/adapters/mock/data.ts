@@ -148,6 +148,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         failureCode: null,
         suggestedAt: at(2.9),
       },
+      // Checked, nothing found: shows nothing.
+      criticalCheck: { status: "completed", rulesVersion: "critical-alerts-v1", signals: [] },
       reporterIds: [residentA1],
       history: [
         received(3),
@@ -170,6 +172,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       createdAt: at(20),
       triage: null,
       suggestion: null,
+      // The critical check has not finished: never read as "nothing found" (#96).
+      criticalCheck: { status: "pending", rulesVersion: null, signals: [] },
       reporterIds: [residentA2],
       history: [received(20)],
     },
@@ -272,7 +276,14 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         failureCode: "timeout",
         suggestedAt: at(0.95),
       },
-      criticalAlert: { reason: "The report mentions smoke near an electrical socket.", raisedAt: at(1) },
+      criticalCheck: {
+        status: "completed",
+        rulesVersion: "critical-alerts-v1",
+        signals: [
+          { code: "smoke_or_fire", raisedAt: at(1) },
+          { code: "water_near_electrics", raisedAt: at(1) },
+        ],
+      },
       reporterIds: [residentB1],
       history: [
         received(1),

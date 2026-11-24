@@ -222,10 +222,13 @@ keyboard pass each UI story records in its PR.
 - `/me`, the report endpoints and `/buildings/{id}/areas` match the Issue service (US-01-01). The issue, history and
   triage shapes (`GET /issues`, `GET /issues/{id}`, `GET /issues/{id}/history`, `POST /issues/{id}/triage`) match
   the service's pull request #140 (US-02-01), which is not merged yet. History types for later stories stay marked
-  `ASSUMPTION` in `src/contracts/issue.ts`, and so do the US-03-02 additions: the suggestion's `rationale`,
-  `needsReview`, `failureCode` (and its values) and `suggestedAt` (US-03-03, #108), and the issue's `criticalAlert`
-  (US-14-02, #96). All are optional, so the service as it is today still parses. "Triage pending — classify
-  manually" is worked out in the client from `createdAt` (2 minutes, technical design §5).
+  `ASSUMPTION` in `src/contracts/issue.ts`. The US-03-02 additions are agreed with the Issue service owner but not
+  built yet: the suggestion's `rationale` (`null` in lists), `needsReview`, `failureCode` and `suggestedAt` (US-03-03,
+  #108), and the issue's `criticalCheck` (`status`, `rulesVersion`, `signals`; US-14-02, #96). They are optional, so
+  the service as it is today still parses. Still `ASSUMPTION`: the `failureCode` values (#93, #95) and the signal
+  codes (the `critical-alerts-v1` rule set). "Triage pending — classify manually" is worked out in the client from
+  `createdAt` (2 minutes, technical design §5); an issue still waiting on a suggestion or on the critical check is
+  asked again every 10 seconds.
 - `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
   HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
 - The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
