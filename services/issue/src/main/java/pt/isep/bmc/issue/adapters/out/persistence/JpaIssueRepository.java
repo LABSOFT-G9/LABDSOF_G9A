@@ -10,6 +10,7 @@ import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 
 @Repository
 class JpaIssueRepository implements IssueRepository {
@@ -43,6 +44,7 @@ class JpaIssueRepository implements IssueRepository {
         entity.version = issue.version();
         entity.category = issue.category().map(IssueCategory::value).orElse(null);
         entity.urgency = issue.urgency().map(IssueUrgency::value).orElse(null);
+        entity.publishedSummaryId = issue.publishedSummaryId().map(SummaryId::toString).orElse(null);
         entity.updatedAt = Timestamps.toColumn(issue.updatedAt());
     }
 

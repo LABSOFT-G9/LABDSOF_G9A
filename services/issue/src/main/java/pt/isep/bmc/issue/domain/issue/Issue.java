@@ -28,6 +28,7 @@ public final class Issue {
     private final IssueCategory category;
     private final IssueUrgency urgency;
     private final CriticalCheckStatus criticalCheckStatus;
+    private final SummaryId publishedSummaryId;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -40,6 +41,7 @@ public final class Issue {
             IssueCategory category,
             IssueUrgency urgency,
             CriticalCheckStatus criticalCheckStatus,
+            SummaryId publishedSummaryId,
             Instant createdAt,
             Instant updatedAt) {
         this.id = Objects.requireNonNull(id, "id");
@@ -50,6 +52,7 @@ public final class Issue {
         this.category = category;
         this.urgency = urgency;
         this.criticalCheckStatus = Objects.requireNonNull(criticalCheckStatus, "criticalCheckStatus");
+        this.publishedSummaryId = publishedSummaryId;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         if (version < INITIAL_VERSION) {
@@ -63,7 +66,7 @@ public final class Issue {
     /** A new issue for a new report: {@code received}, version 1, nothing decided, critical check pending. */
     public static Issue receive(IssueId id, BuildingId buildingId, AreaId areaId, Instant now) {
         return new Issue(id, buildingId, areaId, IssueState.RECEIVED, INITIAL_VERSION, null, null,
-                CriticalCheckStatus.PENDING, now, now);
+                CriticalCheckStatus.PENDING, null, now, now);
     }
 
     public static Issue restore(
@@ -77,7 +80,25 @@ public final class Issue {
             CriticalCheckStatus criticalCheckStatus,
             Instant createdAt,
             Instant updatedAt) {
-        return new Issue(id, buildingId, areaId, state, version, category, urgency, criticalCheckStatus, createdAt, updatedAt);
+        return restore(id, buildingId, areaId, state, version, category, urgency, criticalCheckStatus, null,
+                createdAt, updatedAt);
+    }
+
+    /** @param publishedSummaryId the current published summary, or {@code null} when none was published */
+    public static Issue restore(
+            IssueId id,
+            BuildingId buildingId,
+            AreaId areaId,
+            IssueState state,
+            long version,
+            IssueCategory category,
+            IssueUrgency urgency,
+            CriticalCheckStatus criticalCheckStatus,
+            SummaryId publishedSummaryId,
+            Instant createdAt,
+            Instant updatedAt) {
+        return new Issue(id, buildingId, areaId, state, version, category, urgency, criticalCheckStatus,
+                publishedSummaryId, createdAt, updatedAt);
     }
 
     /**
@@ -100,7 +121,7 @@ public final class Issue {
             throw new InvalidTransitionException(state.value());
         }
         return new Issue(id, buildingId, areaId, IssueState.TRIAGED, version + 1, category, urgency,
-                criticalCheckStatus, createdAt, now);
+                criticalCheckStatus, publishedSummaryId, createdAt, now);
     }
 
     /**
@@ -119,7 +140,25 @@ public final class Issue {
             return Optional.empty();
         }
         return Optional.of(new Issue(id, buildingId, areaId, IssueState.IN_TRIAGE, version + 1, category, urgency,
-                criticalCheckStatus, createdAt, now));
+                criticalCheckStatus, publishedSummaryId, createdAt, now));
+    }
+
+    /**
+     * An administrator published a summary for the building, or replaced the
+     * one already published (US-04). The state, category and urgency stay as
+     * they are; only the version moves, so Dispatch's copy of the issue picks
+     * up the new summary reference. No state forbids it: the design names none.
+     *
+     * @param expectedVersion the version the administrator was looking at ({@code If-Match})
+     * @throws VersionConflictException if the issue has changed since then
+     */
+    public Issue publishSummary(long expectedVersion, SummaryId summaryId, Instant now) {
+        Objects.requireNonNull(summaryId, "summaryId");
+        if (expectedVersion != version) {
+            throw new VersionConflictException(version, state.value());
+        }
+        return new Issue(id, buildingId, areaId, state, version + 1, category, urgency, criticalCheckStatus,
+                summaryId, createdAt, now);
     }
 
     public IssueId id() {
@@ -154,6 +193,16 @@ public final class Issue {
 
     public CriticalCheckStatus criticalCheckStatus() {
         return criticalCheckStatus;
+    }
+
+    /** The current published summary, or empty while nothing was published. */
+    public Optional<SummaryId> publishedSummaryId() {
+        return Optional.ofNullable(publishedSummaryId);
+    }
+
+    /** Whether the residents of the building may see the issue (US-04). */
+    public boolean isPublished() {
+        return publishedSummaryId != null;
     }
 
     public Instant createdAt() {

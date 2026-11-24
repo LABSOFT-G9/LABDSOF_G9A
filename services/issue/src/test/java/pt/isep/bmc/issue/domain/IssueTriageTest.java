@@ -69,7 +69,7 @@ class IssueTriageTest {
         assertThat(outcome.events()).containsExactly(
                 new IssueTriaged(received.id(), A, 2, IssueCategory.PLUMBING, IssueUrgency.HIGH, NOW),
                 new IssueStateChanged(received.id(), A, IssueState.TRIAGED, 2, true, Optional.of(IssueCategory.PLUMBING),
-                        Optional.of(IssueUrgency.HIGH), "Garage level -1", NOW));
+                        Optional.of(IssueUrgency.HIGH), "Garage level -1", Optional.empty(), NOW));
     }
 
     @Test

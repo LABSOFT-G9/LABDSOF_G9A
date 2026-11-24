@@ -6,7 +6,9 @@ public enum HistoryEntryType {
     /** An unconfirmed suggestion arrived (AI, rules or fallback). Internal. */
     TRIAGE_SUGGESTED("triage_suggested"),
     /** An administrator decided category and urgency. Public; the reason is not. */
-    TRIAGE_DECIDED("triage_decided");
+    TRIAGE_DECIDED("triage_decided"),
+    /** An administrator published or replaced the shared summary. Public. */
+    SUMMARY_PUBLISHED("summary_published");
 
     private final String value;
 

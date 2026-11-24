@@ -13,13 +13,17 @@ import pt.isep.bmc.issue.application.port.out.IssueReadModel;
 import pt.isep.bmc.issue.application.query.IssueHistoryItem;
 import pt.isep.bmc.issue.application.query.IssueListCriteria;
 import pt.isep.bmc.issue.application.query.IssuePage;
+import pt.isep.bmc.issue.application.query.ImpactView;
 import pt.isep.bmc.issue.application.query.IssueView;
+import pt.isep.bmc.issue.application.query.SummaryView;
 import pt.isep.bmc.issue.application.query.TriageView;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
+import pt.isep.bmc.issue.domain.issue.SummaryText;
 import pt.isep.bmc.issue.domain.issue.TriageReason;
+import pt.isep.bmc.issue.domain.membership.UserId;
 
 /**
  * Query side for issues (CQRS as packages, ADR-009): SQL projections over
@@ -29,13 +33,23 @@ import pt.isep.bmc.issue.domain.issue.TriageReason;
 @Repository
 class JdbcIssueReadModel implements IssueReadModel {
 
-    /** {@code %s}: extra columns of the current decision ({@code d}). */
+    /**
+     * {@code %s}: extra columns of the current decision ({@code d}).
+     * {@code :caller} is whose own impact confirmation and subscription to show.
+     */
     private static final String SELECT = """
             SELECT i.id, i.building_id, b.name AS building_name, a.label AS area_label, i.state, i.version,
-                   i.category, i.urgency, i.created_at, d.decided_at%s
+                   i.category, i.urgency, i.created_at, d.decided_at%s,
+                   s.text AS summary_text, s.published_at AS summary_published_at,
+                   (SELECT COUNT(*) FROM impact_confirmations c WHERE c.issue_id = i.id) AS impact_count,
+                   EXISTS (SELECT 1 FROM impact_confirmations c
+                            WHERE c.issue_id = i.id AND c.user_id = :caller) AS impact_mine,
+                   EXISTS (SELECT 1 FROM issue_subscriptions n
+                            WHERE n.issue_id = i.id AND n.user_id = :caller) AS subscribed
               FROM issues i
               JOIN buildings b ON b.id = i.building_id
               JOIN areas a ON a.id = i.area_id
+              LEFT JOIN issue_summaries s ON s.id = i.published_summary_id
               LEFT JOIN triage_decisions d
                      ON d.issue_id = i.id
                     AND d.resulting_version = (SELECT MAX(x.resulting_version)
@@ -49,9 +63,10 @@ class JdbcIssueReadModel implements IssueReadModel {
     }
 
     @Override
-    public Optional<IssueView> findView(IssueId id) {
+    public Optional<IssueView> findView(IssueId id, UserId caller) {
         return jdbc.sql(SELECT.formatted(", d.reason") + " WHERE i.id = :id")
                 .param("id", id.toString())
+                .param("caller", caller.value())
                 .query((rs, n) -> view(rs, true))
                 .optional();
     }
@@ -64,6 +79,11 @@ class JdbcIssueReadModel implements IssueReadModel {
         if (!administered.isEmpty()) {
             where.append(" OR i.building_id IN (:administered)");
         }
+        // Shared with the building: a published summary makes the issue visible to its members (US-04).
+        List<String> member = criteria.memberBuildings().stream().map(BuildingId::toString).toList();
+        if (!member.isEmpty()) {
+            where.append(" OR (i.published_summary_id IS NOT NULL AND i.building_id IN (:member))");
+        }
         where.append(")");
         if (criteria.building().isPresent()) {
             where.append(" AND i.building_id = :building");
@@ -72,10 +92,14 @@ class JdbcIssueReadModel implements IssueReadModel {
         String sql = SELECT.formatted("") + where + " ORDER BY i.created_at DESC, i.id DESC LIMIT :limit OFFSET :offset";
         JdbcClient.StatementSpec statement = jdbc.sql(sql)
                 .param("reporter", criteria.reporter().value())
+                .param("caller", criteria.reporter().value())
                 .param("limit", criteria.size() + 1)
                 .param("offset", (long) criteria.page() * criteria.size());
         if (!administered.isEmpty()) {
             statement = statement.param("administered", administered);
+        }
+        if (!member.isEmpty()) {
+            statement = statement.param("member", member);
         }
         if (criteria.building().isPresent()) {
             statement = statement.param("building", criteria.building().get().toString());
@@ -123,6 +147,16 @@ class JdbcIssueReadModel implements IssueReadModel {
                         PersistenceMapper.urgency(rs.getString("urgency")),
                         withReason ? Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore) : Optional.empty(),
                         Timestamps.fromColumn(rs.getObject("decided_at", LocalDateTime.class))));
+        String summaryText = rs.getString("summary_text");
+        Optional<SummaryView> summary = summaryText == null
+                ? Optional.empty()
+                : Optional.of(new SummaryView(
+                        SummaryText.restore(summaryText),
+                        Timestamps.fromColumn(rs.getObject("summary_published_at", LocalDateTime.class))));
+        // No summary, no impact: nobody else can see the issue yet.
+        Optional<ImpactView> impact = summary.isEmpty()
+                ? Optional.empty()
+                : Optional.of(new ImpactView(rs.getLong("impact_count"), rs.getBoolean("impact_mine")));
         return new IssueView(
                 new IssueId(UUID.fromString(rs.getString("id"))),
                 new BuildingId(UUID.fromString(rs.getString("building_id"))),
@@ -131,6 +165,9 @@ class JdbcIssueReadModel implements IssueReadModel {
                 IssueState.fromValue(rs.getString("state")),
                 rs.getLong("version"),
                 Timestamps.fromColumn(rs.getObject("created_at", LocalDateTime.class)),
-                triage);
+                triage,
+                summary,
+                impact,
+                rs.getBoolean("subscribed"));
     }
 }

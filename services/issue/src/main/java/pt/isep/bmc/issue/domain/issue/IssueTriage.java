@@ -53,7 +53,7 @@ public final class IssueTriage {
             int sequence,
             String areaLabel,
             Instant now) {
-        if (!access.canViewIssue(issue.buildingId(), callerReported)) {
+        if (!access.canViewIssue(issue.buildingId(), callerReported, issue.isPublished())) {
             throw new AccessDeniedException();
         }
         if (!access.administers(issue.buildingId())) {

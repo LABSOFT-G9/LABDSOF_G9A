@@ -25,9 +25,10 @@ import pt.isep.bmc.issue.domain.membership.UserId;
  * <ul>
  *   <li>Administrators of the building: everything, including internal
  *       history and triage reasons.</li>
- *   <li>A resident who reported the issue: its status, the decided category
- *       and urgency, and public history. Never a reason, an internal entry or
- *       anyone's report text.</li>
+ *   <li>Whoever reported the issue and, once a summary is published, every
+ *       member of the building: its status, the decided category and urgency,
+ *       the summary, the impact count and public history. Never a reason, an
+ *       internal entry or anyone's report text.</li>
  *   <li>Everyone else, including contractors and other buildings'
  *       administrators: not found.</li>
  * </ul>
@@ -63,8 +64,11 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
 
     @Override
     public IssuePage list(UserId actor, Optional<BuildingId> building, int page, int size) {
-        return transactions.readOnly(() -> readModel.list(
-                new IssueListCriteria(actor, access(actor).administeredBuildings(), building, page, size)));
+        return transactions.readOnly(() -> {
+            BuildingAccess access = access(actor);
+            return readModel.list(new IssueListCriteria(
+                    actor, access.administeredBuildings(), access.memberBuildings(), building, page, size));
+        });
     }
 
     @Override
@@ -84,8 +88,9 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
 
     /** The issue, or not found when it does not exist or the caller may not see it. */
     private IssueView visible(UserId actor, IssueId issueId) {
-        IssueView issue = readModel.findView(issueId).orElseThrow(NotFoundException::new);
-        if (!access(actor).canViewIssue(issue.buildingId(), reports.existsByIssueAndAuthor(issueId, actor))) {
+        IssueView issue = readModel.findView(issueId, actor).orElseThrow(NotFoundException::new);
+        if (!access(actor).canViewIssue(issue.buildingId(), reports.existsByIssueAndAuthor(issueId, actor),
+                issue.summary().isPresent())) {
             throw new NotFoundException();
         }
         return issue;

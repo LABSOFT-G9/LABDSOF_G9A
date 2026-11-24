@@ -72,9 +72,12 @@ class IssueTriageIT extends IntegrationTestSupport {
         Map<String, Object> stateChanged = envelope(rows.get(0));
         assertThat(stateChanged).containsEntry("type", "IssueStateChanged").containsEntry("subject", issueId)
                 .containsEntry("aggregateversion", 2);
-        assertThat(stateChanged.get("data")).isEqualTo(Map.of("issueId", issueId, "buildingId", BUILDING_A,
+        Map<String, Object> expected = new HashMap<>(Map.of("issueId", issueId, "buildingId", BUILDING_A,
                 "state", "triaged", "version", 2, "dispatchable", true, "category", "plumbing", "urgency", "high",
                 "areaLabel", "Garage level -1"));
+        // No summary was published: the reference is sent as null, never left to a default.
+        expected.put("publishedSummaryId", null);
+        assertThat(stateChanged.get("data")).isEqualTo(expected);
         assertThat(envelope(rows.get(1)).get("data")).isEqualTo(Map.of("issueId", issueId, "category", "plumbing",
                 "urgency", "high", "decisionSource", "human"));
         assertThat(rows).allSatisfy(row -> assertThat((String) row.get("payload").toString()).doesNotContain("Water"));

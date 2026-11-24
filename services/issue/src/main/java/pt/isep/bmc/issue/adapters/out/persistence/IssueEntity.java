@@ -35,6 +35,9 @@ class IssueEntity {
     @Column(name = "critical_check_status", nullable = false)
     String criticalCheckStatus;
 
+    @Column(name = "published_summary_id", length = 36)
+    String publishedSummaryId;
+
     @Column(name = "created_at", nullable = false)
     LocalDateTime createdAt;
 

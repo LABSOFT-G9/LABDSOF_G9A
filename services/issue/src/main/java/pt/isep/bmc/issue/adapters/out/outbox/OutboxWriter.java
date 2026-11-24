@@ -12,11 +12,13 @@ import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
 import pt.isep.bmc.issue.domain.event.DomainEvent;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
+import pt.isep.bmc.issue.domain.event.IssueSummaryPublished;
 import pt.isep.bmc.issue.domain.event.IssueTriaged;
 import pt.isep.bmc.issue.domain.event.ReportSubmitted;
 import pt.isep.bmc.issue.domain.event.TriageRequested;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -105,6 +107,11 @@ class OutboxWriter implements EventOutbox {
                 data.put("category", e.category().map(IssueCategory::value).orElse(null));
                 data.put("urgency", e.urgency().map(IssueUrgency::value).orElse(null));
                 data.put("areaLabel", e.areaLabel());
+                data.put("publishedSummaryId", e.publishedSummaryId().map(SummaryId::toString).orElse(null));
+            }
+            case IssueSummaryPublished e -> {
+                data.put("issueId", e.issueId().toString());
+                data.put("summaryId", e.summaryId().toString());
             }
             case TriageRequested e -> {
                 data.put("issueId", e.issueId().toString());
