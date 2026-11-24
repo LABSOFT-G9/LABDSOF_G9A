@@ -225,7 +225,12 @@ keyboard pass each UI story records in its PR.
   `ASSUMPTION` in `src/contracts/issue.ts`, and so do the US-03-02 additions: the suggestion's `rationale`,
   `needsReview`, `failureCode` (and its values) and `suggestedAt` (US-03-03, #108), and the issue's `criticalAlert`
   (US-14-02, #96). US-14-03 adds `rulesVersion` and `modelVersion` on the suggestion, `origin` on `triage_suggested`
-  history entries (#108) and the `critical_alert_raised` entry type (#96). All are optional, so the service as it is today still parses. "Triage pending — classify
+  history entries (#108) and the `critical_alert_raised` entry type (#96).
+- US-04-02 (shared issue) is built on ASSUMPTION shapes until US-04-01 (#89) defines them: `summary`, `impact`
+  (`{count, mine}`) and `subscribed` on the issue; `POST /issues/{id}/publication` (`If-Match`, answers the new
+  version and summary); `PUT`/`DELETE /issues/{id}/impact` (answers the count) and `/subscription` (answers
+  `{subscribed}`); the `summary_published` history type; and residents of the building seeing shared issues in
+  `GET /issues`. Publishing moves the issue version, so an open triage form then offers to reload. All are optional, so the service as it is today still parses. "Triage pending — classify
   manually" is worked out in the client from `createdAt` (2 minutes, technical design §5).
 - `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
   HTTP. It never carries the contractor link, which belongs to Dispatch (#80).

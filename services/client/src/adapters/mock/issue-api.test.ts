@@ -130,7 +130,7 @@ describe("mockIssueApi reports (same rules as the Issue service)", () => {
 
 describe("mockIssueApi triage and history (same rules as the Issue service)", () => {
   const suggested = "0199f2a1-0000-7000-8000-000000002001"; // Building A, in_triage, AI suggestion, Resident A1's
-  const pending = "0199f2a1-0000-7000-8000-000000002002"; // Building A, received, Resident A2's
+  const pending = "0199f2a1-0000-7000-8000-000000002002"; // Building A, received, Resident A2's, shared (version 2)
   const scheduled = "0199f2a1-0000-7000-8000-000000002003"; // Building A, scheduled, human decision
   const roof = "0199f2a1-0000-7000-8000-000000002004"; // Building B
   const critical = "0199f2a1-0000-7000-8000-000000002005"; // Building B, fallback suggestion, critical alert
@@ -146,12 +146,13 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     return { as };
   }
 
-  it("lists the administered buildings' issues, and residents the issues of their own reports", async () => {
+  it("lists the administered buildings' issues, and residents their own and their building's shared ones", async () => {
     const { as } = world();
     const ids = async (persona: string) => (await as(persona).list({})).items.map((i) => i.issueId).sort();
     expect(await ids("administrator-a")).toEqual([suggested, pending, scheduled].sort());
     expect(await ids("administrator-b")).toEqual([roof, critical].sort());
-    expect(await ids("resident-a1")).toEqual([suggested, scheduled].sort());
+    // The garage issue is shared with Building A, so Resident A1 sees it too; Building B's residents do not.
+    expect(await ids("resident-a1")).toEqual([suggested, pending, scheduled].sort());
     expect(await ids("resident-a2")).toEqual([pending]);
   });
 
@@ -211,9 +212,9 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     await expect(as("administrator-a").triage(pending, 0, decision, "k")).rejects.toMatchObject({
       status: 409,
       code: "VERSION_CONFLICT",
-      extensions: { currentVersion: 1, currentState: "received" },
+      extensions: { currentVersion: 2, currentState: "received" },
     });
-    await expect(as("administrator-a").getIssue(pending)).resolves.toMatchObject({ version: 1, triage: null });
+    await expect(as("administrator-a").getIssue(pending)).resolves.toMatchObject({ version: 2, triage: null });
   });
 
   it("refuses triage once the issue has moved on (409 INVALID_TRANSITION)", async () => {
@@ -238,7 +239,7 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
 
   it("validates the decision with the service's errors[]", async () => {
     const { as } = world();
-    await expect(as("administrator-a").triage(pending, 1, { ...decision, reason: " " }, "k")).rejects.toMatchObject({
+    await expect(as("administrator-a").triage(pending, 2, { ...decision, reason: " " }, "k")).rejects.toMatchObject({
       status: 400,
       extensions: { errors: [{ field: "reason", reason: "required" }] },
     });

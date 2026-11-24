@@ -69,7 +69,7 @@ export const en = {
   },
   issues: {
     title: "Issues",
-    subtitle: "Faults in the buildings you administer, and the ones you reported.",
+    subtitle: "Faults in the buildings you administer, the ones you reported, and those shared with your building.",
     empty: "No issues to show.",
     emptyHint: "Issues reported in your buildings appear here.",
     states: {
@@ -186,6 +186,7 @@ export const en = {
       triage_suggested: "Triage suggested (not a decision)",
       triage_decided: "Triage decided",
       critical_alert_raised: "Critical alert raised",
+      summary_published: "Summary shared with the building",
       intervention_approved: "Request approved by the administrator",
       contractor_accepted: "Contractor accepted the request",
       contractor_declined: "Contractor declined the request",
@@ -203,6 +204,51 @@ export const en = {
       fallback: "Triage suggested by the rules: AI unavailable (not a decision)",
     },
     lateSuggestion: "Arrived after the decision: not applied",
+    shared: {
+      badge: "Shared",
+      title: "Shared with the building",
+      adminTitle: "Share with the building",
+      adminHint:
+        "Residents of the building see this summary instead of the report. The report text and who reported it stay private.",
+      notShared: "Not shared yet. Only the administrators and the people who reported it can see this issue.",
+      publishedAt: (when: string) => `Shared ${when}`,
+      summaryLabel: "Summary for residents",
+      summaryHint: "10 to 500 characters. Leave out names, unit numbers and anything personal.",
+      summaryCount: (count: number, max: number) => `${count} of ${max} characters`,
+      publish: "Share the summary",
+      update: "Update the summary",
+      change: "Change the summary",
+      cancel: "Cancel",
+      publishing: "Sharing…",
+      published: "Summary shared with the building.",
+      errors: {
+        summary: {
+          required: "Write a summary.",
+          too_short: "Use at least 10 characters.",
+          too_long: "Use at most 500 characters.",
+          invalid_characters: "Remove control characters from the summary.",
+        },
+        unknown: "This value was not accepted.",
+        summary_title: "The summary was not shared. Check the highlighted field.",
+      },
+      impactCount: (count: number) =>
+        count === 0
+          ? "No resident has said this affects them yet."
+          : count === 1
+            ? "1 resident says this affects them."
+            : `${count} residents say this affects them.`,
+      impactHint: "Only the number is shown, never who.",
+      affectsMe: "This affects me too",
+      affectsMeHint: "Adds you to the count. It does not change the urgency; you can still report a fault yourself.",
+      youConfirmed: "You said this affects you.",
+      withdraw: "Withdraw my confirmation",
+      confirmed: "Your confirmation was recorded.",
+      withdrawn: "Your confirmation was withdrawn. You can still follow this issue here.",
+      subscribe: "Notify me when this issue changes",
+      subscribeHint: "Separate from confirming. You can turn it off at any time.",
+      subscribed: "You will be notified when this issue changes.",
+      unsubscribed: "Notifications for this issue are off. You can still check its status here.",
+    },
     backToIssues: "All issues",
     followIssue: "Follow the issue",
   },

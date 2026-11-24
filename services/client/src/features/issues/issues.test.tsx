@@ -564,3 +564,191 @@ describe("origins (US-14-03)", () => {
     expect(within(historyCard()).queryByText(/suggested|Critical alert/)).not.toBeInTheDocument();
   });
 });
+
+describe("shared issue (US-04-02)", () => {
+  const SHARED = "0199f2a1-0000-7000-8000-000000002002"; // Garage level -1: shared with Building A, Resident A2's report
+  const sharedCard = () => screen.getByRole("heading", { name: "Shared with the building" }).closest("section")!;
+
+  it("shows residents of the building the shared summary and count, not the report", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp("/issues");
+    const link = await screen.findByRole("link", { name: "Garage level -1" });
+    expect(within(card(link)).getByText("Shared")).toBeInTheDocument();
+
+    await user.click(link);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    const shared = sharedCard();
+    expect(shared).toHaveTextContent("The garage door on level -1 does not close fully.");
+    expect(shared).toHaveTextContent("1 resident says this affects them.");
+    expect(shared).toHaveTextContent("Only the number is shown, never who.");
+    expect(screen.queryByRole("button", { name: "Save decision" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share with the building" })).not.toBeInTheDocument();
+  });
+
+  it("confirms and withdraws the impact by keyboard, with messages in words, and keeps the status", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+
+    const confirm = screen.getByRole("button", { name: "This affects me too" });
+    expect(confirm).toHaveAccessibleDescription(expect.stringContaining("It does not change the urgency"));
+    confirm.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByText("Your confirmation was recorded.");
+    expect(sharedCard()).toHaveTextContent("2 residents say this affects them.");
+    expect(sharedCard()).toHaveTextContent("You said this affects you.");
+
+    await user.click(screen.getByRole("button", { name: "Withdraw my confirmation" }));
+    await screen.findByText("Your confirmation was withdrawn. You can still follow this issue here.");
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+    // Withdrawing never removes access: the status and history are still there.
+    expect(screen.getAllByText("Received").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+  });
+
+  it("subscribes and unsubscribes separately from the impact", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp(`/issues/${SHARED}`);
+    const box = await screen.findByRole("checkbox", { name: "Notify me when this issue changes" });
+    expect(box).not.toBeChecked();
+
+    await user.click(box);
+    await screen.findByText("You will be notified when this issue changes.");
+    expect(box).toBeChecked();
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+
+    box.focus();
+    await user.keyboard(" ");
+    await screen.findByText("Notifications for this issue are off. You can still check its status here.");
+    expect(box).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "This affects me too" })).toBeInTheDocument();
+  });
+
+  it("shows a failed confirmation as an error and changes nothing", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Garage level -1",
+      state: "received",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The garage door does not close.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 1, mine: false },
+      subscribed: false,
+    };
+    const setImpact = vi.fn(async () => {
+      throw new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Try again later.", "c-503");
+    });
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), setImpact }),
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "This affects me too" }));
+    await screen.findByText(/c-503/);
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+    expect(screen.queryByText("Your confirmation was recorded.")).not.toBeInTheDocument();
+  });
+
+  it("is not visible to another building's residents", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Page not found" });
+  });
+
+  it("lets the administrator share a summary after a triage decision, without a false conflict", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    renderApp(`/issues/${SUGGESTED}`);
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    expect(screen.getByText(/Not shared yet/)).toBeInTheDocument();
+
+    // Triage first: it moves the version.
+    await user.click(screen.getByRole("button", { name: "Fill in the suggestion" }));
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Exposed wiring by the door.");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    await user.type(summary, "Too short");
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    expect(await screen.findByText("Use at least 10 characters.")).toBeInTheDocument();
+    expect(summary).toHaveFocus();
+    expect(summary).toHaveAccessibleDescription(expect.stringContaining("Use at least 10 characters."));
+
+    await user.clear(summary);
+    await user.type(summary, "The entrance light switch is unsafe. An electrician is being arranged.");
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    await screen.findByText("Summary shared with the building.");
+    expect(screen.queryByText("Someone changed this issue")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("The entrance light switch is unsafe. An electrician is being arranged."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No resident has said this affects them yet.")).toBeInTheDocument();
+    const history = screen.getByRole("heading", { name: "History" }).closest("[data-slot=card]") as HTMLElement;
+    await waitFor(() => expect(within(history).getByText("Summary shared with the building")).toBeInTheDocument());
+  });
+
+  it("lets the administrator change the summary, or cancel, and shows the count but no confirm button", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    expect(screen.getByText("1 resident says this affects them.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "This affects me too" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText(/does not close fully/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    await user.clear(summary);
+    await user.type(summary, "The garage door on level -1 is being repaired on Thursday.");
+    await user.click(screen.getByRole("button", { name: "Update the summary" }));
+    await screen.findByText("Summary shared with the building.");
+    expect(screen.getByText("The garage door on level -1 is being repaired on Thursday.")).toBeInTheDocument();
+  });
+
+  it("on a conflict, overwrites nothing and offers to reload", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 3,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const publish = vi.fn(async () => {
+      throw new ApiError(409, "VERSION_CONFLICT", "Changed.", "c-409", { currentVersion: 4, currentState: "triaged" });
+    });
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), publish }),
+      },
+    });
+    await user.type(
+      await screen.findByRole("textbox", { name: "Summary for residents" }),
+      "The entrance light is out.",
+    );
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Someone changed this issue");
+    expect(publish).toHaveBeenCalledWith("i1", 3, { summary: "The entrance light is out." }, expect.any(String));
+    expect(screen.getByRole("textbox", { name: "Summary for residents" })).toHaveValue("The entrance light is out.");
+    expect(within(alert).getByRole("button", { name: "Reload the issue" })).toBeInTheDocument();
+  });
+});
