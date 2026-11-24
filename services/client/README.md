@@ -223,7 +223,10 @@ keyboard pass each UI story records in its PR.
   triage shapes (`GET /issues`, `GET /issues/{id}`, `GET /issues/{id}/history`, `POST /issues/{id}/triage`) match
   the service's pull request #140 (US-02-01), which is not merged yet. History types for later stories and the
   suggestion's extra fields stay marked `ASSUMPTION` in `src/contracts/issue.ts`.
-- `/me` has no email, platform roles or contractor link yet (EN-02-04, #80).
-- The CSRF header name, the login `redirect` parameter and the edge paths are placeholders (EN01-U6, spike item 3).
+- `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
+  HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
+- The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
+  (#80). The CSRF header and the edge paths match EN-02-04 (#139) but are untested against the real edge until it
+  reaches dev.
 - `npm audit` reports moderate advisories in `glob`/`minimatch` under `workbox-build`, a build-time dependency of
   vite-plugin-pwa 2.0.0. The production dependencies report none.
