@@ -29,8 +29,8 @@ CREATE TABLE triage_decisions (
 
 -- Each history entry records the issue version it produced, which links a
 -- `triage_decided` entry to its decision. Existing entries are all
--- `report_received`, at version 1.
+-- `report_received`, at version 1. The default stays: it is the right value
+-- for the entries the previous release writes, so that release still works
+-- against this schema if the image has to be rolled back.
 ALTER TABLE issue_history
     ADD COLUMN issue_version BIGINT NOT NULL DEFAULT 1 AFTER actor_role;
-ALTER TABLE issue_history
-    ALTER COLUMN issue_version DROP DEFAULT;
