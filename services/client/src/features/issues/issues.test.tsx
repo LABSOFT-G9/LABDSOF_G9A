@@ -277,7 +277,7 @@ describe("triage (administrator)", () => {
   it("marks entries only administrators can see", async () => {
     signInAs("administrator-a");
     renderApp(`/issues/${SUGGESTED}`);
-    await screen.findByText("Triage suggested (not a decision)");
+    await screen.findByText("Triage suggested by the AI (not a decision)");
     expect(screen.getByText("Internal: administrators only")).toBeInTheDocument();
   });
 
@@ -371,7 +371,7 @@ describe("suggestion (US-03-02)", () => {
     const { router } = renderApp("/issues");
     const garage = await screen.findByRole("link", { name: "Garage" });
     expect(within(card(garage)).getByText("Critical alert")).toBeInTheDocument();
-    expect(within(card(garage)).getByText("Unconfirmed suggestion (fallback rules)")).toBeInTheDocument();
+    expect(within(card(garage)).getByText("Unconfirmed suggestion (rules, AI unavailable)")).toBeInTheDocument();
 
     await router.navigate({ to: "/issues/$issueId", params: { issueId: CRITICAL } });
     await screen.findByRole("heading", { level: 1, name: "Garage" });
@@ -450,5 +450,117 @@ describe("suggestion (US-03-02)", () => {
     expect(screen.getByText("Decision pending")).toBeInTheDocument();
     expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/suggest/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("origins (US-14-03)", () => {
+  const CRITICAL = "0199f2a1-0000-7000-8000-000000002005"; // Building B: AI timed out, fallback rules, critical alert
+  const iconOf = (element: HTMLElement) => element.querySelector("svg")?.getAttribute("class") ?? "";
+  const historyCard = () => screen.getByRole("heading", { name: "History" }).closest("[data-slot=card]") as HTMLElement;
+
+  it("tells the AI, the rules with AI unavailable and a human decision apart in words and icons", async () => {
+    signInAs("administrator-a");
+    const first = renderApp("/issues");
+    const ai = within(card(await screen.findByRole("link", { name: "Entrance hall" }))).getByText(
+      "Unconfirmed suggestion (AI)",
+    );
+    const human = within(card(screen.getByRole("link", { name: "Unit 2B" }))).getByText("Plumbing · Normal");
+    expect(iconOf(ai)).toContain("lucide-sparkles");
+    expect(iconOf(human)).toContain("lucide-user-check");
+    first.unmount();
+
+    signInAs("administrator-b");
+    renderApp("/issues");
+    const fallback = within(card(await screen.findByRole("link", { name: "Garage" }))).getByText(
+      "Unconfirmed suggestion (rules, AI unavailable)",
+    );
+    expect(iconOf(fallback)).toContain("lucide-cloud-off");
+  });
+
+  it("names what produced the suggestion: the model, or the rules version", async () => {
+    signInAs("administrator-a");
+    const first = renderApp(`/issues/${SUGGESTED}`);
+    const ai = await screen.findByRole("region", { name: "Suggestion" });
+    expect(ai).toHaveTextContent("Produced byModel mock-model-v1");
+    first.unmount();
+
+    signInAs("administrator-b");
+    renderApp(`/issues/${CRITICAL}`);
+    const fallback = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(fallback).getByText("Unconfirmed · rules, AI unavailable")).toBeInTheDocument();
+    expect(fallback).toHaveTextContent("Produced byRules rules-v1");
+  });
+
+  it("shows a rules result with AI turned off as rules, without claiming the AI failed", async () => {
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: { category: "lift", urgency: "normal", origin: "rules", rulesVersion: "rules-v1" },
+    };
+    renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }) }) },
+    });
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText("Unconfirmed · rules")).toBeInTheDocument();
+    expect(iconOf(within(panel).getByText("Unconfirmed · rules"))).toContain("lucide-list-checks");
+    expect(panel).toHaveTextContent("Rules rules-v1");
+    expect(panel).not.toHaveTextContent("AI could not be used");
+  });
+
+  it("shows in the history who suggested, the critical alert, and a late suggestion as not applied", async () => {
+    signInAs("administrator-b");
+    const first = renderApp(`/issues/${CRITICAL}`);
+    await screen.findByText("Triage suggested by the rules: AI unavailable (not a decision)");
+    expect(within(historyCard()).getByText("Critical alert raised")).toBeInTheDocument();
+    expect(within(historyCard()).queryByText("Arrived after the decision: not applied")).not.toBeInTheDocument();
+    first.unmount();
+
+    signInAs("administrator-a");
+    renderApp(`/issues/${SCHEDULED}`);
+    const late = await screen.findByText("Triage suggested by the AI (not a decision)");
+    expect(late.closest("li")).toHaveTextContent("Arrived after the decision: not applied");
+    expect(late.closest("li")).toHaveTextContent("Plumbing · Low");
+    // The decision itself is untouched by the late result.
+    expect(screen.getByText("Plumbing · Normal", { selector: "[data-slot=badge]" })).toBeInTheDocument();
+  });
+
+  it("keeps a suggestion entry without an origin generic", async () => {
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const entry = {
+      sequence: 2,
+      type: "triage_suggested",
+      visibility: "internal" as const,
+      actorRole: "system" as const,
+      occurredAt: "2026-11-24T10:00:30Z",
+    };
+    renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [entry] }) }) },
+    });
+    await screen.findByText("Triage suggested (not a decision)");
+  });
+
+  it("never shows a resident who suggested or the critical alert in the history", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${CRITICAL}`);
+    await screen.findByText("Report received");
+    expect(within(historyCard()).queryByText(/suggested|Critical alert/)).not.toBeInTheDocument();
   });
 });

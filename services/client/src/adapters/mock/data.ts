@@ -147,6 +147,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         needsReview: false,
         failureCode: null,
         suggestedAt: at(2.9),
+        rulesVersion: null,
+        modelVersion: "mock-model-v1",
       },
       reporterIds: [residentA1],
       history: [
@@ -158,6 +160,7 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           occurredAt: at(2.9),
           category: "electrical",
           urgency: "high",
+          origin: "ai",
         }),
       ],
     },
@@ -200,14 +203,24 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           urgency: "normal",
           reason: "Slow leak under the kitchen sink. No electrical risk.",
         }),
+        // US-14-03: the AI answered after the administrator had decided. Kept with its source; it changed nothing.
         entry(3, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(69.5),
+          category: "plumbing",
+          urgency: "low",
+          origin: "ai",
+        }),
+        entry(4, {
           type: "intervention_approved",
           visibility: "public",
           actorRole: "administrator",
           occurredAt: at(60),
         }),
-        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
-        entry(5, {
+        entry(5, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
+        entry(6, {
           type: "booking_confirmed_manually",
           visibility: "public",
           actorRole: "administrator",
@@ -271,18 +284,22 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         needsReview: true,
         failureCode: "timeout",
         suggestedAt: at(0.95),
+        rulesVersion: "rules-v1",
+        modelVersion: null,
       },
       criticalAlert: { reason: "The report mentions smoke near an electrical socket.", raisedAt: at(1) },
       reporterIds: [residentB1],
       history: [
         received(1),
-        entry(2, {
+        entry(2, { type: "critical_alert_raised", visibility: "internal", actorRole: "system", occurredAt: at(1) }),
+        entry(3, {
           type: "triage_suggested",
           visibility: "internal",
           actorRole: "system",
           occurredAt: at(0.95),
           category: "electrical",
           urgency: "normal",
+          origin: "fallback",
         }),
       ],
     },
