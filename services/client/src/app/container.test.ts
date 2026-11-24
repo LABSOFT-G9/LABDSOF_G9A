@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createContainer } from "@/app/container";
 import { testConfig } from "@/test/render-app";
+import { stubIssueApi } from "@/test/fakes";
 
 describe("createContainer", () => {
   it("wires mock adapters and offers dev personas in mock mode", () => {
@@ -29,7 +30,7 @@ describe("createContainer", () => {
   });
 
   it("lets tests replace any port", async () => {
-    const issues = { list: async () => [] };
+    const issues = stubIssueApi({ list: async () => [] });
     expect(createContainer(testConfig, { issues }, {}).issues).toBe(issues);
   });
 });

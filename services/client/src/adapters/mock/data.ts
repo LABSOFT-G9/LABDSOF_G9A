@@ -1,4 +1,4 @@
-import type { IssueSummary } from "@/contracts/issue";
+import type { Area, IssueSummary } from "@/contracts/issue";
 import type { Persona, Session } from "@/ports/auth-session";
 
 /*
@@ -15,6 +15,19 @@ export const BUILDINGS = {
   a: { buildingId: id("00000000b001"), buildingName: "Synthetic Building A" },
   b: { buildingId: id("00000000b002"), buildingName: "Synthetic Building B" },
 } as const;
+
+/** The seeded areas of each building, keyed by building ID. */
+export const AREAS: Readonly<Record<string, readonly Area[]>> = {
+  [BUILDINGS.a.buildingId]: [
+    { areaId: id("00000000a001"), label: "Garage level -1", kind: "common_area" },
+    { areaId: id("00000000a002"), label: "Entrance hall", kind: "common_area" },
+    { areaId: id("00000000a003"), label: "Unit 2B", kind: "unit" },
+  ],
+  [BUILDINGS.b.buildingId]: [
+    { areaId: id("00000000a101"), label: "Garage", kind: "common_area" },
+    { areaId: id("00000000a102"), label: "Roof terrace", kind: "common_area" },
+  ],
+};
 
 interface MockPersona extends Persona {
   readonly session: Session;

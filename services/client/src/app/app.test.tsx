@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/lib/errors";
 import { renderApp } from "@/test/render-app";
+import { stubIssueApi } from "@/test/fakes";
 
 /** The whole client over mock adapters: routing, guards, session, shell and a data page together. */
 describe("app (mock adapters)", () => {
@@ -80,11 +81,11 @@ describe("app (mock adapters)", () => {
 
   it("ends the session globally when any request answers 401", async () => {
     localStorage.setItem("bmc-mock-persona", "resident-a1");
-    const issues = {
+    const issues = stubIssueApi({
       list: async () => {
         throw new ApiError(401, "UNAUTHENTICATED", "Session expired.");
       },
-    };
+    });
     const { router } = renderApp("/issues", { services: { issues } });
 
     await screen.findByRole("heading", { name: "Sign in to BMC" });
@@ -93,11 +94,11 @@ describe("app (mock adapters)", () => {
 
   it("shows a failed request in place, with its reference and a retry", async () => {
     localStorage.setItem("bmc-mock-persona", "resident-a1");
-    const issues = {
+    const issues = stubIssueApi({
       list: async () => {
         throw new ApiError(409, "INVALID_TRANSITION", "That change is no longer possible.", "corr-42");
       },
-    };
+    });
     renderApp("/issues", { services: { issues } });
 
     const message = await screen.findByText("That change is no longer possible.");
