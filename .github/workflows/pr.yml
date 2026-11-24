@@ -3,6 +3,7 @@ name: PR
 # Pull-request checks (CICD.md §3). Nothing is pushed or deployed.
 #   repo-wide:   secrets scan, CodeQL, buf (once contracts/proto exists)
 #   per service: build and test, hadolint, image build (not scanned, not pushed)
+#   sign-in:     the local stack signs a synthetic user in through the edge
 #   ci-required: the single check the branch ruleset requires
 #
 # The service list is .github/services.json. There is deliberately no `paths:`
@@ -168,10 +169,49 @@ jobs:
           persist-credentials: false
       - run: docker build -t "bmc-ci/${{ matrix.service.name }}:pr" "${{ matrix.service.dir }}"
 
+  # EN-02-04: the Backend-for-Frontend session end to end (ADR-005). Starts the
+  # part of the local stack that sign-in needs, with throwaway secrets, and
+  # runs scripts/e2e-signin.sh: 401 without a session, sign-in at Keycloak as
+  # a synthetic account, /me through the edge, the CSRF header, sign-out.
+  sign-in:
+    name: Sign-in end to end (local stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Write .env with throwaway secrets
+        run: |
+          secret() { openssl rand -hex "$1"; }
+          sed -E \
+            -e "s|^(MYSQL_ROOT_PASSWORD)=.*|\1=$(secret 16)|" \
+            -e "s|^([A-Z]+_DB_PASSWORD)=.*|\1=$(secret 16)|" \
+            -e "s|^(KEYCLOAK_ADMIN_PASSWORD)=.*|\1=$(secret 16)|" \
+            -e "s|^(BMC_EDGE_CLIENT_SECRET)=.*|\1=$(secret 24)|" \
+            -e "s|^(OIDC_PLUGIN_SECRET)=.*|\1=$(secret 16)|" \
+            -e "s|^(BMC_SYNTHETIC_USER_PASSWORD)=.*|\1=$(secret 12)|" \
+            .env.example >.env
+          # No value is printed; fail if a placeholder survived.
+          ! grep -q 'change-me' .env
+      - name: Start Traefik, Keycloak, MySQL, Mailpit, Issue and the client
+        run: |
+          docker compose -f compose.yaml -f compose.local.yaml up --build --detach \
+            traefik keycloak mysql mailpit issue client
+      - name: Sign in through the edge
+        run: |
+          set -a; . ./.env; set +a
+          scripts/e2e-signin.sh
+      - name: Container state and logs
+        if: failure()
+        run: |
+          docker compose -f compose.yaml -f compose.local.yaml ps --all
+          docker compose -f compose.yaml -f compose.local.yaml logs --no-color --tail 200 traefik keycloak issue
+
   ci-required:
     name: ci-required
     if: always()
-    needs: [services, secrets-scan, codeql, contracts, build-test, hadolint, image-build]
+    needs: [services, secrets-scan, codeql, contracts, build-test, hadolint, image-build, sign-in]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
