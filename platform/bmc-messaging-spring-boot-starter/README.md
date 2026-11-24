@@ -118,7 +118,8 @@ Observed with RabbitMQ 4.4.1 and MySQL 8.4 in `mvn verify`; these are spike resu
 
 - **Broker permissions are not tested.** The tests use the broker's administrator. Whether a service user without configure permission can consume from a deployment-declared queue is still to check (ADR-003, "Verification").
 - **Replay keeps the routing key.** The consumer compares the envelope's `source.type` with the routing key of the delivery. A replay from a dead-letter queue must publish with the original routing key, or the message is rejected again.
-- **One publisher at a time per row.** Rows are locked with `FOR UPDATE SKIP LOCKED`, so two instances never send the same row together, but with two instances the order across batches is not kept.
+- **Order is per instance.** Rows are locked with `FOR UPDATE SKIP LOCKED`, so two instances never send the same row together, but with two instances the order across batches is not kept. That is acceptable because consumers apply events by aggregate version, not by arrival order (technical design 3.3).
+- **Row locks are held while waiting for confirms.** A pass keeps its database transaction, and the locks on its pending rows, open until every confirm of the batch has arrived or one has failed. With a slow broker that is up to `outbox.batch-size` times `outbox.confirm-timeout`. Only pending outbox rows are locked, so the service's own writes are not blocked, but do not combine a large batch with a long timeout.
 - **No retention for `sent` rows.** Nothing deletes them yet (EN01-U6).
 - **The retry pause blocks the consumer thread.** One failing message delays the ones behind it by `inbox.retry-delay` per attempt.
 
