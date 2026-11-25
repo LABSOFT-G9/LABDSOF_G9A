@@ -220,6 +220,30 @@ class IssueSharingIT extends IntegrationTestSupport {
         assertThat(other.json()).containsEntry("code", "IDEMPOTENCY_KEY_REUSED");
     }
 
+    @Test
+    void aRepeatedPublicationByAnAdministratorWhoWasRevokedIsRefusedLikeANewOne() {
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        String key = UUID.randomUUID().toString();
+        assertThat(publish(ADMIN_A, issueId, "\"1\"", key, SUMMARY).status()).isEqualTo(200);
+
+        setAdministratorStatus(ADMIN_A, "revoked");
+        try {
+            Response retry = publish(ADMIN_A, issueId, "\"1\"", key, SUMMARY);
+
+            assertThat(retry.status()).isEqualTo(404);
+            assertThat(retry.json()).containsEntry("code", "NOT_FOUND");
+            assertThat(retry.header("ETag")).isNull();
+            assertThat(retry.body()).doesNotContain(SUMMARY);
+        } finally {
+            setAdministratorStatus(ADMIN_A, "active");
+        }
+
+        Response again = publish(ADMIN_A, issueId, "\"1\"", key, SUMMARY);
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(again.header("ETag")).isEqualTo("\"2\"");
+        assertThat(count("issue_summaries")).isEqualTo(1);
+    }
+
     @RepeatedTest(3)
     void twoAdministratorsPublishingFromTheSameVersionCannotBothWin() throws Exception {
         String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);

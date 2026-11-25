@@ -54,10 +54,7 @@ public final class IssueSharing {
             int sequence,
             String areaLabel,
             Instant now) {
-        requireVisible(access, issue, callerReported);
-        if (!access.administers(issue.buildingId())) {
-            throw new ForbiddenException();
-        }
+        requireMayPublish(access, issue, callerReported);
         SummaryText.violation(rawSummary).ifPresent(reason -> {
             throw new ValidationException(List.of(new FieldViolation(FIELD_SUMMARY, reason)));
         });
@@ -73,6 +70,19 @@ public final class IssueSharing {
                         new IssueSummaryPublished(published.id(), published.buildingId(), published.version(), summaryId,
                                 now),
                         IssueStateChanged.of(published, areaLabel)));
+    }
+
+    /**
+     * Whether the caller may publish a summary of the issue: visible
+     * ({@code 404}) and an administrator of the building ({@code 403}). Also
+     * run before a stored publication receipt is returned again, so a retry is
+     * answered by today's permissions.
+     */
+    public static void requireMayPublish(BuildingAccess access, Issue issue, boolean callerReported) {
+        requireVisible(access, issue, callerReported);
+        if (!access.administers(issue.buildingId())) {
+            throw new ForbiddenException();
+        }
     }
 
     /**

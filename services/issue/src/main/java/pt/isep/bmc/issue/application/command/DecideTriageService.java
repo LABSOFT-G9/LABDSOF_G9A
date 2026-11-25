@@ -39,7 +39,8 @@ import pt.isep.bmc.issue.domain.membership.BuildingAccess;
  * <ul>
  *   <li>the idempotency key is the first write (see {@link IdempotentExecutor}),
  *       so a retry of a decision that already committed is replayed even
- *       though the issue's version has moved on;</li>
+ *       though the issue's version has moved on. The replay checks the
+ *       caller's permissions again;</li>
  *   <li>the issue row is then locked, so of two administrators who decide
  *       from the same version, the second sees the first one's version and
  *       gets {@code VERSION_CONFLICT}.</li>
@@ -95,7 +96,8 @@ public final class DecideTriageService implements DecideTriageUseCase {
                 command.issueId(), command.expectedVersion(), command.category(), command.urgency(), command.reason());
         // Millisecond precision, so the stored and the returned times are the same.
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
-        return idempotent.execute(scope, requestHash, now, () -> apply(command, scope, requestHash, now), this::replay);
+        return idempotent.execute(scope, requestHash, now, () -> apply(command, scope, requestHash, now),
+                record -> replay(command, record, now));
     }
 
     private TriageReceipt apply(DecideTriageCommand command, IdempotencyScope scope, String requestHash, Instant now) {
@@ -131,8 +133,20 @@ public final class DecideTriageService implements DecideTriageUseCase {
         return receipt(outcome.decision(), false);
     }
 
-    private TriageReceipt replay(IdempotencyRecord record) {
-        TriageDecision decision = decisions.find(new IssueId(record.resourceId()), record.resourceVersion())
+    /**
+     * The stored receipt, for a caller who may still decide this issue's triage.
+     * The key proves who asked first, not what that user may see now: a revoked
+     * administrator gets the same refusal as for a new decision.
+     */
+    private TriageReceipt replay(DecideTriageCommand command, IdempotencyRecord record, Instant now) {
+        IssueId issueId = new IssueId(record.resourceId());
+        Issue issue = issues.find(issueId)
+                .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing issue"));
+        IssueTriage.authorise(
+                BuildingAccess.of(command.actor(), memberships.findByUser(command.actor()), now),
+                issue,
+                reports.existsByIssueAndAuthor(issueId, command.actor()));
+        TriageDecision decision = decisions.find(issueId, record.resourceVersion())
                 .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing decision"));
         return receipt(decision, true);
     }
