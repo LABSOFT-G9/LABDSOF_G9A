@@ -4,5 +4,6 @@
   { "name": "dispatch",     "dir": "services/dispatch",     "language": "maven" },
   { "name": "calendar-sim", "dir": "services/calendar-sim", "language": "maven" },
   { "name": "ai-triage",    "dir": "services/ai-triage",    "language": "python" },
-  { "name": "client",       "dir": "services/client",       "language": "node" }
+  { "name": "client",       "dir": "services/client",       "language": "node" },
+  { "name": "keycloak",     "dir": "infra/keycloak",        "language": "image" }
 ]

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pt.isep.bmc.issue.adapters.in.rest.dto.ProfileResponse;
 import pt.isep.bmc.issue.application.port.in.GetProfileQuery;
 import pt.isep.bmc.issue.application.query.Profile;
+import pt.isep.bmc.issue.domain.membership.PlatformRole;
 
 /**
  * {@code GET /me} (technical design 4.2): the client loads its session from it
@@ -24,10 +25,12 @@ class ProfileController {
 
     @GetMapping(path = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
     ProfileResponse me(@AuthenticationPrincipal Jwt jwt) {
-        Profile profile = getProfile.get(Actors.of(jwt));
+        Profile profile = getProfile.get(Actors.identity(jwt));
         return new ProfileResponse(
                 profile.userId().value(),
                 profile.displayName().orElse(null),
+                profile.email().orElse(null),
+                profile.platformRoles().stream().map(PlatformRole::value).sorted().toList(),
                 profile.memberships().stream()
                         .map(m -> new ProfileResponse.MembershipResponse(
                                 m.membershipId().toString(),

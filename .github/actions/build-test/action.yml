@@ -9,7 +9,7 @@ inputs:
     description: Service folder
     required: true
   language:
-    description: maven, python or node
+    description: maven, python, node or image
     required: true
 
 runs:
@@ -65,9 +65,22 @@ runs:
         npm run build --if-present
         npm test
 
-    - if: inputs.language != 'maven' && inputs.language != 'python' && inputs.language != 'node'
+    # A stock image with configuration baked in (Keycloak with the realm,
+    # infra/keycloak): nothing to compile. Check that every JSON file parses;
+    # the image build and the sign-in job in pr.yml exercise the rest.
+    - if: inputs.language == 'image'
+      name: Validate JSON configuration
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        find . -name '*.json' -print0 | while IFS= read -r -d '' f; do
+          jq empty "$f" || { echo "::error file=${{ inputs.dir }}/${f#./}::Invalid JSON"; exit 1; }
+          echo "ok ${f#./}"
+        done
+
+    - if: inputs.language != 'maven' && inputs.language != 'python' && inputs.language != 'node' && inputs.language != 'image'
       name: Unknown language
       shell: bash
       run: |
-        echo "::error::Unknown language '${{ inputs.language }}' in .github/services.json (use maven, python or node)"
+        echo "::error::Unknown language '${{ inputs.language }}' in .github/services.json (use maven, python, node or image)"
         exit 1

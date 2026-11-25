@@ -19,6 +19,8 @@ public final class Fixtures {
     public static final String ADMIN_B = "0199f2a0-0000-7000-8000-000000000202";
     public static final String REVOKED_ADMIN_A = "0199f2a0-0000-7000-8000-000000000203";
     public static final String CONTRACTOR = "0199f2a0-0000-7000-8000-000000000301";
+    /** A platform staff account: a realm role in the token, no membership. */
+    public static final String PLATFORM_STAFF = "0199f2a0-0000-7000-8000-000000000401";
     /** A valid account with no profile and no membership. */
     public static final String STRANGER = "0199f2a0-0000-7000-8000-000000000999";
 }

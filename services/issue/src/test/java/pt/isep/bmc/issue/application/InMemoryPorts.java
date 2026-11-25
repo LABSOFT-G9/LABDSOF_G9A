@@ -50,6 +50,8 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
     public RuntimeException failNextTransaction;
+    /** When n > 0, the n-th append from now fails. */
+    public int failAppendNumber;
 
     /** One undo journal per open transaction; a nested transaction that commits is not undone by its parent. */
     private final Deque<List<Runnable>> journals = new ArrayDeque<>();
@@ -84,6 +86,11 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     @Override
     public <T> T readOnly(Supplier<T> work) {
         return work.get();
+    }
+
+    @Override
+    public List<Membership> findAll() {
+        return List.copyOf(memberships);
     }
 
     @Override
@@ -125,7 +132,19 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
+    public boolean appendIfAbsent(OutboxEvent event) {
+        if (outbox.stream().anyMatch(existing -> existing.eventId().equals(event.eventId()))) {
+            return false;
+        }
+        append(event);
+        return true;
+    }
+
+    @Override
     public void append(OutboxEvent event) {
+        if (failAppendNumber > 0 && --failAppendNumber == 0) {
+            throw new IllegalStateException("simulated outbox failure");
+        }
         outbox.add(event);
         journal(() -> outbox.remove(event));
     }
