@@ -114,6 +114,10 @@ jobs:
           pr_comment: false
           push: false
           archive: false
+      # The AsyncAPI document names the same events as the .proto files.
+      - if: hashFiles('contracts/proto/**') != ''
+        name: Proto and AsyncAPI agree
+        run: scripts/check-contracts.sh
 
   build-test:
     name: Build and test (${{ matrix.service.name }})

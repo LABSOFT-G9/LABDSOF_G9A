@@ -293,7 +293,7 @@ Alternatives considered: a per-command call to Issue (`GET /internal/issues/{id}
 
 ### 4.4 Event contracts
 
-Envelope as in [5](#5-asynchronous-workflow-and-consistency). On the wire, each event is a CloudEvents 1.0 structured JSON message (E43) published to `bmc.events` with routing key `<producer>.<eventType>`; the EN-01-02 envelope maps one-to-one ([ADR-003](adr/ADR-003-asynchronous-messaging-rabbitmq.md)):
+Envelope as in [5](#5-asynchronous-workflow-and-consistency). The payload schemas are the `.proto` files in [`contracts/proto`](../contracts/proto) and the channels are in [`contracts/asyncapi/asyncapi.yaml`](../contracts/asyncapi/asyncapi.yaml); the [contracts README](../contracts/README.md) has the rules for changing them (added 2026-11-24, EN-02-02). On the wire, each event is a CloudEvents 1.0 structured JSON message (E43) published to `bmc.events` with routing key `<producer>.<eventType>`; the EN-01-02 envelope maps one-to-one ([ADR-003](adr/ADR-003-asynchronous-messaging-rabbitmq.md)):
 
 | Envelope field | CloudEvents attribute |
 |---|---|

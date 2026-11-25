@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// The issue was closed as resolved. Dispatch closes or cancels the active
+// intervention, if any.
+message IssueResolved {
+  string issue_id = 1;
+  // `validated` or `manual`.
+  string resolution_kind = 2;
+  optional string active_intervention_id = 3;
+}

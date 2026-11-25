@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// An administrator published or changed the shared summary of an issue. The
+// text is not in the event; it is read through the API under authorisation.
+message IssueSummaryPublished {
+  string issue_id = 1;
+  string summary_id = 2;
+}
