@@ -252,7 +252,7 @@ function render() {
   if (type !== 'all') message.textContent += ` ${labelGaps} snapshot(s) lack label data.`;
   if ((sprint !== "all" || type !== 'all') && !matched) message.textContent += " No matching issues recorded for this selection.";
   const reconstructed = history.filter(snapshot => snapshot.reconstruction).length;
-  if (reconstructed) message.textContent += ` Includes ${reconstructed} reconstructed planning snapshots (not observed collections); marked in the date labels.`;
+  if (reconstructed) message.textContent += ` Includes ${reconstructed} reconstructed snapshots (planning baseline or filled missed collections; not observed); marked in the date labels.`;
   if (history.length === 1) message.textContent += ' With one snapshot, only points are shown; the flow develops as more snapshots are collected.';
   if (typeof Chart === 'undefined') {
     message.className = 'error';
