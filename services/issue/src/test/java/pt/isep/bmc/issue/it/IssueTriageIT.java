@@ -211,7 +211,7 @@ class IssueTriageIT extends IntegrationTestSupport {
         Map<String, Object> body = triageBody("plumbing", "high", REASON);
         assertThat(triage(ADMIN_A, issueId, "\"1\"", key, body).status()).isEqualTo(200);
 
-        setMembershipStatus(ADMIN_A, "revoked");
+        setAdministratorStatus(ADMIN_A, "revoked");
         try {
             Response retry = triage(ADMIN_A, issueId, "\"1\"", key, body);
 
@@ -220,7 +220,7 @@ class IssueTriageIT extends IntegrationTestSupport {
             assertThat(retry.header("ETag")).isNull();
             assertThat(retry.body()).doesNotContain("plumbing").doesNotContain(REASON);
         } finally {
-            setMembershipStatus(ADMIN_A, "active");
+            setAdministratorStatus(ADMIN_A, "active");
         }
 
         // With the membership back, the same key replays the original receipt; nothing was stored twice.
@@ -254,13 +254,6 @@ class IssueTriageIT extends IntegrationTestSupport {
 
         // A JSON string that looks like a number is still a reason.
         assertThat(triage(ADMIN_A, issueId, 1, "plumbing", "high", "12345").status()).isEqualTo(200);
-    }
-
-    private void setMembershipStatus(String sub, String status) {
-        jdbc.sql("UPDATE memberships SET status = :status WHERE user_id = :user AND role = 'administrator'")
-                .param("status", status)
-                .param("user", sub)
-                .update();
     }
 
     /** Repeated: a lock or deadlock problem shows up as a 503 in some runs only. */

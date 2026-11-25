@@ -92,6 +92,18 @@ public abstract class IntegrationTestSupport {
         return api.postWithHeaders("/issues/" + issueId + "/triage", tokens.token(sub), headers, body);
     }
 
+    /**
+     * Revokes or restores the administrator memberships of {@code sub}. The
+     * fixtures do not reset memberships, so a test that revokes restores in a
+     * {@code finally}.
+     */
+    protected void setAdministratorStatus(String sub, String status) {
+        jdbc.sql("UPDATE memberships SET status = :status WHERE user_id = :user AND role = 'administrator'")
+                .param("status", status)
+                .param("user", sub)
+                .update();
+    }
+
     protected Map<String, Object> triageBody(String category, String urgency, String reason) {
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("category", category);
