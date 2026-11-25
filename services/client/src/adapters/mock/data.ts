@@ -110,10 +110,14 @@ export const PERSONAS: readonly MockPersona[] = [
 const hoursAgo = (now: Date, hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
 
 /** An issue as the mock Issue service stores it: the full record, before projecting it for the caller. */
-export interface MockIssueRecord extends Issue {
+export interface MockIssueRecord extends Omit<Issue, "impact" | "subscribed"> {
   /** Users whose reports belong to this issue: they may follow it. */
   readonly reporterIds: readonly string[];
   readonly history: readonly HistoryEntry[];
+  /** Residents who said the issue affects them (US-04). The service exposes only the count. */
+  readonly impactUserIds?: readonly string[];
+  /** Users subscribed to the issue's notifications (US-04). */
+  readonly subscriberIds?: readonly string[];
 }
 
 const issueId = (suffix: string) => `0199f2a1-0000-7000-8000-${suffix}`;
@@ -172,14 +176,24 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       ...BUILDINGS.a,
       areaLabel: "Garage level -1",
       state: "received",
-      version: 1,
+      version: 2,
       createdAt: at(20),
       triage: null,
       suggestion: null,
       // The critical check has not finished: never read as "nothing found" (#96).
       criticalCheck: { status: "pending", rulesVersion: null, signals: [] },
+      // US-04: shared with Building A's residents. The report text stays private; only this summary is shown.
+      summary: {
+        text: "The garage door on level -1 does not close fully. The administrator is arranging a repair.",
+        publishedAt: at(18),
+      },
       reporterIds: [residentA2],
-      history: [received(20)],
+      impactUserIds: [residentA2],
+      subscriberIds: [residentA2],
+      history: [
+        received(20),
+        entry(2, { type: "summary_published", visibility: "public", actorRole: "administrator", occurredAt: at(18) }),
+      ],
     },
     {
       issueId: issueId("000000002003"),

@@ -5,6 +5,8 @@ import {
   type HistoryEntry,
   type Issue,
   type IssueState,
+  type PublicationResult,
+  PublicationRequestSchema,
   type Report,
   type ReportReceipt,
   type ReportSummary,
@@ -66,14 +68,28 @@ export function mockIssueApi(
 
   const mayReadReport = (me: Session | null, report: StoredReport) =>
     !me || report.authorId === me.sub || administers(me, report.buildingId);
+  /** Administrators, the issue's reporters and, once a summary is published, every member of the building (US-04). */
   const mayReadIssue = (me: Session | null, issue: IssueRecord) =>
-    administers(me, issue.buildingId) || (!!me && issue.reporterIds.includes(me.sub));
+    administers(me, issue.buildingId) ||
+    (!!me && issue.reporterIds.includes(me.sub)) ||
+    (!!issue.summary && !!roleIn(me, issue.buildingId));
 
-  /** What a role may see of an issue: residents get no suggestion, no critical alert and no reason. */
-  function project(me: Session | null, { reporterIds: _r, history: _h, ...issue }: IssueRecord): Issue {
-    if (administers(me, issue.buildingId)) return issue;
+  /**
+   * What a role may see of an issue: residents get no suggestion, no critical alert and no reason. Everyone gets the
+   * impact as a count (never who) and their own subscription.
+   */
+  function project(
+    me: Session | null,
+    { reporterIds: _r, history: _h, impactUserIds = [], subscriberIds = [], ...issue }: IssueRecord,
+  ): Issue {
+    const own = {
+      impact: issue.summary ? { count: impactUserIds.length, mine: !!me && impactUserIds.includes(me.sub) } : null,
+      subscribed: !!me && subscriberIds.includes(me.sub),
+    };
+    if (administers(me, issue.buildingId)) return { ...issue, ...own };
     return {
       ...issue,
+      ...own,
       suggestion: null,
       criticalCheck: null,
       triage: issue.triage && { ...issue.triage, reason: null },
@@ -292,6 +308,82 @@ export function mockIssueApi(
           ];
           return { issueId, state: issue.state, version: issue.version, category, urgency, decisionSource: "human" };
         });
+      }),
+
+    publish: (issueId, version, publication, idempotencyKey) =>
+      runtime.call(() => {
+        const me = caller();
+        const issue = findIssue(me, issueId);
+        if (!administers(me, issue.buildingId)) {
+          throw new ApiError(
+            403,
+            "FORBIDDEN",
+            "Only the building's administrators may publish.",
+            "mock-correlation-id",
+          );
+        }
+        const parsed = PublicationRequestSchema.safeParse(publication);
+        if (!parsed.success) throw validationError(parsed.error.issues);
+        const body = { version, ...parsed.data };
+        return idempotent(me, `publish:${issueId}`, idempotencyKey, body, (): PublicationResult => {
+          if (version !== issue.version) {
+            throw new ApiError(
+              409,
+              "VERSION_CONFLICT",
+              "The issue changed since you loaded it.",
+              "mock-correlation-id",
+              {
+                currentVersion: issue.version,
+                currentState: issue.state,
+              },
+            );
+          }
+          const publishedAt = clock.now().toISOString();
+          issue.summary = { text: parsed.data.summary, publishedAt };
+          issue.version += 1;
+          issue.history = [
+            ...issue.history,
+            {
+              sequence: issue.history.length + 1,
+              type: "summary_published",
+              visibility: "public",
+              actorRole: "administrator",
+              occurredAt: publishedAt,
+            },
+          ];
+          return { issueId, version: issue.version, summary: issue.summary };
+        });
+      }),
+
+    setImpact: (issueId, affected) =>
+      runtime.call(() => {
+        const me = caller();
+        const issue = findIssue(me, issueId);
+        // Residents of the building confirm impact on a published issue; nobody else, and never for someone else.
+        if (!me || roleIn(me, issue.buildingId) !== "resident") {
+          throw new ApiError(403, "FORBIDDEN", "Only the building's residents confirm impact.", "mock-correlation-id");
+        }
+        if (!issue.summary) {
+          throw new ApiError(
+            409,
+            "NOT_PUBLISHED",
+            "This issue is not shared with the building.",
+            "mock-correlation-id",
+          );
+        }
+        const others = (issue.impactUserIds ?? []).filter((userId) => userId !== me.sub);
+        issue.impactUserIds = affected ? [...others, me.sub] : others;
+        return { count: issue.impactUserIds.length, mine: affected };
+      }),
+
+    setSubscription: (issueId, subscribed) =>
+      runtime.call(() => {
+        const me = caller();
+        const issue = findIssue(me, issueId);
+        if (!me) throw new ApiError(403, "FORBIDDEN", "Sign in to subscribe.", "mock-correlation-id");
+        const others = (issue.subscriberIds ?? []).filter((userId) => userId !== me.sub);
+        issue.subscriberIds = subscribed ? [...others, me.sub] : others;
+        return { subscribed };
       }),
   };
 }

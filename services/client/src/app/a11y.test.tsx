@@ -43,6 +43,8 @@ describe("accessibility (axe)", () => {
     // Critical alert, fallback suggestion with its failure, and the "triage pending" notice (US-03-02).
     ["/issues/0199f2a1-0000-7000-8000-000000002005", "administrator-b", "Garage"],
     ["/issues/0199f2a1-0000-7000-8000-000000002002", "administrator-a", "Garage level -1"],
+    // US-04-02: the shared summary, impact and subscription controls.
+    ["/issues/0199f2a1-0000-7000-8000-000000002002", "resident-a1", "Garage level -1"],
     ["/reports", "resident-a1", "Reports"],
     ["/reports/new", "resident-a1", "Report a fault"],
     ["/settings", "resident-a1", "Settings"],

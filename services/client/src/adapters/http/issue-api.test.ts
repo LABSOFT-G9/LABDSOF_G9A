@@ -175,3 +175,50 @@ describe("httpIssueApi (US-01 reports)", () => {
     });
   });
 });
+
+describe("httpIssueApi (US-04 shared issue)", () => {
+  it("publishes the summary with If-Match and an Idempotency-Key", async () => {
+    const result = {
+      issueId: "i1",
+      version: 4,
+      summary: { text: "The garage door does not close fully.", publishedAt: "2026-11-24T10:00:00Z" },
+    };
+    const { api, fetcher } = setup(result);
+    await expect(api.publish("i1", 3, { summary: "The garage door does not close fully." }, "k-1")).resolves.toEqual(
+      result,
+    );
+    const { url, init, headers } = lastCall(fetcher);
+    expect(url).toBe("/api/issue/issues/i1/publication");
+    expect(init.method).toBe("POST");
+    expect(headers.get("If-Match")).toBe('"3"');
+    expect(headers.get("Idempotency-Key")).toBe("k-1");
+    expect(JSON.parse(init.body as string)).toEqual({ summary: "The garage door does not close fully." });
+  });
+
+  it.each([
+    [true, "PUT"],
+    [false, "DELETE"],
+  ])("sets the caller's impact (%s) with %s and reads the new count", async (affected, method) => {
+    const { api, fetcher } = setup({ count: 2, mine: affected });
+    await expect(api.setImpact("i1", affected)).resolves.toEqual({ count: 2, mine: affected });
+    const { url, init } = lastCall(fetcher);
+    expect(url).toBe("/api/issue/issues/i1/impact");
+    expect(init.method).toBe(method);
+  });
+
+  it.each([
+    [true, "PUT"],
+    [false, "DELETE"],
+  ])("sets the caller's subscription (%s) with %s", async (subscribed, method) => {
+    const { api, fetcher } = setup({ subscribed });
+    await expect(api.setSubscription("i1", subscribed)).resolves.toEqual({ subscribed });
+    const { url, init } = lastCall(fetcher);
+    expect(url).toBe("/api/issue/issues/i1/subscription");
+    expect(init.method).toBe(method);
+  });
+
+  it("refuses an impact answer that breaks the contract", async () => {
+    const { api } = setup({ count: "two", mine: true });
+    await expect(api.setImpact("i1", true)).rejects.toMatchObject({ name: "ContractError" });
+  });
+});

@@ -234,6 +234,12 @@ keyboard pass each UI story records in its PR.
   asked again every 10 seconds. US-14-03 adds `rulesVersion` and `modelVersion` on the suggestion (agreed on #108),
   `origin` and `applied` on `triage_suggested` history entries (#108), and one `critical_alert_raised` entry per
   signal, with its `code` (#96).
+- US-04-02 (shared issue) is built on ASSUMPTION shapes until US-04-01 (#89) defines them: `summary`, `impact`
+  (`{count, mine}`) and `subscribed` on the issue; `POST /issues/{id}/publication` (`If-Match`, answers the new
+  version and summary); `PUT`/`DELETE /issues/{id}/impact` (answers the count) and `/subscription` (answers
+  `{subscribed}`); the `summary_published` history type; and residents of the building seeing shared issues in
+  `GET /issues`. All are optional, so the service as it is today still parses. Publishing moves the issue version, so
+  an open triage form then offers to reload.
 - `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
   HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
 - The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead

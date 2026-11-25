@@ -7,6 +7,7 @@ import { hasBuildingRole, useSession } from "@/features/auth";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
+import { PublishSummary, SharedIssuePanel } from "@/features/issues/shared-issue";
 import { CriticalCheckBanner, SuggestionPanel } from "@/features/issues/suggestion-panel";
 import { TriageForm } from "@/features/issues/triage-form";
 import { TriageBadge } from "@/features/issues/triage-status";
@@ -87,6 +88,20 @@ export function IssuePage({ issueId }: { issueId: string }) {
             <Card>
               <CardContent>
                 <TriageForm issue={issue} intro={<SuggestionPanel issue={issue} now={now} />} />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {isAdministrator ? (
+            <Card>
+              <CardContent>
+                <PublishSummary issue={issue} />
+              </CardContent>
+            </Card>
+          ) : issue.summary ? (
+            <Card>
+              <CardContent>
+                <SharedIssuePanel issue={issue} canConfirm={hasBuildingRole(session, issue.buildingId, "resident")} />
               </CardContent>
             </Card>
           ) : null}

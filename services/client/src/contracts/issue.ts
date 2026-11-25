@@ -161,6 +161,57 @@ export type CriticalCheck = z.infer<typeof CriticalCheckSchema>;
  */
 export const TRIAGE_PENDING_AFTER_MS = 2 * 60_000;
 
+/*
+ * Shared issue, impact and subscription (US-04). Paths from technical design §4.2 and the US-04 story:
+ * `POST /issues/{id}/publication`, `PUT`/`DELETE /issues/{id}/impact`, `PUT`/`DELETE /issues/{id}/subscription`.
+ * ASSUMPTION: every shape below, until US-04-01 (#89) defines them. All issue fields are optional, so the service as it
+ * is today still parses.
+ */
+
+/** The administrator's reviewed summary, the only text residents of the building see (never the report text). */
+export const SharedSummarySchema = z.object({
+  text: z.string(),
+  publishedAt: z.iso.datetime({ offset: true }),
+});
+export type SharedSummary = z.infer<typeof SharedSummarySchema>;
+
+/** How many residents said the issue affects them, and whether the caller did. A count only: never who (US-04). */
+export const ImpactSchema = z.object({
+  count: z.number().int().nonnegative(),
+  mine: z.boolean(),
+});
+export type Impact = z.infer<typeof ImpactSchema>;
+
+/** `200` of `PUT`/`DELETE /issues/{id}/subscription`: the caller's own choice, off by default. */
+export const SubscriptionSchema = z.object({ subscribed: z.boolean() });
+export type Subscription = z.infer<typeof SubscriptionSchema>;
+
+export const SUMMARY_MIN = 10;
+export const SUMMARY_MAX = 500;
+
+/** Body of `POST /issues/{id}/publication`: plain text of 10-500 characters, trimmed, no control characters. */
+export const PublicationRequestSchema = z.object({
+  summary: z
+    .string()
+    .trim()
+    .superRefine((summary, ctx) => {
+      const length = codePointLength(summary);
+      if (length === 0) ctx.addIssue({ code: "custom", message: "required" });
+      else if (length < SUMMARY_MIN) ctx.addIssue({ code: "custom", message: "too_short" });
+      else if (length > SUMMARY_MAX) ctx.addIssue({ code: "custom", message: "too_long" });
+      else if (hasForbiddenCharacter(summary)) ctx.addIssue({ code: "custom", message: "invalid_characters" });
+    }),
+});
+export type PublicationRequest = z.infer<typeof PublicationRequestSchema>;
+
+/** `200` of `POST /issues/{id}/publication`. Publishing changes the issue, so it moves the version. */
+export const PublicationResultSchema = z.object({
+  issueId: z.string(),
+  version: z.number().int(),
+  summary: SharedSummarySchema,
+});
+export type PublicationResult = z.infer<typeof PublicationResultSchema>;
+
 /** One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role. */
 export const IssueSchema = z.object({
   issueId: z.string(),
@@ -175,6 +226,12 @@ export const IssueSchema = z.object({
   triage: TriageDecisionSchema.nullable(),
   suggestion: TriageSuggestionSchema.nullable(),
   criticalCheck: CriticalCheckSchema.nullish(),
+  /** Published to the building's residents (US-04). Absent or `null` while unpublished. */
+  summary: SharedSummarySchema.nullish(),
+  /** With a published summary: the impact count, and whether the caller confirmed. */
+  impact: ImpactSchema.nullish(),
+  /** The caller's own notification subscription to this issue (US-04, used by US-10). */
+  subscribed: z.boolean().optional(),
 });
 export type Issue = z.infer<typeof IssueSchema>;
 
@@ -196,7 +253,7 @@ export type HistoryActor = z.infer<typeof HistoryActorSchema>;
 
 /**
  * Entry types the client explains. The first three exist in the service (#140); `critical_alert_raised` is an
- * ASSUMPTION for US-14-02 (#96), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
+ * ASSUMPTION for US-14-02 (#96), `summary_published` one for US-04-01 (#89), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
  * (technical design §3.3). Any other type is
  * still shown, as a generic update, so a new type never breaks the page.
  */
@@ -205,6 +262,7 @@ export const KNOWN_HISTORY_TYPES = [
   "triage_suggested",
   "triage_decided",
   "critical_alert_raised",
+  "summary_published",
   "intervention_approved",
   "contractor_accepted",
   "contractor_declined",
