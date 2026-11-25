@@ -498,6 +498,27 @@ describe("suggestion (US-03-02)", () => {
     expect(screen.getByRole("combobox", { name: "Category" })).toBeEnabled();
   });
 
+  it("moves from waiting to triage pending on an open page, once the 2 minutes pass and the poll answers", async () => {
+    // From Martim's probe on #144: the poll gets an identical answer, which alone did not re-render the page.
+    signInAs("administrator-a");
+    let now = new Date(NOW.getTime() + 110_000); // 1 min 50 s after the report
+    const getIssue = vi.fn(async () => stubbed({})); // a fresh but identical answer each time, like the network
+    const { router } = renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }) }),
+        clock: { now: () => now },
+      },
+    });
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+
+    now = new Date(NOW.getTime() + 130_000); // 2 min 10 s
+    const calls = getIssue.mock.calls.length;
+    await router.options.context.queryClient.refetchQueries(); // what the 10 s poll does
+    await waitFor(() => expect(getIssue.mock.calls.length).toBeGreaterThan(calls));
+    await screen.findByText("Triage pending — classify manually");
+    expect(screen.queryByText("Waiting for a suggestion. You can decide now without it.")).not.toBeInTheDocument();
+  });
+
   it("shows the explanation as plain text and an unknown failure in general words", async () => {
     signInAs("administrator-a");
     renderStubbed(
