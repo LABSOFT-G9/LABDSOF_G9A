@@ -7,6 +7,7 @@ import pt.isep.bmc.issue.application.query.IssueListCriteria;
 import pt.isep.bmc.issue.application.query.IssuePage;
 import pt.isep.bmc.issue.application.query.IssueView;
 import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.membership.UserId;
 
 /**
  * Query side for issues: projections over the issue, its area and building,
@@ -15,8 +16,13 @@ import pt.isep.bmc.issue.domain.issue.IssueId;
  */
 public interface IssueReadModel {
 
-    /** The issue with its current decision, reason included. */
-    Optional<IssueView> findView(IssueId id);
+    /**
+     * The issue with its current decision, reason included, its published
+     * summary and impact count.
+     *
+     * @param caller whose own impact confirmation and subscription the view shows
+     */
+    Optional<IssueView> findView(IssueId id, UserId caller);
 
     /** Issues matching the criteria, newest first, without triage reasons. */
     IssuePage list(IssueListCriteria criteria);

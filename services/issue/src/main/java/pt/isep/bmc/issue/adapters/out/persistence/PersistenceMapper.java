@@ -12,6 +12,8 @@ import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SuggestionOrigin;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import pt.isep.bmc.issue.domain.issue.TriageReason;
 import pt.isep.bmc.issue.domain.membership.Membership;
@@ -40,6 +42,7 @@ final class PersistenceMapper {
         entity.category = issue.category().map(IssueCategory::value).orElse(null);
         entity.urgency = issue.urgency().map(IssueUrgency::value).orElse(null);
         entity.criticalCheckStatus = issue.criticalCheckStatus().value();
+        entity.publishedSummaryId = issue.publishedSummaryId().map(SummaryId::toString).orElse(null);
         entity.createdAt = Timestamps.toColumn(issue.createdAt());
         entity.updatedAt = Timestamps.toColumn(issue.updatedAt());
         return entity;
@@ -55,6 +58,7 @@ final class PersistenceMapper {
                 entity.category == null ? null : category(entity.category),
                 entity.urgency == null ? null : urgency(entity.urgency),
                 CriticalCheckStatus.fromValue(entity.criticalCheckStatus),
+                entity.publishedSummaryId == null ? null : new SummaryId(UUID.fromString(entity.publishedSummaryId)),
                 Timestamps.fromColumn(entity.createdAt),
                 Timestamps.fromColumn(entity.updatedAt));
     }
@@ -90,6 +94,11 @@ final class PersistenceMapper {
     static IssueUrgency urgency(String stored) {
         return IssueUrgency.fromValue(stored)
                 .orElseThrow(() -> new IllegalStateException("unknown stored urgency"));
+    }
+
+    static SuggestionOrigin origin(String stored) {
+        return SuggestionOrigin.fromValue(stored)
+                .orElseThrow(() -> new IllegalStateException("unknown stored suggestion origin"));
     }
 
     static ReportEntity toEntity(Report report) {

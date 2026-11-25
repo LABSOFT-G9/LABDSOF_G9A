@@ -17,6 +17,7 @@ import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 import pt.isep.bmc.issue.domain.shared.InvalidTransitionException;
 import pt.isep.bmc.issue.domain.shared.VersionConflictException;
 
@@ -92,7 +93,7 @@ class IssueTest {
     }
 
     @Test
-    void aSuggestionForTheCurrentVersionMovesAReceivedIssueToInTriageWithoutDecidingAnything() {
+    void aSuggestionForTheRequestedVersionMovesAReceivedIssueToInTriageWithoutDecidingAnything() {
         Optional<Issue> next = issue(IssueState.RECEIVED, 1).suggestTriage(1, LATER);
 
         assertThat(next).isPresent();
@@ -108,9 +109,9 @@ class IssueTest {
         Issue received = Issue.receive(ID, BUILDING, AREA, CREATED);
         Issue decided = received.decideTriage(1, IssueCategory.ELECTRICAL, IssueUrgency.CRITICAL, LATER);
 
-        // The suggestion was computed from version 1; the issue is now version 2 and triaged.
+        // The suggestion answers the request (version 1), but the issue is now triaged.
         assertThat(decided.suggestTriage(1, LATER.plusSeconds(60))).isEmpty();
-        // Even a suggestion that names the current version changes nothing after a decision.
+        // Naming the current version changes nothing either.
         assertThat(decided.suggestTriage(2, LATER.plusSeconds(60))).isEmpty();
         assertThat(decided.category()).contains(IssueCategory.ELECTRICAL);
         assertThat(decided.urgency()).contains(IssueUrgency.CRITICAL);
@@ -120,12 +121,33 @@ class IssueTest {
     @ParameterizedTest
     @EnumSource(value = IssueState.class, names = "RECEIVED", mode = EnumSource.Mode.EXCLUDE)
     void aSuggestionChangesNothingOutsideReceived(IssueState state) {
+        assertThat(issue(state, 5).suggestTriage(1, LATER)).isEmpty();
         assertThat(issue(state, 5).suggestTriage(5, LATER)).isEmpty();
     }
 
+    /** The request names version 1 ({@code TriageRequested}); nothing else was ever asked for. */
     @Test
-    void aSuggestionForAnOlderVersionIsIgnored() {
+    void aSuggestionThatNamesAVersionTriageWasNotAskedForIsIgnored() {
+        assertThat(Issue.receive(ID, BUILDING, AREA, CREATED).triageRequestVersion()).isEqualTo(1);
         assertThat(issue(IssueState.RECEIVED, 3).suggestTriage(2, LATER)).isEmpty();
+        assertThat(issue(IssueState.RECEIVED, 3).suggestTriage(3, LATER)).isEmpty();
+        assertThat(issue(IssueState.RECEIVED, 1).suggestTriage(2, LATER)).isEmpty();
+    }
+
+    /** A summary moves the version but not the report the suggestion was computed from. */
+    @Test
+    void aSummaryPublishedFirstDoesNotMakeTheSuggestionLate() {
+        SummaryId summary = new SummaryId(UUID.randomUUID());
+        Issue shared = Issue.receive(ID, BUILDING, AREA, CREATED).publishSummary(1, summary, LATER);
+        assertThat(shared.version()).isEqualTo(2);
+
+        Optional<Issue> next = shared.suggestTriage(1, LATER.plusSeconds(60));
+
+        assertThat(next).isPresent();
+        assertThat(next.get().state()).isEqualTo(IssueState.IN_TRIAGE);
+        assertThat(next.get().version()).isEqualTo(3);
+        assertThat(next.get().publishedSummaryId()).contains(summary);
+        assertThat(next.get().category()).isEmpty();
     }
 
     @Test

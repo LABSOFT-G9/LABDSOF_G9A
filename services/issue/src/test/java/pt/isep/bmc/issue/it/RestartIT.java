@@ -13,6 +13,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.mysql.MySQLContainer;
 import pt.isep.bmc.issue.IssueApplication;
+import pt.isep.bmc.issue.application.command.RecordTriageSuggestionCommand;
+import pt.isep.bmc.issue.application.command.SuggestionResult;
+import pt.isep.bmc.issue.application.port.in.RecordTriageSuggestionUseCase;
+import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.issue.SuggestionInput;
 import pt.isep.bmc.issue.support.Api;
 import pt.isep.bmc.issue.support.TestDatabase;
 import pt.isep.bmc.issue.support.TestTokens;
@@ -80,6 +85,90 @@ class RestartIT {
                     Map.of("category", "electrical", "urgency", "critical", "reason", reason));
             assertThat(next.status()).isEqualTo(200);
             assertThat(next.json()).containsEntry("version", 3);
+        }
+    }
+
+    /** US-03: the suggestion and its history entry are still there after a restart, and the same event is not recorded twice. */
+    @Test
+    void suggestionSurvivesARestart() throws Exception {
+        MySQLContainer mysql = TestDatabase.shared();
+        TestTokens tokens = TestTokens.get();
+        String rationale = "Restart check: the report mentions a leak.";
+        UUID eventId = UUID.randomUUID();
+        String issueId;
+        try (ConfigurableApplicationContext first = start(mysql)) {
+            try (var connection = first.getBean(javax.sql.DataSource.class).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us01-fixtures.sql"));
+            }
+            var created = api(first).post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                    Map.of("buildingId", BUILDING_A, "areaId", AREA_A_GARAGE, "text", "Restart check for suggestions, garage."));
+            issueId = (String) created.json().get("issueId");
+            assertThat(suggest(first, issueId, eventId, rationale)).isEqualTo(SuggestionResult.APPLIED);
+        }
+        try (ConfigurableApplicationContext second = start(mysql)) {
+            // The broker delivers the event again after the restart.
+            assertThat(suggest(second, issueId, eventId, rationale)).isEqualTo(SuggestionResult.DUPLICATE);
+
+            var issue = api(second).get("/issues/" + issueId, tokens.token(ADMIN_A));
+            assertThat(issue.status()).isEqualTo(200);
+            assertThat(issue.json()).containsEntry("state", "in_triage").containsEntry("version", 2);
+            assertThat((Map<?, ?>) issue.json().get("suggestion")).extracting("category", "urgency", "origin", "rationale")
+                    .containsExactly("plumbing", "high", "rules", rationale);
+            var history = api(second).get("/issues/" + issueId + "/history", tokens.token(ADMIN_A));
+            assertThat((java.util.List<?>) history.json().get("items")).hasSize(2);
+
+            // A decision continues from the stored version.
+            var decided = api(second).postWithHeaders("/issues/" + issueId + "/triage", tokens.token(ADMIN_A),
+                    Map.of("If-Match", "\"2\"", "Idempotency-Key", UUID.randomUUID().toString()),
+                    Map.of("category", "plumbing", "urgency", "high", "reason", "Confirmed on site"));
+            assertThat(decided.status()).isEqualTo(200);
+            assertThat(decided.json()).containsEntry("version", 3);
+        }
+    }
+
+    private static SuggestionResult suggest(ConfigurableApplicationContext context, String issueId, UUID eventId, String rationale) {
+        return context.getBean(RecordTriageSuggestionUseCase.class).record(new RecordTriageSuggestionCommand(
+                new IssueId(UUID.fromString(issueId)),
+                new SuggestionInput(eventId, 1, "plumbing", "high", rationale, false, "rules", null, null, "rules-v1", null, null),
+                "corr-restart-it"));
+    }
+
+    /** US-04: the summary, a resident's impact confirmation and their subscription are still there after a restart. */
+    @Test
+    void summaryImpactAndSubscriptionSurviveARestart() throws Exception {
+        MySQLContainer mysql = TestDatabase.shared();
+        TestTokens tokens = TestTokens.get();
+        String summary = "Restart check: the garage door does not close fully.";
+        String issueId;
+
+        try (ConfigurableApplicationContext first = start(mysql)) {
+            try (var connection = first.getBean(javax.sql.DataSource.class).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us01-fixtures.sql"));
+            }
+            Api api = api(first);
+            var created = api.post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                    Map.of("buildingId", BUILDING_A, "areaId", AREA_A_GARAGE, "text", "Restart check for sharing, garage."));
+            issueId = (String) created.json().get("issueId");
+            var published = api.postWithHeaders("/issues/" + issueId + "/publication", tokens.token(ADMIN_A),
+                    Map.of("If-Match", "\"1\"", "Idempotency-Key", UUID.randomUUID().toString()),
+                    Map.of("summary", summary));
+            assertThat(published.status()).isEqualTo(200);
+            assertThat(api.method("PUT", "/issues/" + issueId + "/impact", tokens.token(RESIDENT_A2), null).status())
+                    .isEqualTo(200);
+            assertThat(api.method("PUT", "/issues/" + issueId + "/subscription", tokens.token(RESIDENT_A2), null)
+                    .status()).isEqualTo(200);
+        }
+
+        try (ConfigurableApplicationContext second = start(mysql)) {
+            var issue = api(second).get("/issues/" + issueId, tokens.token(RESIDENT_A2));
+            assertThat(issue.status()).isEqualTo(200);
+            assertThat(issue.json()).containsEntry("version", 2).containsEntry("subscribed", true);
+            assertThat((Map<?, ?>) issue.json().get("summary")).extracting("text").isEqualTo(summary);
+            assertThat(issue.json().get("impact")).isEqualTo(Map.of("count", 1, "mine", true));
+            // The other resident's own choices are theirs: nothing confirmed, not subscribed.
+            var other = api(second).get("/issues/" + issueId, tokens.token(RESIDENT_A1));
+            assertThat(other.json()).containsEntry("subscribed", false);
+            assertThat(other.json().get("impact")).isEqualTo(Map.of("count", 1, "mine", false));
         }
     }
 

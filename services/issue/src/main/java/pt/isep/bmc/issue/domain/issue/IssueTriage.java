@@ -84,7 +84,7 @@ public final class IssueTriage {
      * @param callerReported whether the caller authored a report of this issue
      */
     public static void authorise(BuildingAccess access, Issue issue, boolean callerReported) {
-        if (!access.canViewIssue(issue.buildingId(), callerReported)) {
+        if (!access.canViewIssue(issue.buildingId(), callerReported, issue.isPublished())) {
             throw new AccessDeniedException();
         }
         if (!access.administers(issue.buildingId())) {

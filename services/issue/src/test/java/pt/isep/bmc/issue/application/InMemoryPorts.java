@@ -24,6 +24,7 @@ import pt.isep.bmc.issue.application.port.out.OutboxEvent;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
+import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
 import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
@@ -31,6 +32,7 @@ import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
+import pt.isep.bmc.issue.domain.issue.TriageSuggestion;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.UserId;
 import pt.isep.bmc.issue.domain.report.Report;
@@ -41,7 +43,8 @@ import pt.isep.bmc.issue.domain.report.ReportId;
  * writes of a transaction whose work throws, like a real rollback.
  */
 public final class InMemoryPorts implements TransactionRunner, MembershipRepository, BuildingRepository,
-        IssueRepository, ReportRepository, TriageDecisionRepository, EventOutbox, IdempotencyStore, IdGenerator {
+        IssueRepository, ReportRepository, TriageDecisionRepository, TriageSuggestionRepository, EventOutbox,
+        IdempotencyStore, IdGenerator {
 
     public final List<Membership> memberships = new ArrayList<>();
     public final Map<AreaId, Area> areas = new HashMap<>();
@@ -51,6 +54,7 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public final List<OutboxEvent> outbox = new ArrayList<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     public final List<TriageDecision> decisions = new ArrayList<>();
+    public final List<TriageSuggestion> suggestions = new ArrayList<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
     public RuntimeException failNextTransaction;
@@ -152,6 +156,17 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
         return decisions.stream()
                 .filter(d -> d.issueId().equals(issueId) && d.resultingVersion() == resultingVersion)
                 .findFirst();
+    }
+
+    @Override
+    public boolean existsByEventId(UUID eventId) {
+        return suggestions.stream().anyMatch(suggestion -> suggestion.eventId().equals(eventId));
+    }
+
+    @Override
+    public void add(TriageSuggestion suggestion) {
+        suggestions.add(suggestion);
+        journal(() -> suggestions.remove(suggestion));
     }
 
     @Override

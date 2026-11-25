@@ -4,21 +4,29 @@ import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import pt.isep.bmc.issue.application.command.DecideTriageService;
+import pt.isep.bmc.issue.application.command.ImpactService;
 import pt.isep.bmc.issue.application.command.MembershipAnnouncementService;
+import pt.isep.bmc.issue.application.command.PublishSummaryService;
 import pt.isep.bmc.issue.application.command.PurgeExpiredIdempotencyKeysService;
+import pt.isep.bmc.issue.application.command.RecordTriageSuggestionService;
 import pt.isep.bmc.issue.application.command.SubmitReportService;
+import pt.isep.bmc.issue.application.command.SubscriptionService;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
 import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
+import pt.isep.bmc.issue.application.port.out.ImpactRepository;
 import pt.isep.bmc.issue.application.port.out.IssueReadModel;
 import pt.isep.bmc.issue.application.port.out.IssueRepository;
 import pt.isep.bmc.issue.application.port.out.MembershipRepository;
 import pt.isep.bmc.issue.application.port.out.ProfileReadModel;
 import pt.isep.bmc.issue.application.port.out.ReportReadModel;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
+import pt.isep.bmc.issue.application.port.out.SubscriptionRepository;
+import pt.isep.bmc.issue.application.port.out.SummaryRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
+import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
 import pt.isep.bmc.issue.application.query.BuildingAreasQueryService;
 import pt.isep.bmc.issue.application.query.IssueQueryService;
 import pt.isep.bmc.issue.application.query.ProfileQueryService;
@@ -69,6 +77,56 @@ class UseCaseConfig {
             Clock clock) {
         return new DecideTriageService(
                 transactions, memberships, buildings, issues, reports, decisions, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    RecordTriageSuggestionService recordTriageSuggestionService(
+            TransactionRunner transactions,
+            BuildingRepository buildings,
+            IssueRepository issues,
+            TriageSuggestionRepository suggestions,
+            EventOutbox outbox,
+            IdGenerator ids,
+            Clock clock) {
+        return new RecordTriageSuggestionService(transactions, buildings, issues, suggestions, outbox, ids, clock);
+    }
+
+    @Bean
+    PublishSummaryService publishSummaryService(
+            TransactionRunner transactions,
+            MembershipRepository memberships,
+            BuildingRepository buildings,
+            IssueRepository issues,
+            ReportRepository reports,
+            SummaryRepository summaries,
+            EventOutbox outbox,
+            IdempotencyStore idempotency,
+            IdGenerator ids,
+            Clock clock) {
+        return new PublishSummaryService(
+                transactions, memberships, buildings, issues, reports, summaries, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    ImpactService impactService(
+            TransactionRunner transactions,
+            MembershipRepository memberships,
+            IssueRepository issues,
+            ReportRepository reports,
+            ImpactRepository impacts,
+            Clock clock) {
+        return new ImpactService(transactions, memberships, issues, reports, impacts, clock);
+    }
+
+    @Bean
+    SubscriptionService subscriptionService(
+            TransactionRunner transactions,
+            MembershipRepository memberships,
+            IssueRepository issues,
+            ReportRepository reports,
+            SubscriptionRepository subscriptions,
+            Clock clock) {
+        return new SubscriptionService(transactions, memberships, issues, reports, subscriptions, clock);
     }
 
     @Bean

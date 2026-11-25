@@ -55,9 +55,24 @@ public record IssueHistoryEntry(
                 ROLE_ADMINISTRATOR, triaged.version(), triaged.updatedAt());
     }
 
-    /** An unconfirmed suggestion moved the issue to {@code in_triage}. Internal. */
-    public static IssueHistoryEntry triageSuggested(Issue inTriage, int sequence) {
-        return new IssueHistoryEntry(inTriage.id(), sequence, HistoryEntryType.TRIAGE_SUGGESTED,
-                HistoryVisibility.INTERNAL, ROLE_SYSTEM, inTriage.version(), inTriage.updatedAt());
+    /**
+     * An administrator published or replaced the shared summary. Public: it
+     * is the moment the residents of the building can see the issue.
+     */
+    public static IssueHistoryEntry summaryPublished(Issue published, int sequence) {
+        return new IssueHistoryEntry(published.id(), sequence, HistoryEntryType.SUMMARY_PUBLISHED,
+                HistoryVisibility.PUBLIC, ROLE_ADMINISTRATOR, published.version(), published.updatedAt());
+    }
+
+    /**
+     * A triage suggestion arrived. Internal. A suggestion that was applied
+     * moved the issue to {@code in_triage}; a late one changed nothing, and its
+     * entry keeps the version the issue already had.
+     *
+     * @param issue the issue once the suggestion was recorded
+     */
+    public static IssueHistoryEntry triageSuggested(Issue issue, int sequence, Instant at) {
+        return new IssueHistoryEntry(issue.id(), sequence, HistoryEntryType.TRIAGE_SUGGESTED,
+                HistoryVisibility.INTERNAL, ROLE_SYSTEM, issue.version(), at);
     }
 }
