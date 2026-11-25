@@ -9,6 +9,9 @@ public interface IssueRepository {
 
     void add(Issue issue);
 
+    /** Reads the issue without locking it; for checks that change nothing. */
+    Optional<Issue> find(IssueId id);
+
     /**
      * Loads the issue and locks it until the transaction ends, so two
      * commands on the same issue run one after the other: the second one

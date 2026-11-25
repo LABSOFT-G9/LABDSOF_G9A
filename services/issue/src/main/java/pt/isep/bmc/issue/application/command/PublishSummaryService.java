@@ -90,7 +90,8 @@ public final class PublishSummaryService implements PublishSummaryUseCase {
                 IdempotentExecutor.fingerprint(command.issueId(), command.expectedVersion(), command.summary());
         // Millisecond precision, so the stored and the returned times are the same.
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
-        return idempotent.execute(scope, requestHash, now, () -> apply(command, scope, requestHash, now), this::replay);
+        return idempotent.execute(scope, requestHash, now, () -> apply(command, scope, requestHash, now),
+                record -> replay(command, record, now));
     }
 
     private PublicationReceipt apply(
@@ -125,8 +126,20 @@ public final class PublishSummaryService implements PublishSummaryUseCase {
         return receipt(outcome.summary(), false);
     }
 
-    private PublicationReceipt replay(IdempotencyRecord record) {
-        IssueSummary summary = summaries.find(new IssueId(record.resourceId()), record.resourceVersion())
+    /**
+     * The stored receipt, for a caller who may still publish for this issue
+     * (as for a triage replay): an administrator who was revoked since gets the
+     * same refusal as for a new publication.
+     */
+    private PublicationReceipt replay(PublishSummaryCommand command, IdempotencyRecord record, Instant now) {
+        IssueId issueId = new IssueId(record.resourceId());
+        Issue issue = issues.find(issueId)
+                .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing issue"));
+        IssueSharing.requireMayPublish(
+                BuildingAccess.of(command.actor(), memberships.findByUser(command.actor()), now),
+                issue,
+                reports.existsByIssueAndAuthor(issueId, command.actor()));
+        IssueSummary summary = summaries.find(issueId, record.resourceVersion())
                 .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing summary"));
         return receipt(summary, true);
     }

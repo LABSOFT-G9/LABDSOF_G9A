@@ -123,6 +123,11 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
+    public Optional<Issue> find(IssueId id) {
+        return findForUpdate(id);
+    }
+
+    @Override
     public Optional<Issue> findForUpdate(IssueId id) {
         return issues.stream().filter(issue -> issue.id().equals(id)).findFirst();
     }

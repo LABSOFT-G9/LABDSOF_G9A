@@ -61,6 +61,7 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 
 - **Errors** are `application/problem+json` with `code` and `correlationId`:
   - `400 VALIDATION_FAILED` (with `errors[]`) or `INVALID_AREA`
+  - `400 VALIDATION_FAILED` without `errors[]`, for a body that is not JSON or has a field of the wrong JSON type. A text field takes a JSON string only: `"reason": 42` is rejected, never stored as `"42"` (`JacksonConfig`)
   - `401 UNAUTHENTICATED`
   - `403 FORBIDDEN`, when the caller can see an issue but may not do this to it: triage or publish as a resident, confirm impact as an administrator
   - `403 CSRF_HEADER_REQUIRED`, for a state-changing request without the CSRF header
@@ -72,7 +73,7 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 
   Error bodies never contain the report text or a triage reason.
 - **CSRF** ([ADR-005](../../documents/adr/ADR-005-authentication-authorisation.md#csrf)). Every `POST`, `PUT`, `PATCH` or `DELETE` must carry the custom header named by `CSRF_HEADER` (default `X-BMC-CSRF`), with any non-blank value. A cross-origin page cannot add it without a CORS pre-flight, and there is no CORS. Reads need no header. The check runs before token validation, so such a request gets `403` even without a token.
-- **Idempotency.** The key is scoped per user and operation and kept for 24 hours. The same key and body replay the original `201`, including when several retries run at the same time. The same key with a different body gets `422`.
+- **Idempotency.** The key is scoped per user and operation and kept for 24 hours. The same key and body replay the original result (`201` for a report, `200` for a triage decision or a publication), including when several retries run at the same time. The same key with a different body gets `422`. A triage or publication replay checks the caller's permissions again: an administrator who was revoked since gets the same `404` or `403` as for a new request, not the stored receipt.
 - **Triage** (technical design 3.1 and 3.3). Categories: `plumbing`, `electrical`, `lift`, `cleaning`, `structural`, `other`. Urgencies: `low`, `normal`, `high`, `critical`. Reason: 1 to 500 characters, internal.
   - From `received`, `in_triage` or `triaged` to `triaged`; a decision can be corrected by deciding again, and every decision is kept. From any later state: `409 INVALID_TRANSITION`.
   - `If-Match` is the quoted version the administrator was looking at. If the issue changed since: `409 VERSION_CONFLICT`, and nothing is overwritten. Of several decisions based on the same version, exactly one wins.
