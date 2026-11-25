@@ -125,7 +125,7 @@ got="$(curl --silent --max-time 30 --output /dev/null --write-out '%{http_code}'
 echo "ok   client-supplied bearer token without a session -> 401"
 
 step "6. Keycloak's internal paths are not routed"
-for path in /auth/admin/ /auth/admin/master/console/ /auth/health/ready /auth/metrics; do
+for path in /auth/admin/ /auth/admin/master/console/ /auth/health/ready /auth/metrics /auth/realms/master/ /auth/realms/master/protocol/openid-connect/certs; do
   got="$(curl --silent --max-time 30 --output /dev/null --write-out '%{http_code}' "$BASE$path")"
   [ "$got" = 404 ] || fail "$path should not be routed: expected 404, got $got"
   echo "ok   $path -> 404"

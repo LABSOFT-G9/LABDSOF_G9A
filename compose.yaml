@@ -139,11 +139,12 @@ services:
       start_period: 90s
     labels:
       traefik.enable: "true"
-      # Only what sign-in needs (Keycloak's reverse-proxy guidance): the realm
-      # endpoints and their static resources. The admin console (/auth/admin),
-      # health and metrics are never routed; reach the console through SSM
-      # port forwarding.
-      traefik.http.routers.keycloak.rule: PathPrefix(`/auth/realms/`) || PathPrefix(`/auth/resources/`)
+      # Only what sign-in needs (Keycloak's reverse-proxy guidance): the `bmc`
+      # realm's endpoints and the static resources. The `master` realm
+      # (/auth/realms/master/, where the bootstrap administrator signs in), the
+      # admin console (/auth/admin), health and metrics are never routed; reach
+      # the console through SSM port forwarding.
+      traefik.http.routers.keycloak.rule: PathPrefix(`/auth/realms/bmc/`) || PathPrefix(`/auth/resources/`)
       traefik.http.routers.keycloak.entrypoints: websecure
       traefik.http.services.keycloak.loadbalancer.server.port: "8080"
 
