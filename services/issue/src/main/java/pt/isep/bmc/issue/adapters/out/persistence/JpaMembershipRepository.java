@@ -16,6 +16,11 @@ class JpaMembershipRepository implements MembershipRepository {
     }
 
     @Override
+    public List<Membership> findAll() {
+        return memberships.findAll().stream().map(PersistenceMapper::toDomain).toList();
+    }
+
+    @Override
     public List<Membership> findByUser(UserId userId) {
         return memberships.findByUserId(userId.value()).stream().map(PersistenceMapper::toDomain).toList();
     }

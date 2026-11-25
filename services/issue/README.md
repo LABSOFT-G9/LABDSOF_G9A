@@ -6,6 +6,7 @@ Implemented so far:
 
 - US-01-01 ([#85](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/85)): report submission and queries, with building permissions and 24-hour idempotency.
 - US-02-01 ([#87](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/87)): manual triage with `If-Match`, the triage rows of the state table, issue queries and history projected by role.
+- EN-02-04 ([#80](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/80)): tokens from the Keycloak realm `bmc`; `GET /me` passes on the account's email and platform roles; the seeded memberships are announced through the outbox.
 
 ## Architecture
 
@@ -15,19 +16,19 @@ The layers are hexagonal, also called onion or clean architecture ([ADR-009](../
 pt.isep.bmc.issue
 ├── domain/            pure Java: no Spring, JPA, Jackson or servlet types
 │   ├── building/      BuildingId, Area, AreaKind
-│   ├── membership/    Membership, UserId (Keycloak sub), BuildingAccess (access matrix rules)
+│   ├── membership/    Membership, UserId (Keycloak sub), BuildingAccess (access matrix rules), PlatformRole
 │   ├── report/        Report, ReportText (10–4,000 code points), ReportIntake (domain service)
 │   ├── issue/         Issue, IssueState, IssueTriage (domain service), TriageDecision, TriageReason, IssueHistoryEntry
-│   ├── event/         DomainEvent: ReportSubmitted, TriageRequested, IssueTriaged, IssueStateChanged
+│   ├── event/         DomainEvent: ReportSubmitted, TriageRequested, IssueTriaged, IssueStateChanged, MembershipGranted, MembershipRevoked
 │   └── shared/        DomainException (sealed): validation, invalid area, access denied, forbidden, version conflict, invalid transition
 ├── application/       use cases and ports; depends only on domain
 │   ├── port/in/       SubmitReportUseCase, DecideTriageUseCase, GetReportQuery, GetIssueQuery, GetProfileQuery, ...
 │   ├── port/out/      repositories, EventOutbox, IdempotencyStore, TransactionRunner, IdGenerator, read models
-│   ├── command/       SubmitReportService, DecideTriageService, PurgeExpiredIdempotencyKeysService
+│   ├── command/       SubmitReportService, DecideTriageService, PurgeExpiredIdempotencyKeysService, MembershipAnnouncementService
 │   ├── query/         ReportQueryService, IssueQueryService, ProfileQueryService, BuildingAreasQueryService
 │   ├── idempotency/   IdempotencyKey, IdempotentExecutor (one effect per key)
 │   └── error/         NotFoundException, IdempotencyKeyReusedException, StorageUnavailableException
-├── adapters/in/       driving: REST controllers + DTOs, problem+json mapping, correlation ID, scheduled purge
+├── adapters/in/       driving: REST controllers + DTOs, problem+json mapping, correlation ID, scheduled purge, start-up announcer
 ├── adapters/out/      driven: JPA (aggregates), JDBC (idempotency keys, read models), outbox, UUIDv7
 └── config/            composition root: @Configuration wiring, security, Flyway seed, scheduling
 ```
@@ -46,7 +47,7 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | `POST /reports` + `Idempotency-Key` | Resident of the building, or its administrator (source `administrator_on_behalf`) | `201`, `ETag: "1"`, `{reportId, issueId, state: "received", version: 1, submittedAt}` |
 | `GET /reports/{id}` | The author, or an administrator of the building | Text, area, source, `authoredByMe` and the issue's `{state, version}`. Never the author's identity |
 | `GET /reports?buildingId=&page=&size=` | Any user | Own reports, plus every report of the buildings the caller administers, newest first. No text |
-| `GET /me` | Any user | Profile and active memberships, with building names |
+| `GET /me` | Any user | `{userId, displayName, email, platformRoles, memberships}`. Memberships (with building names) come only from this service's data. `email` and `platformRoles` (for example `["platform_staff"]`) are passed on from the access token for display and grant nothing here; `displayName` is the stored profile name, else the token's `name` |
 | `GET /issues?buildingId=&page=&size=` | Any user | Issues of the buildings the caller administers, plus the issues the caller reported, newest first. Each item: `{issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage, suggestion}`. No report text, no triage reason |
 | `GET /issues/{id}` | Administrators of the building; the resident who reported it | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is `null` until US-03-03 |
 | `GET /issues/{id}/history` | The same | `{items: [{sequence, type, visibility, actorRole, occurredAt, category, urgency, reason}]}`, oldest first. Residents get public entries only, without reasons. Roles, never identities |
@@ -72,6 +73,7 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
   - `If-Match` is the quoted version the administrator was looking at. If the issue changed since: `409 VERSION_CONFLICT`, and nothing is overwritten. Of several decisions based on the same version, exactly one wins.
   - The decision, the issue's next version, the history entry and the `IssueTriaged` and `IssueStateChanged` outbox rows are one transaction. Events never carry the reason.
   - Works without AI. A suggestion never sets category or urgency, and a late one changes nothing (`Issue.suggestTriage`); recording suggestions is US-03-03 ([#108](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/108)).
+- **Membership events.** A migration writes no events, so with the seed on, `SeededMembershipAnnouncer` writes `MembershipGranted` (or `MembershipRevoked`) once per membership version, so Dispatch's administrator projection can learn the synthetic administrators (technical design 4.3). The event ID is derived from the membership and its version, so a restart writes nothing twice.
 - **One transaction per report.** The report, the issue, the first history entry, both outbox rows (`ReportSubmitted`, `TriageRequested`, as CloudEvents JSON, status `pending`) and the key are committed together. The request waits for neither AI nor the broker. The publisher that sends outbox rows to RabbitMQ is part of EN-02-02 ([#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)).
 
 ## Configuration
@@ -79,14 +81,16 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | Variable | Default | Meaning |
 |---|---|---|
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | `localhost`, `3306`, `issue`, `issue`, empty | MySQL |
-| `OIDC_ISSUER_URI` | empty | Keycloak realm issuer. **When empty, every API call answers `401`** (fail closed until EN-02-04) |
-| `OIDC_JWK_SET_URI` | `<issuer>/protocol/openid-connect/certs` | Signing keys |
-| `OIDC_AUDIENCE` | `bmc-api` | Required `aud`. When blank, the service refuses to start |
+| `OIDC_ISSUER_URI` | empty | Keycloak realm issuer, as the browser sees it: `https://<public host>/auth/realms/bmc` (set in `compose.yaml`). **When empty, every API call answers `401`** (fail closed) |
+| `OIDC_JWK_SET_URI` | `<issuer>/protocol/openid-connect/certs` | Signing keys. In Compose it is the internal address `http://keycloak:8080/auth/realms/bmc/protocol/openid-connect/certs`, so the service does not go out through the edge |
+| `OIDC_AUDIENCE` | `bmc-api` | Required `aud`; the realm's `bmc-edge` client adds it with an audience mapper. When blank, the service refuses to start |
 | `CSRF_HEADER` | `X-BMC-CSRF` | Header required on state-changing requests. Provisional name until EN01-U6 settles it; the client must send the same one. When blank, the service refuses to start |
-| `BMC_SEED_SYNTHETIC` | `false` | `true` loads `db/seed/R__synthetic_fixtures.sql` (synthetic buildings and accounts). Never set it in production |
+| `BMC_SEED_SYNTHETIC` | `false` | `true` loads `db/seed/R__synthetic_fixtures.sql` (synthetic buildings and accounts) and, at every start, writes a `MembershipGranted` outbox event for each seeded membership that has none yet. Never set it in production |
 | `MANAGEMENT_PORT` | `8081` | `/healthz` (liveness) and `/readyz` (readiness, includes MySQL). Never routed by Traefik |
 
-The synthetic user IDs in the seed are the Keycloak `sub` values that the synthetic realm (EN-02-04, [#80](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/80)) must assign.
+The synthetic user IDs in the seed are the IDs of the synthetic accounts in `infra/keycloak/realm/bmc-users-0.json`, which Keycloak puts in the token's `sub`. Keep the two files in step; `scripts/e2e-signin.sh` fails when they drift.
+
+In the browser the service is reached through Traefik's OIDC middleware, which holds the session cookie and adds `Authorization: Bearer <access token>`; without a session the edge itself answers `401` and the request never reaches this service ([ADR-005](../../documents/adr/ADR-005-authentication-authorisation.md)).
 
 ## Build and test
 

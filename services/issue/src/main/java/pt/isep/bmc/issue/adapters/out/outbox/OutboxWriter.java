@@ -10,14 +10,20 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
+import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.event.DomainEvent;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
 import pt.isep.bmc.issue.domain.event.IssueTriaged;
+import pt.isep.bmc.issue.domain.event.MembershipGranted;
+import pt.isep.bmc.issue.domain.event.MembershipRevoked;
 import pt.isep.bmc.issue.domain.event.ReportSubmitted;
 import pt.isep.bmc.issue.domain.event.TriageRequested;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
+import pt.isep.bmc.issue.domain.membership.MembershipId;
+import pt.isep.bmc.issue.domain.membership.MembershipRole;
+import pt.isep.bmc.issue.domain.membership.UserId;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -47,6 +53,31 @@ class OutboxWriter implements EventOutbox {
 
     @Override
     public void append(OutboxEvent outboxEvent) {
+        insert(outboxEvent, """
+                INSERT INTO outbox
+                  (id, event_type, routing_key, aggregate_id, aggregate_version, building_id,
+                   correlation_id, payload, status, attempts, created_at)
+                VALUES (:id, :type, :routingKey, :aggregateId, :aggregateVersion, :buildingId,
+                        :correlationId, :payload, 'pending', 0, :createdAt)
+                """);
+    }
+
+    @Override
+    public boolean appendIfAbsent(OutboxEvent outboxEvent) {
+        // One statement, so two writers cannot both pass the check: the second
+        // insert waits on the primary key and then finds the row.
+        return insert(outboxEvent, """
+                INSERT INTO outbox
+                  (id, event_type, routing_key, aggregate_id, aggregate_version, building_id,
+                   correlation_id, payload, status, attempts, created_at)
+                SELECT :id, :type, :routingKey, :aggregateId, :aggregateVersion, :buildingId,
+                       :correlationId, :payload, 'pending', 0, :createdAt
+                  FROM DUAL
+                 WHERE NOT EXISTS (SELECT 1 FROM outbox WHERE id = :id)
+                """) == 1;
+    }
+
+    private int insert(OutboxEvent outboxEvent, String sql) {
         DomainEvent event = outboxEvent.event();
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("specversion", "1.0");
@@ -62,13 +93,7 @@ class OutboxWriter implements EventOutbox {
         envelope.put("correlationid", outboxEvent.correlationId());
         envelope.put("data", data(event));
 
-        jdbc.sql("""
-                        INSERT INTO outbox
-                          (id, event_type, routing_key, aggregate_id, aggregate_version, building_id,
-                           correlation_id, payload, status, attempts, created_at)
-                        VALUES (:id, :type, :routingKey, :aggregateId, :aggregateVersion, :buildingId,
-                                :correlationId, :payload, 'pending', 0, :createdAt)
-                        """)
+        return jdbc.sql(sql)
                 .param("id", outboxEvent.eventId().toString())
                 .param("type", event.type())
                 .param("routingKey", SOURCE + "." + event.type())
@@ -106,6 +131,10 @@ class OutboxWriter implements EventOutbox {
                 data.put("urgency", e.urgency().map(IssueUrgency::value).orElse(null));
                 data.put("areaLabel", e.areaLabel());
             }
+            case MembershipGranted e -> membership(data, e.membershipId(), e.userId(), e.buildingId(), e.role(),
+                    e.membershipVersion());
+            case MembershipRevoked e -> membership(data, e.membershipId(), e.userId(), e.buildingId(), e.role(),
+                    e.membershipVersion());
             case TriageRequested e -> {
                 data.put("issueId", e.issueId().toString());
                 data.put("issueVersion", e.issueVersion());
@@ -115,6 +144,15 @@ class OutboxWriter implements EventOutbox {
             }
         }
         return data;
+    }
+
+    private static void membership(
+            Map<String, Object> data, MembershipId id, UserId userId, BuildingId buildingId, MembershipRole role, long version) {
+        data.put("membershipId", id.toString());
+        data.put("userId", userId.value());
+        data.put("buildingId", buildingId.toString());
+        data.put("role", role.value());
+        data.put("version", version);
     }
 
     private static LocalDateTime column(Instant instant) {

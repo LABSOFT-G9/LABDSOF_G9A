@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// Asks the AI triage service for a suggestion. The only event that carries
+// private report text: it is bound point-to-point to `ai-triage.requests`,
+// never fanned out and never logged.
+message TriageRequested {
+  string issue_id = 1;
+  // The issue version the suggestion must name to be applied.
+  int32 issue_version = 2;
+  string building_id = 3;
+  // `common_area` or `unit`.
+  string area_kind = 4;
+  // The report text needed for classification.
+  string text = 5;
+}

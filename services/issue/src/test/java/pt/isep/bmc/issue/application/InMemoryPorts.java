@@ -93,6 +93,11 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
+    public List<Membership> findAll() {
+        return List.copyOf(memberships);
+    }
+
+    @Override
     public List<Membership> findByUser(UserId userId) {
         return memberships.stream().filter(m -> m.userId().equals(userId)).toList();
     }
@@ -165,6 +170,15 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     @Override
     public Optional<Report> findById(ReportId id) {
         return Optional.ofNullable(reports.get(id));
+    }
+
+    @Override
+    public boolean appendIfAbsent(OutboxEvent event) {
+        if (outbox.stream().anyMatch(existing -> existing.eventId().equals(event.eventId()))) {
+            return false;
+        }
+        append(event);
+        return true;
     }
 
     @Override

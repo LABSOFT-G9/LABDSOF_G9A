@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// A resolved issue went back to triage.
+message IssueReopened {
+  string issue_id = 1;
+  // A code, never free text. OPEN: the values are settled in US-09.
+  string reason_code = 2;
+}
