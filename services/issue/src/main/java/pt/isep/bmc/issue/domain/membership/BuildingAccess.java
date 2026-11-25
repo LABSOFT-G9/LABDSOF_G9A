@@ -18,7 +18,11 @@ import pt.isep.bmc.issue.domain.report.ReportSource;
  *   <li>create a report: residents of the building, or its administrators on
  *       behalf (source recorded);</li>
  *   <li>raw report text: the author, or administrators of the building. Being a
- *       resident of the same building is not enough.</li>
+ *       resident of the same building is not enough;</li>
+ *   <li>an issue's status and public history: administrators of the building,
+ *       and the residents who reported it (a published summary will widen
+ *       this in US-04);</li>
+ *   <li>triage: administrators of the building only.</li>
  * </ul>
  *
  * <p>Only the token's {@code sub} identifies the caller; building roles never
@@ -87,6 +91,16 @@ public final class BuildingAccess {
             return Optional.of(ReportSource.ADMINISTRATOR_ON_BEHALF);
         }
         return Optional.empty();
+    }
+
+    /**
+     * An issue's status: any issue of a building this user administers, or an
+     * issue this user reported.
+     *
+     * @param reportedByUser whether this user authored a report of the issue
+     */
+    public boolean canViewIssue(BuildingId building, boolean reportedByUser) {
+        return reportedByUser || administers(building);
     }
 
     /** Raw text: own reports, or any report in a building this user administers. */

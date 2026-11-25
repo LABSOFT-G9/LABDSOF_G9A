@@ -23,11 +23,14 @@ import pt.isep.bmc.issue.application.port.out.MembershipRepository;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
+import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
 import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
+import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.UserId;
 import pt.isep.bmc.issue.domain.report.Report;
@@ -38,7 +41,7 @@ import pt.isep.bmc.issue.domain.report.ReportId;
  * writes of a transaction whose work throws, like a real rollback.
  */
 public final class InMemoryPorts implements TransactionRunner, MembershipRepository, BuildingRepository,
-        IssueRepository, ReportRepository, EventOutbox, IdempotencyStore, IdGenerator {
+        IssueRepository, ReportRepository, TriageDecisionRepository, EventOutbox, IdempotencyStore, IdGenerator {
 
     public final List<Membership> memberships = new ArrayList<>();
     public final Map<AreaId, Area> areas = new HashMap<>();
@@ -47,6 +50,7 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public final Map<ReportId, Report> reports = new HashMap<>();
     public final List<OutboxEvent> outbox = new ArrayList<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
+    public final List<TriageDecision> decisions = new ArrayList<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
     public RuntimeException failNextTransaction;
@@ -112,6 +116,48 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public void add(Issue issue) {
         issues.add(issue);
         journal(() -> issues.remove(issue));
+    }
+
+    @Override
+    public Optional<Issue> find(IssueId id) {
+        return findForUpdate(id);
+    }
+
+    @Override
+    public Optional<Issue> findForUpdate(IssueId id) {
+        return issues.stream().filter(issue -> issue.id().equals(id)).findFirst();
+    }
+
+    @Override
+    public void update(Issue issue) {
+        Issue previous = findForUpdate(issue.id()).orElseThrow();
+        int index = issues.indexOf(previous);
+        issues.set(index, issue);
+        journal(() -> issues.set(issues.indexOf(issue), previous));
+    }
+
+    @Override
+    public int nextHistorySequence(IssueId id) {
+        return (int) history.stream().filter(entry -> entry.issueId().equals(id)).count() + 1;
+    }
+
+    @Override
+    public void add(TriageDecision decision) {
+        decisions.add(decision);
+        journal(() -> decisions.remove(decision));
+    }
+
+    @Override
+    public Optional<TriageDecision> find(IssueId issueId, long resultingVersion) {
+        return decisions.stream()
+                .filter(d -> d.issueId().equals(issueId) && d.resultingVersion() == resultingVersion)
+                .findFirst();
+    }
+
+    @Override
+    public boolean existsByIssueAndAuthor(IssueId issueId, UserId author) {
+        return reports.values().stream()
+                .anyMatch(report -> report.issueId().equals(issueId) && report.authorUserId().equals(author));
     }
 
     @Override

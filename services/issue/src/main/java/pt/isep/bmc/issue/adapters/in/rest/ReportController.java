@@ -134,8 +134,8 @@ class ReportController {
                 violations.add(new FieldViolation("buildingId", "invalid_format"));
             }
         }
-        int pageNumber = intParam(page, 0, 0, Integer.MAX_VALUE / MAX_PAGE_SIZE, "page", violations);
-        int pageSize = intParam(size, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE, "size", violations);
+        int pageNumber = RequestIds.intParam(page, 0, 0, Integer.MAX_VALUE / MAX_PAGE_SIZE, "page", violations);
+        int pageSize = RequestIds.intParam(size, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE, "size", violations);
         if (!violations.isEmpty()) {
             throw new ValidationException(violations);
         }
@@ -159,21 +159,5 @@ class ReportController {
                 s.authorUserId().equals(actor),
                 DateTimeFormatter.ISO_INSTANT.format(s.submittedAt()),
                 new ReportResponse.IssueStatus(s.issueState().value(), s.issueVersion()));
-    }
-
-    private static int intParam(String raw, int fallback, int min, int max, String field, List<FieldViolation> out) {
-        if (raw == null) {
-            return fallback;
-        }
-        try {
-            int value = Integer.parseInt(raw);
-            if (value >= min && value <= max) {
-                return value;
-            }
-        } catch (NumberFormatException ignored) {
-            // reported below
-        }
-        out.add(new FieldViolation(field, "out_of_range"));
-        return fallback;
     }
 }

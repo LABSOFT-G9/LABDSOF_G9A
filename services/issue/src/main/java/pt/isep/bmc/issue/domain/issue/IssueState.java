@@ -1,8 +1,10 @@
 package pt.isep.bmc.issue.domain.issue;
 
 /**
- * Issue states (technical design 3.1). This slice only creates issues in
- * {@link #RECEIVED}; the transitions are added by US-02-01 (#87).
+ * Issue states (technical design 3.1). The transition table there is an
+ * allow-list: what is not listed is rejected. The states after
+ * {@link #TRIAGED} are projections of Dispatch's intervention, never set by a
+ * client.
  */
 public enum IssueState {
     RECEIVED("received"),
@@ -23,6 +25,21 @@ public enum IssueState {
 
     public String value() {
         return value;
+    }
+
+    /** Manual triage is allowed while no intervention has started (technical design 3.1). */
+    public boolean allowsManualTriage() {
+        return this == RECEIVED || this == IN_TRIAGE || this == TRIAGED;
+    }
+
+    /** Every state except the two final ones. */
+    public boolean isOpen() {
+        return this != RESOLVED && this != CANCELLED;
+    }
+
+    /** Dispatch may create an intervention for the issue (technical design 3.2). */
+    public boolean isDispatchable() {
+        return this == TRIAGED || this == IN_COORDINATION;
     }
 
     public static IssueState fromValue(String value) {

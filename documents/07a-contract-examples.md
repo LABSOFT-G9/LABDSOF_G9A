@@ -52,6 +52,48 @@ ETag: "3"
   "category": "plumbing", "urgency": "high", "decisionSource": "human" }
 ```
 
+Added with US-02-01 (2026-11-24), as the Issue service answers. `If-Match` must be the quoted version from the last `ETag` (`"2"`); a missing or malformed one is `400` `VALIDATION_FAILED` with the field `If-Match`. The same `Idempotency-Key` with the same request replays this answer, even after the version has moved on.
+
+The issue afterwards, for an administrator of the building (`GET /issues/{id}`, `ETag: "3"`; `GET /issues` returns `{ "items": [ … ], "page": 0, "size": 20, "hasMore": false }` with the same items, newest first, and `reason` always `null`):
+
+```json
+{ "issueId": "0199f2a1-0000-7000-8000-000000002001",
+  "buildingId": "0199f2a0-0000-7000-8000-00000000b001", "buildingName": "Synthetic Building A",
+  "areaLabel": "Garage level -1",
+  "state": "triaged", "version": 3, "createdAt": "2026-11-24T10:00:00Z",
+  "triage": { "category": "plumbing", "urgency": "high", "reason": "Water near an electrical fitting",
+              "decidedAt": "2026-11-24T10:05:00.120Z", "decisionSource": "human" },
+  "suggestion": null }
+```
+
+- `triage` is `null` until an administrator decides: an undecided category or urgency is never filled in.
+- The resident who reported the issue gets the same answer with `"reason": null`. Anyone else gets `404`.
+- `suggestion` is always `null` until suggestions are recorded (US-03-03); it will be `{ category, urgency, origin }` for administrators only.
+
+Its history (`GET /issues/{id}/history`), oldest first. A resident gets the `public` entries only, with `"reason": null`; entries name the actor's role, never the person:
+
+```json
+{ "items": [
+  { "sequence": 1, "type": "report_received", "visibility": "public", "actorRole": "resident",
+    "occurredAt": "2026-11-24T10:00:00Z", "category": null, "urgency": null, "reason": null },
+  { "sequence": 2, "type": "triage_suggested", "visibility": "internal", "actorRole": "system",
+    "occurredAt": "2026-11-24T10:00:02Z", "category": null, "urgency": null, "reason": null },
+  { "sequence": 3, "type": "triage_decided", "visibility": "public", "actorRole": "administrator",
+    "occurredAt": "2026-11-24T10:05:00.120Z", "category": "plumbing", "urgency": "high",
+    "reason": "Water near an electrical fitting" } ] }
+```
+
+Errors of the triage call, all `application/problem+json` and none with a partial update:
+
+| Case | Answer |
+|---|---|
+| Category or urgency missing or unknown; reason missing, over 500 characters or with control characters | `400` `VALIDATION_FAILED`, `errors: [{ "field": "urgency", "reason": "required" }, …]` (reasons `required`, `invalid`, `too_long`, `invalid_characters`) |
+| The caller reported the issue but does not administer the building | `403` `FORBIDDEN` |
+| Unknown issue, or one the caller cannot see | `404` `NOT_FOUND` |
+| Another decision was stored since the version in `If-Match` | `409` `VERSION_CONFLICT` with `currentVersion` and `currentState` |
+| The issue is `in_coordination` or later, or closed | `409` `INVALID_TRANSITION` with `currentState` |
+| The same `Idempotency-Key` with a different request | `422` `IDEMPOTENCY_KEY_REUSED` |
+
 ### 1.3 Administrator creates and approves an intervention (Dispatch)
 
 ```http

@@ -1,8 +1,12 @@
 package pt.isep.bmc.issue.domain.issue;
 
-/** Kinds of history entry. Later stories add triage, intervention and closure entries. */
+/** Kinds of history entry. Later stories add intervention and closure entries. */
 public enum HistoryEntryType {
-    REPORT_RECEIVED("report_received");
+    REPORT_RECEIVED("report_received"),
+    /** An unconfirmed suggestion arrived (AI, rules or fallback). Internal. */
+    TRIAGE_SUGGESTED("triage_suggested"),
+    /** An administrator decided category and urgency. Public; the reason is not. */
+    TRIAGE_DECIDED("triage_decided");
 
     private final String value;
 
