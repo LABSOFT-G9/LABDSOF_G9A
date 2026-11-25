@@ -133,6 +133,7 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
   const pending = "0199f2a1-0000-7000-8000-000000002002"; // Building A, received, Resident A2's
   const scheduled = "0199f2a1-0000-7000-8000-000000002003"; // Building A, scheduled, human decision
   const roof = "0199f2a1-0000-7000-8000-000000002004"; // Building B
+  const critical = "0199f2a1-0000-7000-8000-000000002005"; // Building B, fallback suggestion, critical alert
   const decision = { category: "electrical", urgency: "high", reason: "Exposed wiring by the door." } as const;
 
   function world() {
@@ -149,7 +150,7 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     const { as } = world();
     const ids = async (persona: string) => (await as(persona).list({})).items.map((i) => i.issueId).sort();
     expect(await ids("administrator-a")).toEqual([suggested, pending, scheduled].sort());
-    expect(await ids("administrator-b")).toEqual([roof]);
+    expect(await ids("administrator-b")).toEqual([roof, critical].sort());
     expect(await ids("resident-a1")).toEqual([suggested, scheduled].sort());
     expect(await ids("resident-a2")).toEqual([pending]);
   });
@@ -168,12 +169,30 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
     expect((await as("administrator-a").list({ buildingId: BUILDINGS.b.buildingId })).items).toEqual([]);
   });
 
+  it("keeps the suggestion's explanation out of the list, and drops the suggestion once decided (#108)", async () => {
+    const { as } = world();
+    const listed = (await as("administrator-a").list({})).items.find((i) => i.issueId === suggested);
+    expect(listed?.suggestion).toMatchObject({ category: "electrical", rationale: null });
+    expect((await as("administrator-a").getIssue(suggested)).suggestion?.rationale).toEqual(expect.any(String));
+
+    await as("administrator-a").triage(suggested, 2, decision, "k");
+    expect((await as("administrator-a").getIssue(suggested)).suggestion).toBeNull();
+    const history = await as("administrator-a").getHistory(suggested);
+    expect(history.items.map((e) => e.type)).toContain("triage_suggested");
+  });
+
   it("never shows residents a suggestion, a reason or an internal entry", async () => {
     const { as } = world();
     const issue = await as("resident-a1").getIssue(suggested);
     expect(issue.suggestion).toBeNull();
     const decided = await as("resident-a1").getIssue(scheduled);
     expect(decided.triage).toMatchObject({ category: "plumbing", reason: null });
+    const alerted = await as("resident-b1").getIssue(critical);
+    expect(alerted).toMatchObject({ suggestion: null, criticalCheck: null });
+    expect((await as("administrator-b").getIssue(critical)).criticalCheck).toMatchObject({
+      status: "completed",
+      signals: [{ code: "smoke_or_fire" }, { code: "water_near_electrics" }],
+    });
 
     const history = await as("resident-a1").getHistory(suggested);
     expect(history.items.map((e) => e.type)).toEqual(["report_received"]);

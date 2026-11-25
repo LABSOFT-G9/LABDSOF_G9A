@@ -7,6 +7,7 @@ import { hasBuildingRole, useSession } from "@/features/auth";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
+import { CriticalCheckBanner, SuggestionPanel } from "@/features/issues/suggestion-panel";
 import { TriageForm } from "@/features/issues/triage-form";
 import { TriageBadge } from "@/features/issues/triage-status";
 import { ErrorState } from "@/shared/components/error-state";
@@ -28,9 +29,14 @@ const TRIAGEABLE: readonly IssueState[] = ["received", "in_triage", "triaged"];
 export function IssuePage({ issueId }: { issueId: string }) {
   const { issues, clock } = useServices();
   const session = useSession();
-  const { data: issue } = useSuspenseQuery(issueQuery(issues, issueId));
+  // `dataUpdatedAt` is read so that every answer of the poll re-renders the page, even an identical one (TanStack
+  // Query renders only for the fields a component reads, and keeps the same `data` for an unchanged answer). That
+  // re-render reads the clock again, which moves "waiting" to "triage pending" once the 2 minutes have passed.
+  const { data: issue, dataUpdatedAt } = useSuspenseQuery(issueQuery(issues, issueId));
   const history = useQuery(historyQuery(issues, issueId));
   const isAdministrator = hasBuildingRole(session, issue.buildingId, "administrator");
+  const now = clock.now();
+  void dataUpdatedAt;
 
   return (
     <>
@@ -44,6 +50,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,22rem)]">
         <div className="space-y-6">
+          {issue.criticalCheck ? <CriticalCheckBanner check={issue.criticalCheck} issue={issue} now={now} /> : null}
           <Card>
             <CardContent>
               <dl className="grid gap-3 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
@@ -56,7 +63,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
                   <TriageBadge issue={issue} />
                   <p className="text-muted-foreground">
                     {issue.triage
-                      ? `${t.issues.decided} · ${t.issues.decidedAt(timeAgo(issue.triage.decidedAt, clock.now()))}`
+                      ? `${t.issues.decided} · ${t.issues.decidedAt(timeAgo(issue.triage.decidedAt, now))}`
                       : issue.suggestion
                         ? t.issues.suggestedHint
                         : t.issues.pendingHint}
@@ -79,7 +86,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
           {isAdministrator && TRIAGEABLE.includes(issue.state) ? (
             <Card>
               <CardContent>
-                <TriageForm issue={issue} />
+                <TriageForm issue={issue} intro={<SuggestionPanel issue={issue} now={now} />} />
               </CardContent>
             </Card>
           ) : null}

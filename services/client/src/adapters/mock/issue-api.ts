@@ -69,10 +69,15 @@ export function mockIssueApi(
   const mayReadIssue = (me: Session | null, issue: IssueRecord) =>
     administers(me, issue.buildingId) || (!!me && issue.reporterIds.includes(me.sub));
 
-  /** What a role may see of an issue: residents get no suggestion and no reason. */
+  /** What a role may see of an issue: residents get no suggestion, no critical alert and no reason. */
   function project(me: Session | null, { reporterIds: _r, history: _h, ...issue }: IssueRecord): Issue {
     if (administers(me, issue.buildingId)) return issue;
-    return { ...issue, suggestion: null, triage: issue.triage && { ...issue.triage, reason: null } };
+    return {
+      ...issue,
+      suggestion: null,
+      criticalCheck: null,
+      triage: issue.triage && { ...issue.triage, reason: null },
+    };
   }
 
   const findIssue = (me: Session | null, issueId: string) => {
@@ -111,8 +116,13 @@ export function mockIssueApi(
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         const items = visible.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((record): Issue => {
           const issue = project(me, record);
-          // Lists never carry the reason, not even to administrators: it is read on the issue itself.
-          return { ...issue, triage: issue.triage && { ...issue.triage, reason: null } };
+          // Lists never carry the reason or the suggestion's explanation, not even to administrators: both are written
+          // from private text and read on the issue itself (#108).
+          return {
+            ...issue,
+            triage: issue.triage && { ...issue.triage, reason: null },
+            suggestion: issue.suggestion && { ...issue.suggestion, rationale: null },
+          };
         });
         return { items, page, size: PAGE_SIZE, hasMore: visible.length > (page + 1) * PAGE_SIZE };
       }),
@@ -263,6 +273,8 @@ export function mockIssueApi(
           const { category, urgency, reason } = parsed.data;
           const decidedAt = clock.now().toISOString();
           issue.triage = { category, urgency, reason, decidedAt, decisionSource: "human" };
+          // Once decided, the issue carries no suggestion; it stays in the history only (#108).
+          issue.suggestion = null;
           issue.state = "triaged";
           issue.version += 1;
           issue.history = [

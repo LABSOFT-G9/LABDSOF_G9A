@@ -121,6 +121,49 @@ describe("httpIssueApi (US-01 reports)", () => {
     expect(lastCall(history.fetcher).url).toBe("/api/issue/issues/i1/history");
   });
 
+  it("reads the suggestion details and the critical check when the service sends them (US-03-02)", async () => {
+    const issue = {
+      issueId: "i1",
+      buildingId: "b1",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: {
+        category: "electrical",
+        urgency: "normal",
+        origin: "fallback",
+        rationale: "Rules matched “socket”.",
+        needsReview: true,
+        failureCode: "timeout",
+        suggestedAt: "2026-11-24T10:00:30Z",
+      },
+      criticalCheck: {
+        status: "completed",
+        rulesVersion: "critical-alerts-v1",
+        signals: [{ code: "smoke_or_fire", raisedAt: "2026-11-24T10:00:01Z" }],
+      },
+    };
+    await expect(setup(issue).api.getIssue("i1")).resolves.toEqual(issue);
+  });
+
+  it("refuses an unknown suggestion origin instead of guessing", async () => {
+    const issue = {
+      issueId: "i1",
+      buildingId: "b1",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: { category: "electrical", urgency: "normal", origin: "oracle" },
+    };
+    await expect(setup(issue).api.getIssue("i1")).rejects.toMatchObject({ name: "ContractError" });
+  });
+
   it("keeps the conflict details of a 409", async () => {
     const problem = { code: "VERSION_CONFLICT", currentVersion: 3, currentState: "triaged", correlationId: "c-1" };
     const { api } = setup(problem, 409);

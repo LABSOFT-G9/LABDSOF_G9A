@@ -95,14 +95,67 @@ export const SuggestionOriginSchema = z.enum(["ai", "rules", "fallback"]);
 export type SuggestionOrigin = z.infer<typeof SuggestionOriginSchema>;
 
 /**
- * An unconfirmed suggestion, administrators only. ASSUMPTION: US-03-02 (#94) adds rationale and processing status.
+ * Why the AI result was not used, on a `fallback` suggestion (`TriageSuggested.failureCode`, technical design §4.4).
+ * ASSUMPTION: the values are not agreed yet (US-03-03 #108, US-14-01 #95). Any other code is still shown, as a
+ * generic "AI could not be used", so a new code never breaks the page.
+ */
+export const KNOWN_FAILURE_CODES = ["timeout", "provider_error", "invalid_output", "quota_exceeded"] as const;
+export type KnownFailureCode = (typeof KNOWN_FAILURE_CODES)[number];
+
+/**
+ * An unconfirmed suggestion, administrators only, and `null` once a decision exists. `category`, `urgency` and `origin`
+ * are in the Issue service (#140); the rest is agreed on #108 for US-03-03, named after `TriageSuggested` (technical
+ * design §4.4), and optional until that ships:
+ * - `rationale`: the short explanation (1-240 characters). Model output: shown as plain text, never as markup. `null`
+ *   in `GET /issues`, because it is written from the private report text; read it on the issue itself.
+ * - `needsReview`: the suggester itself asks for a careful look.
+ * - `failureCode`: why the AI result was not used, on `fallback` only.
+ * - `suggestedAt`: when the suggestion was recorded.
+ * There is deliberately no confidence value: a model's confidence must not be shown as a reliable probability (US-03).
  */
 export const TriageSuggestionSchema = z.object({
   category: IssueCategorySchema,
   urgency: IssueUrgencySchema,
   origin: SuggestionOriginSchema,
+  rationale: z.string().nullish(),
+  needsReview: z.boolean().optional(),
+  failureCode: z.string().nullish(),
+  suggestedAt: z.iso.datetime({ offset: true }).nullish(),
 });
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
+
+/**
+ * Rule codes of the critical check that the client words. ASSUMPTION: the codes come with the `critical-alerts-v1`
+ * rule set, which is not agreed yet (#96). Any other code is still shown, in general words.
+ */
+export const KNOWN_SIGNAL_CODES = ["smoke_or_fire", "gas_smell", "exposed_wiring", "water_near_electrics"] as const;
+export type KnownSignalCode = (typeof KNOWN_SIGNAL_CODES)[number];
+
+/** One rule of the critical check that matched a report. A fact about the report: it never clears. */
+export const CriticalSignalSchema = z.object({
+  code: z.string(),
+  raisedAt: z.iso.datetime({ offset: true }),
+});
+export type CriticalSignal = z.infer<typeof CriticalSignalSchema>;
+
+/**
+ * Issue's own critical check (US-14-02, shape agreed on #96; technical design §2.1 `criticalSignals`,
+ * `criticalRulesVersion`, `criticalCheckStatus`). Administrators only, `null` for residents; absent before US-14-02.
+ * Independent of the AI: no suggestion, retry or decision removes a signal. `pending` with no signals means "not
+ * checked", never "nothing found".
+ */
+export const CriticalCheckSchema = z.object({
+  status: z.enum(["pending", "completed"]),
+  rulesVersion: z.string().nullish(),
+  signals: z.array(CriticalSignalSchema),
+});
+export type CriticalCheck = z.infer<typeof CriticalCheckSchema>;
+
+/**
+ * With no suggestion after this long, the administrator is told "triage pending — classify manually" (technical
+ * design §5, 2 minutes). The client works it out from `createdAt`; nothing changes on the issue.
+ */
+export const TRIAGE_PENDING_AFTER_MS = 2 * 60_000;
 
 /** One issue as `GET /issues` and `GET /issues/{id}` return it, already projected for the caller's role. */
 export const IssueSchema = z.object({
@@ -117,6 +170,7 @@ export const IssueSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   triage: TriageDecisionSchema.nullable(),
   suggestion: TriageSuggestionSchema.nullable(),
+  criticalCheck: CriticalCheckSchema.nullish(),
 });
 export type Issue = z.infer<typeof IssueSchema>;
 
