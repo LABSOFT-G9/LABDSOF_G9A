@@ -24,7 +24,8 @@ export const PROCESSING_POLL_MS = 10_000;
 
 /**
  * Still waiting on background work the administrator is watching for: a suggestion (US-03) or the critical check
- * (US-14). Asking again also re-renders, which moves "waiting" to "triage pending" after 2 minutes.
+ * (US-14). `IssuePage` re-renders on every answer, even an unchanged one, which moves "waiting" to "triage pending"
+ * after 2 minutes.
  */
 export const isProcessing = (issue: Issue | undefined) =>
   !!issue &&

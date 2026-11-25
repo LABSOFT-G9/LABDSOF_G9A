@@ -30,10 +30,14 @@ const TRIAGEABLE: readonly IssueState[] = ["received", "in_triage", "triaged"];
 export function IssuePage({ issueId }: { issueId: string }) {
   const { issues, clock } = useServices();
   const session = useSession();
-  const { data: issue } = useSuspenseQuery(issueQuery(issues, issueId));
+  // `dataUpdatedAt` is read so that every answer of the poll re-renders the page, even an identical one (TanStack
+  // Query renders only for the fields a component reads, and keeps the same `data` for an unchanged answer). That
+  // re-render reads the clock again, which moves "waiting" to "triage pending" once the 2 minutes have passed.
+  const { data: issue, dataUpdatedAt } = useSuspenseQuery(issueQuery(issues, issueId));
   const history = useQuery(historyQuery(issues, issueId));
   const isAdministrator = hasBuildingRole(session, issue.buildingId, "administrator");
   const now = clock.now();
+  void dataUpdatedAt;
 
   return (
     <>
