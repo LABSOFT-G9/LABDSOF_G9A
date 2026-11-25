@@ -6,7 +6,8 @@
 #
 # On top of compose.yaml this file:
 #   - builds every service from its folder instead of pulling it from GHCR
-#     (tagged ghcr.io/labsoft-g9/labdsof-<service>:local, never pushed);
+#     (tagged ghcr.io/labsoft-g9/labdsof-<service>:local, never pushed),
+#     the client with the real API adapters (VITE_ADAPTERS=http);
 #   - adds MySQL 8.4, the same image as the database host, with the four
 #     databases and users (local/mysql/init.sh); data in the volume `mysql`;
 #   - points the services at it (DB_HOST=mysql);
@@ -49,7 +50,12 @@ services:
       mysql: { condition: service_healthy }
 
   client:
-    build: services/client
+    build:
+      context: services/client
+      # The real API behind Traefik, not the mock adapters (the Dockerfile's
+      # default, services/client/src/app/container.ts).
+      args:
+        VITE_ADAPTERS: http
     labels:
       traefik.http.routers.client.entrypoints: web
 
