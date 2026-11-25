@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// An administrator recorded a triage decision.
+message IssueTriaged {
+  string issue_id = 1;
+  // `plumbing`, `electrical`, `lift`, `cleaning`, `structural` or `other`.
+  string category = 2;
+  // `low`, `normal`, `high` or `critical`.
+  string urgency = 3;
+  // Always `human`: only a person decides.
+  string decision_source = 4;
+}

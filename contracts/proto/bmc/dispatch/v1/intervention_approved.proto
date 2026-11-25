@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bmc.dispatch.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.dispatch.v1";
+
+// An administrator approved one proposal version and the request was sent.
+// `contractor_user_id` lets Issue address the contractor's notification; it
+// grants no read access in Issue.
+message InterventionApproved {
+  string issue_id = 1;
+  string contractor_user_id = 2;
+  string contractor_display_name = 3;
+  int32 approved_proposal_version = 4;
+  // The intervention state after this event: `awaiting_approval`, `sent`,
+  // `scheduling_pending`, `booked`, `in_progress`, `completion_reported`,
+  // `declined`, `cancellation_pending`, `cancelled` or `closed`.
+  string intervention_state = 5;
+}

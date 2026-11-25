@@ -20,6 +20,8 @@ ADRs document context, alternatives, choice, consequences and evidence. “Propo
 | [ADR-012](ADR-012-health-and-status-page.md) | Health checks and monitoring; public status page deferred | Proposed (revised 2026-11-01) |
 | To be created after comparison | AI provider/model and evaluation | Undecided in DEC-05 |
 
+The results of the stack spike (EN01-U2, EN-02-01) are in the [spike record](EN-02-01-stack-spike.md) (2026-11-24).
+
 Use the [template](../templates/adr.md). States: Proposed → Accepted or Rejected; an accepted decision may be Superseded by a new ADR, preserving history. Record participants/date and links to evidence or feedback.
 
 ADR-001–012 are proposals prepared by the Tech Lead in EN-01-01 ([#15](https://github.com/Phenriquerafael/LABDSOF_G9A/issues/15)). They become Accepted only after a team review records participants and date, and an independent PR review. Product and process decisions belong in the [register](../planning/decisions-and-feedback.md). A practical companion for the identity setup is the [Keycloak setup guide](../guides/keycloak-setup.md).
@@ -175,3 +177,9 @@ Unless a row says otherwise, sources were accessed on 2026-10-27. Versions and t
 | E89 | Traefik plugins (experimental) | https://doc.traefik.io/traefik/reference/install-configuration/experimental/plugins/ · pinned source https://github.com/traefik/traefik/blob/ff3c174c1fa028b4a038c6b6dbbb383e2a6a32ca/docs/content/reference/install-configuration/experimental/plugins.md | O — “The `plugins` option is currently experimental and subject to change in future releases”; configured with `moduleName` and `version` under `experimental.plugins`; `experimental.localPlugins` loads a plugin “from a local directory, without publishing them to the Traefik plugin catalog” |
 
 Checked and not used as evidence: npm weekly download counts (the registry API returned a June–July 2026 window), a blog's claim about the date MinIO stopped publishing images, and RustFS's separate S3 compatibility matrix (not read).
+
+### Spike EN-02-01 (accessed 2026-11-24)
+
+| ID | Source | URL | Recorded fact |
+|---|---|---|---|
+| E90 | RabbitMQ quorum queues, poison message handling | https://www.rabbitmq.com/docs/quorum-queues | O — “Starting with RabbitMQ 4.3, the delivery limit is based on `delivery-count` rather than `acquired-count`. This means that unlimited explicit message returns (via `nack` or AMQP 1.0 `modify` with `delivery_failed=false`) are now allowed without counting towards the delivery limit.” “Before 4.3, a message requeued using `basic.nack` counted towards the delivery limit. Starting with 4.3, it does not.” The page lists AMQP 0.9.1 `basic.reject` as incrementing `delivery-count`. Observed with 4.4.1 in the [spike record](EN-02-01-stack-spike.md#25-dead-lettering-and-the-delivery-limit-item-5) |

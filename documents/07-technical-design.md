@@ -293,7 +293,7 @@ Alternatives considered: a per-command call to Issue (`GET /internal/issues/{id}
 
 ### 4.4 Event contracts
 
-Envelope as in [5](#5-asynchronous-workflow-and-consistency). On the wire, each event is a CloudEvents 1.0 structured JSON message (E43) published to `bmc.events` with routing key `<producer>.<eventType>`; the EN-01-02 envelope maps one-to-one ([ADR-003](adr/ADR-003-asynchronous-messaging-rabbitmq.md)):
+Envelope as in [5](#5-asynchronous-workflow-and-consistency). The payload schemas are the `.proto` files in [`contracts/proto`](../contracts/proto) and the channels are in [`contracts/asyncapi/asyncapi.yaml`](../contracts/asyncapi/asyncapi.yaml); the [contracts README](../contracts/README.md) has the rules for changing them (added 2026-11-24, EN-02-02). On the wire, each event is a CloudEvents 1.0 structured JSON message (E43) published to `bmc.events` with routing key `<producer>.<eventType>`; the EN-01-02 envelope maps one-to-one ([ADR-003](adr/ADR-003-asynchronous-messaging-rabbitmq.md)):
 
 | Envelope field | CloudEvents attribute |
 |---|---|
@@ -361,7 +361,7 @@ These values answer EN-01-01's open detail EN01-U7 (#15) as a starting proposal,
 | Mechanism | Proposed value |
 |---|---|
 | Outbox publisher | Poll every 1 s; publish with `mandatory` and publisher confirms; a row is marked sent only on a positive confirm with no returned message, because the broker also confirms an unroutable message (E84); a returned message leaves the row `pending` ([ADR-003](adr/ADR-003-asynchronous-messaging-rabbitmq.md)). While the broker is down: backoff 2 s doubling up to 5 min, without an attempt limit; rows stay `pending`, with an outbox-lag metric and alert |
-| Consumer delivery | `x-delivery-limit` 5 per quorum queue, then `<queue>.dlq` (dead-letter strategy at-least-once); an unsupported `schemaversion` goes to the DLQ without retry; replay is a runbook step owned by DevOps (Martim) |
+| Consumer delivery | `x-delivery-limit` 5 per quorum queue, then `<queue>.dlq` (dead-letter strategy at-least-once); an unsupported `schemaversion` goes to the DLQ without retry; replay is a runbook step owned by DevOps (Martim). Observed on 2026-11-24 with RabbitMQ 4.4.1 (tests of the [messaging starter](../platform/bmc-messaging-spring-boot-starter/README.md#what-the-tests-found)): a failed message must be returned with `basic.reject` and requeue, because since RabbitMQ 4.3 a `basic.nack` does not count towards the limit; and with a limit of 5 the handler receives the message 6 times before it is dead-lettered |
 | AI call (AI triage service) | 10 s timeout per attempt (NFR-03); 2 attempts; then the rules fallback |
 | Triage pending notice | No `TriageSuggested` within 2 min: Issue shows “triage pending — classify manually”; no state change |
 | Calendar call | 5 s timeout; 5 attempts with backoff 5 s doubling up to 2 min, reconciling before each re-send; then booking `failed` |

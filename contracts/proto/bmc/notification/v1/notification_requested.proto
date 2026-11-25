@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package bmc.notification.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.notification.v1";
+
+// Asks the Notification service to notify people. The producer (Issue or
+// Dispatch) decides the recipients; Notification renders `template_key` with
+// `params`, which never hold private text.
+message NotificationRequested {
+  // Idempotency key: one notification per ID, however often it is delivered.
+  string notification_id = 1;
+  // The `id` of the event that caused the notification.
+  string source_event_id = 2;
+  // Identity-provider subjects. Empty only for an invitation.
+  repeated string recipient_user_ids = 3;
+  string template_key = 4;
+  // Identifiers and labels for the template.
+  map<string, string> params = 5;
+  // OPEN: the values are settled in US-10.
+  string priority = 6;
+  // Invitations only: the invitee has no account yet, so the address and the
+  // invite link travel in the event. No other event carries an address.
+  optional string recipient_address = 7;
+  optional string invite_link = 8;
+}

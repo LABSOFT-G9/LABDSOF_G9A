@@ -1,0 +1,24 @@
+# Buf module with the event payloads of technical design 4.4 (ADR-003).
+# `buf lint` and `buf breaking` run on every pull request (pr.yml, job
+# "Protobuf contracts (buf)").
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  # The payloads travel as proto3 JSON, so field names and JSON-visible types
+  # are what a consumer depends on.
+  use:
+    - WIRE_JSON
+  # Events that no service publishes yet. Their owners may still change them;
+  # remove a line in the pull request that first publishes the event.
+  ignore:
+    - bmc/aitriage/v1
+    - bmc/dispatch/v1
+    - bmc/notification/v1
+    - bmc/issue/v1/issue_cancelled.proto
+    - bmc/issue/v1/issue_reopened.proto
+    - bmc/issue/v1/issue_resolved.proto
+    - bmc/issue/v1/issue_summary_published.proto
