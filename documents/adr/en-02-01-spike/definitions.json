@@ -1,0 +1,181 @@
+{
+ "users": [
+  {
+   "name": "admin",
+   "password": "spike-admin",
+   "tags": [
+    "administrator"
+   ]
+  },
+  {
+   "name": "issue",
+   "password": "spike-issue",
+   "tags": []
+  },
+  {
+   "name": "ai-triage",
+   "password": "spike-ai",
+   "tags": []
+  }
+ ],
+ "vhosts": [
+  {
+   "name": "/"
+  }
+ ],
+ "permissions": [
+  {
+   "user": "admin",
+   "vhost": "/",
+   "configure": ".*",
+   "write": ".*",
+   "read": ".*"
+  },
+  {
+   "user": "issue",
+   "vhost": "/",
+   "configure": "^$",
+   "write": "^bmc\\.events$",
+   "read": "^issue\\.inbox$"
+  },
+  {
+   "user": "ai-triage",
+   "vhost": "/",
+   "configure": "^$",
+   "write": "^bmc\\.events$",
+   "read": "^ai-triage\\.requests$"
+  }
+ ],
+ "topic_permissions": [
+  {
+   "user": "issue",
+   "vhost": "/",
+   "exchange": "bmc.events",
+   "write": "^issue\\.",
+   "read": "^$"
+  },
+  {
+   "user": "ai-triage",
+   "vhost": "/",
+   "exchange": "bmc.events",
+   "write": "^ai-triage\\.",
+   "read": "^$"
+  }
+ ],
+ "exchanges": [
+  {
+   "name": "bmc.events",
+   "vhost": "/",
+   "type": "topic",
+   "durable": true,
+   "auto_delete": false,
+   "internal": false,
+   "arguments": {}
+  },
+  {
+   "name": "bmc.dlx",
+   "vhost": "/",
+   "type": "direct",
+   "durable": true,
+   "auto_delete": false,
+   "internal": false,
+   "arguments": {}
+  }
+ ],
+ "queues": [
+  {
+   "name": "issue.inbox",
+   "vhost": "/",
+   "durable": true,
+   "auto_delete": false,
+   "arguments": {
+    "x-queue-type": "quorum",
+    "x-delivery-limit": 5,
+    "x-dead-letter-exchange": "bmc.dlx",
+    "x-dead-letter-routing-key": "issue.inbox.dlq",
+    "x-dead-letter-strategy": "at-least-once",
+    "x-overflow": "reject-publish"
+   }
+  },
+  {
+   "name": "issue.inbox.dlq",
+   "vhost": "/",
+   "durable": true,
+   "auto_delete": false,
+   "arguments": {
+    "x-queue-type": "quorum",
+    "x-message-ttl": 604800000
+   }
+  },
+  {
+   "name": "ai-triage.requests",
+   "vhost": "/",
+   "durable": true,
+   "auto_delete": false,
+   "arguments": {
+    "x-queue-type": "quorum",
+    "x-delivery-limit": 5,
+    "x-dead-letter-exchange": "bmc.dlx",
+    "x-dead-letter-routing-key": "ai-triage.requests.dlq",
+    "x-dead-letter-strategy": "at-least-once",
+    "x-overflow": "reject-publish"
+   }
+  },
+  {
+   "name": "ai-triage.requests.dlq",
+   "vhost": "/",
+   "durable": true,
+   "auto_delete": false,
+   "arguments": {
+    "x-queue-type": "quorum",
+    "x-message-ttl": 604800000
+   }
+  },
+  {
+   "name": "spike.no-reject-publish",
+   "vhost": "/",
+   "durable": true,
+   "auto_delete": false,
+   "arguments": {
+    "x-queue-type": "quorum",
+    "x-dead-letter-exchange": "bmc.dlx",
+    "x-dead-letter-routing-key": "issue.inbox.dlq",
+    "x-dead-letter-strategy": "at-least-once"
+   }
+  }
+ ],
+ "bindings": [
+  {
+   "source": "bmc.events",
+   "vhost": "/",
+   "destination": "ai-triage.requests",
+   "destination_type": "queue",
+   "routing_key": "issue.TriageRequested",
+   "arguments": {}
+  },
+  {
+   "source": "bmc.events",
+   "vhost": "/",
+   "destination": "issue.inbox",
+   "destination_type": "queue",
+   "routing_key": "ai-triage.TriageSuggested",
+   "arguments": {}
+  },
+  {
+   "source": "bmc.dlx",
+   "vhost": "/",
+   "destination": "issue.inbox.dlq",
+   "destination_type": "queue",
+   "routing_key": "issue.inbox.dlq",
+   "arguments": {}
+  },
+  {
+   "source": "bmc.dlx",
+   "vhost": "/",
+   "destination": "ai-triage.requests.dlq",
+   "destination_type": "queue",
+   "routing_key": "ai-triage.requests.dlq",
+   "arguments": {}
+  }
+ ]
+}

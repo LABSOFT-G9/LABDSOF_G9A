@@ -1,0 +1,139 @@
+{
+  "realm": "bmc",
+  "users": [
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000101",
+      "username": "synthetic.resident.a1@bmc.example",
+      "email": "synthetic.resident.a1@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Resident A1",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000102",
+      "username": "synthetic.resident.a2@bmc.example",
+      "email": "synthetic.resident.a2@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Resident A2",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000111",
+      "username": "synthetic.resident.b1@bmc.example",
+      "email": "synthetic.resident.b1@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Resident B1",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000201",
+      "username": "synthetic.administrator.a@bmc.example",
+      "email": "synthetic.administrator.a@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Administrator A",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000202",
+      "username": "synthetic.administrator.b@bmc.example",
+      "email": "synthetic.administrator.b@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Administrator B",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000301",
+      "username": "synthetic.contractor@bmc.example",
+      "email": "synthetic.contractor@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Contractor",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc"
+      ]
+    },
+    {
+      "id": "0199f2a0-0000-7000-8000-000000000401",
+      "username": "synthetic.platform.staff@bmc.example",
+      "email": "synthetic.platform.staff@bmc.example",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Synthetic",
+      "lastName": "Platform Staff",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${BMC_SYNTHETIC_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-bmc",
+        "platform_staff"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package bmc.aitriage.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.aitriage.v1";
+
+// The AI triage service's suggestion for one issue version. A suggestion, not
+// a decision: Issue applies it only if the issue is still at `issue_version`,
+// and it never clears or lowers a critical alert.
+message TriageSuggested {
+  string issue_id = 1;
+  // Copied from the `TriageRequested` it answers.
+  int32 issue_version = 2;
+  // Same values as `bmc.issue.v1.IssueTriaged`.
+  string category = 3;
+  string urgency = 4;
+  string rationale = 5;
+  bool needs_review = 6;
+  // `ai`, `rules` or `fallback`.
+  string origin = 7;
+  // Absent when no provider was called.
+  optional string model_version = 8;
+  optional string prompt_version = 9;
+  // Absent when the rules did not run.
+  optional string rules_version = 10;
+  // Version of the provider-output schema, not of this event. Absent when no
+  // provider output was validated.
+  optional string output_schema_version = 11;
+  // Why the provider result was not used. Only with origin `fallback`.
+  optional string failure_code = 12;
+}

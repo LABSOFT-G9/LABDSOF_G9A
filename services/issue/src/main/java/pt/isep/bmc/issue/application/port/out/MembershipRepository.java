@@ -8,4 +8,7 @@ public interface MembershipRepository {
 
     /** Every membership of the user, active or not; the domain decides what counts. */
     List<Membership> findByUser(UserId userId);
+
+    /** Every membership, active or revoked (rows are never deleted). */
+    List<Membership> findAll();
 }
