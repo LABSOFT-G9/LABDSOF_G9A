@@ -49,10 +49,12 @@ expect() { # expect <wanted status> <description> <curl args...>
 }
 
 sign_in() { # sign_in <username>: /oidc/login -> Keycloak's form -> callback, in the current jar
-  local user="$1" action landed
-  request --location --output "$work/login.html" "$BASE/oidc/login"
-  action="$(grep -o 'action="[^"]*"' "$work/login.html" | head -n 1 | sed 's/^action="//; s/"$//; s/&amp;/\&/g')"
-  [ -n "$action" ] || fail "Keycloak's login form was not found"
+  local user="$1" action landed page
+  page="$(request --location --output "$work/login.html" --write-out '%{url_effective} %{http_code} %{content_type}' \
+    "$BASE/oidc/login")"
+  # `|| true`: without a form, say what answered instead of stopping silently (pipefail).
+  action="$(grep -o 'action="[^"]*"' "$work/login.html" | head -n 1 | sed 's/^action="//; s/"$//; s/&amp;/\&/g' || true)"
+  [ -n "$action" ] || fail "Keycloak's login form was not found; /oidc/login ended at: $page"
   case "$action" in "$BASE"/auth/realms/bmc/*) ;; *) fail "the login form posts outside $BASE/auth/realms/bmc" ;; esac
   landed="$(request --location --output /dev/null --write-out '%{url_effective} %{http_code}' \
     --data-urlencode "username=$user" --data-urlencode "password=$PASSWORD" "$action")"
@@ -60,14 +62,31 @@ sign_in() { # sign_in <username>: /oidc/login -> Keycloak's form -> callback, in
   echo "ok   $user signed in and returned to $BASE/"
 }
 
+# Ready means that Keycloak itself answers, not only that something does.
+# Traefik routes a container once it is healthy; until then /auth/... falls
+# through to the client, and a single-page client answers any path with 200
+# and index.html. So: the discovery document must be Keycloak's JSON, the edge
+# must refuse an API call without a session, and /oidc/login must redirect to
+# the realm (the OIDC plugin answers 500 until it has read the discovery).
+# These probes use no cookie jar, so they leave no login state behind.
+probe() { curl --silent --max-time 30 "$@"; }
+keycloak_answers() {
+  probe "$BASE/auth/realms/bmc/.well-known/openid-configuration" | grep -q "\"issuer\":\"$BASE/auth/realms/bmc\""
+}
+login_redirects() {
+  case "$(probe --output /dev/null --write-out '%{http_code} %{redirect_url}' "$BASE/oidc/login")" in
+    "302 $BASE/auth/realms/bmc/"*) true ;;
+    *) false ;;
+  esac
+}
+
 step "Waiting for the stack at $BASE (up to ${WAIT}s)"
 deadline=$((SECONDS + WAIT))
-until [ "$(status "$BASE/auth/realms/bmc/.well-known/openid-configuration" || true)" = 200 ] \
-  && [ "$(status "$BASE/api/issue/me" || true)" = 401 ]; do
+until keycloak_answers && [ "$(status "$BASE/api/issue/me" || true)" = 401 ] && login_redirects; do
   [ "$SECONDS" -lt "$deadline" ] || fail "the stack did not become ready in ${WAIT}s"
   sleep 5
 done
-echo "ok   Keycloak and the Issue route answer"
+echo "ok   Keycloak answers, the edge refuses an API call without a session and /oidc/login redirects to the realm"
 
 step "1. No session"
 expect 401 "GET /api/issue/me without a session" "$BASE/api/issue/me"
