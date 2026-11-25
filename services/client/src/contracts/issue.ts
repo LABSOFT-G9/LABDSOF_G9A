@@ -292,7 +292,7 @@ export const HistoryEntrySchema = z.object({
    * `triage_suggested` only: whether the suggestion was applied. `false` when it named a version the issue had already
    * left, before or after a decision (agreed on #108; technical design §3.3).
    */
-  applied: z.boolean().optional(),
+  applied: z.boolean().nullish(),
   /** `critical_alert_raised` only: the matched rule's code (agreed on #96), worded by the client. */
   code: z.string().nullish(),
 });
