@@ -45,6 +45,44 @@ class RestartIT {
         }
     }
 
+    /** US-02: the decision, its reason and the history are still there after a restart. */
+    @Test
+    void triageDecisionAndHistorySurviveARestart() throws Exception {
+        MySQLContainer mysql = TestDatabase.shared();
+        TestTokens tokens = TestTokens.get();
+        String reason = "Restart check: water near an electrical fitting";
+        String issueId;
+
+        try (ConfigurableApplicationContext first = start(mysql)) {
+            try (var connection = first.getBean(javax.sql.DataSource.class).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us01-fixtures.sql"));
+            }
+            var created = api(first).post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                    Map.of("buildingId", BUILDING_A, "areaId", AREA_A_GARAGE, "text", "Restart check for triage, garage."));
+            issueId = (String) created.json().get("issueId");
+            var triaged = api(first).postWithHeaders("/issues/" + issueId + "/triage", tokens.token(ADMIN_A),
+                    Map.of("If-Match", "\"1\"", "Idempotency-Key", UUID.randomUUID().toString()),
+                    Map.of("category", "plumbing", "urgency", "high", "reason", reason));
+            assertThat(triaged.status()).isEqualTo(200);
+        }
+
+        try (ConfigurableApplicationContext second = start(mysql)) {
+            var issue = api(second).get("/issues/" + issueId, tokens.token(ADMIN_A));
+            assertThat(issue.status()).isEqualTo(200);
+            assertThat(issue.json()).containsEntry("state", "triaged").containsEntry("version", 2);
+            assertThat((Map<?, ?>) issue.json().get("triage")).extracting("category", "urgency", "reason")
+                    .containsExactly("plumbing", "high", reason);
+            var history = api(second).get("/issues/" + issueId + "/history", tokens.token(ADMIN_A));
+            assertThat((java.util.List<?>) history.json().get("items")).hasSize(2);
+            // The next decision continues from the stored version.
+            var next = api(second).postWithHeaders("/issues/" + issueId + "/triage", tokens.token(ADMIN_A),
+                    Map.of("If-Match", "\"2\"", "Idempotency-Key", UUID.randomUUID().toString()),
+                    Map.of("category", "electrical", "urgency", "critical", "reason", reason));
+            assertThat(next.status()).isEqualTo(200);
+            assertThat(next.json()).containsEntry("version", 3);
+        }
+    }
+
     static ConfigurableApplicationContext start(MySQLContainer mysql, String... extraArgs) {
         Map<String, Object> properties = new HashMap<>();
         properties.put("server.port", "0");

@@ -1,18 +1,12 @@
 package pt.isep.bmc.issue.application.command;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
-import java.util.Optional;
-import pt.isep.bmc.issue.application.error.IdempotencyKeyReusedException;
+import pt.isep.bmc.issue.application.idempotency.IdempotentExecutor;
 import pt.isep.bmc.issue.application.port.in.SubmitReportUseCase;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
-import pt.isep.bmc.issue.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
 import pt.isep.bmc.issue.application.port.out.IdempotencyRecord;
@@ -39,12 +33,9 @@ import pt.isep.bmc.issue.domain.report.ReportSubmission;
  * idempotency record in <b>one</b> transaction (technical design 3.1 and 5).
  * The request never waits for AI or the broker.
  *
- * <p>Idempotency (technical design 3.3): the key is the first write of the
- * transaction. A concurrent retry with the same key blocks on that unique row
- * until the first transaction ends; if it committed, the retry fails with
- * {@link DuplicateIdempotencyKeyException}, rolls back everything it did and
- * replays the stored receipt. A different body under the same key is rejected
- * with {@link IdempotencyKeyReusedException} and changes nothing.
+ * <p>Idempotent per key (technical design 3.3): see {@link IdempotentExecutor}.
+ * The key is the first write of the transaction, after the domain has
+ * accepted the report.
  */
 public final class SubmitReportService implements SubmitReportUseCase {
 
@@ -59,6 +50,7 @@ public final class SubmitReportService implements SubmitReportUseCase {
     private final ReportRepository reports;
     private final EventOutbox outbox;
     private final IdempotencyStore idempotency;
+    private final IdempotentExecutor idempotent;
     private final IdGenerator ids;
     private final Clock clock;
 
@@ -79,6 +71,7 @@ public final class SubmitReportService implements SubmitReportUseCase {
         this.reports = reports;
         this.outbox = outbox;
         this.idempotency = idempotency;
+        this.idempotent = new IdempotentExecutor(transactions, idempotency);
         this.ids = ids;
         this.clock = clock;
     }
@@ -89,28 +82,7 @@ public final class SubmitReportService implements SubmitReportUseCase {
         String requestHash = fingerprint(command);
         // Millisecond precision, so a replay returns exactly the stored time.
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
-
-        Optional<IdempotencyRecord> stored = transactions.readOnly(() -> idempotency.find(scope));
-        if (stored.isPresent() && !stored.get().isExpiredAt(now)) {
-            return transactions.readOnly(() -> replay(stored.get(), requestHash));
-        }
-        if (stored.isPresent()) {
-            // Expired: free the key in its own short transaction. Deleting inside the
-            // create transaction would take InnoDB gap locks that deadlock concurrent inserts.
-            transactions.inTransaction(() -> {
-                idempotency.deleteIfExpired(scope, now);
-                return null;
-            });
-        }
-        try {
-            return transactions.inTransaction(() -> create(command, scope, requestHash, now));
-        } catch (DuplicateIdempotencyKeyException concurrentRetry) {
-            return transactions.readOnly(() -> replay(
-                    idempotency.find(scope)
-                            .filter(r -> !r.isExpiredAt(now))
-                            .orElseThrow(() -> new IllegalStateException("duplicate key without a live record")),
-                    requestHash));
-        }
+        return idempotent.execute(scope, requestHash, now, () -> create(command, scope, requestHash, now), this::replay);
     }
 
     private ReportReceipt create(SubmitReportCommand command, IdempotencyScope scope, String requestHash, Instant now) {
@@ -141,12 +113,7 @@ public final class SubmitReportService implements SubmitReportUseCase {
         return new ReportReceipt(report.id(), issue.id(), issue.state(), issue.version(), report.submittedAt(), false);
     }
 
-    private ReportReceipt replay(IdempotencyRecord record, String requestHash) {
-        if (!MessageDigest.isEqual(
-                record.requestHash().getBytes(StandardCharsets.US_ASCII),
-                requestHash.getBytes(StandardCharsets.US_ASCII))) {
-            throw new IdempotencyKeyReusedException();
-        }
+    private ReportReceipt replay(IdempotencyRecord record) {
         Report report = reports.findById(new ReportId(record.resourceId()))
                 .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing report"));
         // A report's receipt always describes its creation: received, at the stored version.
@@ -156,13 +123,6 @@ public final class SubmitReportService implements SubmitReportUseCase {
 
     /** SHA-256 of the request fields exactly as received. */
     static String fingerprint(SubmitReportCommand command) {
-        String canonical = "v1\n" + command.buildingId() + "\n" + command.areaId() + "\n"
-                + (command.text() == null ? "" : command.text());
-        try {
-            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(sha256.digest(canonical.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the Java platform", e);
-        }
+        return IdempotentExecutor.fingerprint(command.buildingId(), command.areaId(), command.text());
     }
 }

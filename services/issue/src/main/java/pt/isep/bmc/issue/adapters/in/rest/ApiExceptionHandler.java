@@ -20,12 +20,16 @@ import pt.isep.bmc.issue.application.error.NotFoundException;
 import pt.isep.bmc.issue.application.error.StorageUnavailableException;
 import pt.isep.bmc.issue.domain.shared.AccessDeniedException;
 import pt.isep.bmc.issue.domain.shared.DomainException;
+import pt.isep.bmc.issue.domain.shared.ForbiddenException;
 import pt.isep.bmc.issue.domain.shared.InvalidAreaException;
+import pt.isep.bmc.issue.domain.shared.InvalidTransitionException;
 import pt.isep.bmc.issue.domain.shared.ValidationException;
+import pt.isep.bmc.issue.domain.shared.VersionConflictException;
 
 /**
  * Maps errors to {@code application/problem+json} (technical design 4.1):
- * {@code 400} validation, {@code 404} unknown or outside scope, {@code 422}
+ * {@code 400} validation, {@code 403} wrong actor, {@code 404} unknown or
+ * outside scope, {@code 409} stale version or invalid transition, {@code 422}
  * idempotency key reused, {@code 503} database unavailable. Unexpected errors
  * answer {@code 500} without details; only the exception class is logged.
  */
@@ -57,6 +61,28 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 "The resource does not exist or is outside your scope.", CorrelationIdFilter.of(request)));
     }
 
+    /** The caller can see the resource but may not change it (technical design 3.3, "wrong actor"). */
+    @ExceptionHandler(ForbiddenException.class)
+    ResponseEntity<ProblemDetail> forbidden(ForbiddenException e, HttpServletRequest request) {
+        return respond(problem(HttpStatus.FORBIDDEN, e, request));
+    }
+
+    /** Stale {@code If-Match}: tells the client what the resource is now, and changes nothing. */
+    @ExceptionHandler(VersionConflictException.class)
+    ResponseEntity<ProblemDetail> versionConflict(VersionConflictException e, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, e, request);
+        problem.setProperty("currentVersion", e.currentVersion());
+        problem.setProperty("currentState", e.currentState());
+        return respond(problem);
+    }
+
+    @ExceptionHandler(InvalidTransitionException.class)
+    ResponseEntity<ProblemDetail> invalidTransition(InvalidTransitionException e, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, e, request);
+        problem.setProperty("currentState", e.currentState());
+        return respond(problem);
+    }
+
     @ExceptionHandler(IdempotencyKeyReusedException.class)
     ResponseEntity<ProblemDetail> keyReused(IdempotencyKeyReusedException e, HttpServletRequest request) {
         return respond(Problems.of(HttpStatus.UNPROCESSABLE_CONTENT, "IDEMPOTENCY_KEY_REUSED",
@@ -66,7 +92,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(StorageUnavailableException.class)
     ResponseEntity<ProblemDetail> storage(StorageUnavailableException e, HttpServletRequest request) {
         ProblemDetail problem = Problems.of(HttpStatus.SERVICE_UNAVAILABLE, "DEPENDENCY_UNAVAILABLE",
-                "The report could not be saved. Nothing was stored; please try again.",
+                "The request could not be completed. Nothing was changed; please try again.",
                 CorrelationIdFilter.of(request));
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, "5")

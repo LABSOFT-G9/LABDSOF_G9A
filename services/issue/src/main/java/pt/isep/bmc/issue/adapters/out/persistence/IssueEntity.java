@@ -26,6 +26,12 @@ class IssueEntity {
     @Column(name = "version", nullable = false)
     long version;
 
+    @Column(name = "category")
+    String category;
+
+    @Column(name = "urgency")
+    String urgency;
+
     @Column(name = "critical_check_status", nullable = false)
     String criticalCheckStatus;
 

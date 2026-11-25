@@ -43,4 +43,26 @@ class LogPrivacyIT extends IntegrationTestSupport {
 
         assertThat(output.getAll()).contains("POST \"/reports\"").doesNotContain("PrivateMarker", "Jane Synthetic");
     }
+
+    /** US-02: a triage reason may quote a private report, so it stays out of the logs too. */
+    @Test
+    void triageReasonNeverReachesTheLogs(CapturedOutput output) {
+        String reason = MARKER + " reports sparks from the socket.";
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        String key = UUID.randomUUID().toString();
+
+        assertThat(triage(ADMIN_A, issueId, "\"1\"", key, triageBody("electrical", "critical", reason)).status())
+                .isEqualTo(200);
+        triage(ADMIN_A, issueId, "\"1\"", key, triageBody("electrical", "critical", reason));        // replay
+        triage(ADMIN_A, issueId, "\"1\"", key, triageBody("electrical", "low", reason));             // 422
+        triage(ADMIN_A, issueId, 1, "electrical", "critical", reason);                                // 409
+        triage(ADMIN_A, issueId, 2, "gardening", "critical", reason + "x".repeat(500));               // 400
+        triage(RESIDENT_A1, issueId, 2, "electrical", "critical", reason);                            // 403
+        triage(RESIDENT_B1, issueId, 2, "electrical", "critical", reason);                            // 404
+        api.get("/issues/" + issueId, tokens.token(ADMIN_A));
+        api.get("/issues/" + issueId + "/history", tokens.token(ADMIN_A));
+        api.get("/issues", tokens.token(ADMIN_A));
+
+        assertThat(output.getAll()).contains("/triage").doesNotContain("PrivateMarker", "Jane Synthetic");
+    }
 }

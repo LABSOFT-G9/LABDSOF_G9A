@@ -4,6 +4,8 @@ import jakarta.persistence.EntityManager;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
+import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.membership.UserId;
 import pt.isep.bmc.issue.domain.report.Report;
 import pt.isep.bmc.issue.domain.report.ReportId;
 
@@ -22,6 +24,11 @@ class JpaReportRepository implements ReportRepository {
     public void add(Report report) {
         // persist, not save: the ID is assigned, so save() would SELECT first.
         entityManager.persist(PersistenceMapper.toEntity(report));
+    }
+
+    @Override
+    public boolean existsByIssueAndAuthor(IssueId issueId, UserId author) {
+        return reports.existsByIssueIdAndAuthorUserId(issueId.toString(), author.value());
     }
 
     @Override

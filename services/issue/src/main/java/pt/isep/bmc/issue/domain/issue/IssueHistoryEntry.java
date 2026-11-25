@@ -6,9 +6,11 @@ import pt.isep.bmc.issue.domain.report.ReportSource;
 
 /**
  * One entry of an issue's history (technical design 2.1). Holds the actor's
- * role, never their identity or any free text.
+ * role, never their identity or any free text: a decision's reason and its
+ * author are in the {@link TriageDecision} of the same issue version.
  *
- * @param actorRole {@code resident} or {@code administrator}
+ * @param issueVersion the issue's version once the entry's change was applied
+ * @param actorRole    {@code resident}, {@code administrator}, {@code contractor} or {@code system}
  */
 public record IssueHistoryEntry(
         IssueId issueId,
@@ -16,7 +18,12 @@ public record IssueHistoryEntry(
         HistoryEntryType type,
         HistoryVisibility visibility,
         String actorRole,
+        long issueVersion,
         Instant occurredAt) {
+
+    public static final String ROLE_RESIDENT = "resident";
+    public static final String ROLE_ADMINISTRATOR = "administrator";
+    public static final String ROLE_SYSTEM = "system";
 
     public IssueHistoryEntry {
         Objects.requireNonNull(issueId, "issueId");
@@ -27,11 +34,30 @@ public record IssueHistoryEntry(
         if (sequence < 1) {
             throw new IllegalArgumentException("sequence starts at 1");
         }
+        if (issueVersion < Issue.INITIAL_VERSION) {
+            throw new IllegalArgumentException("issueVersion starts at " + Issue.INITIAL_VERSION);
+        }
     }
 
     /** First, public entry of a new issue. */
     public static IssueHistoryEntry reportReceived(IssueId issueId, ReportSource source, Instant at) {
-        String role = source == ReportSource.RESIDENT ? "resident" : "administrator";
-        return new IssueHistoryEntry(issueId, 1, HistoryEntryType.REPORT_RECEIVED, HistoryVisibility.PUBLIC, role, at);
+        String role = source == ReportSource.RESIDENT ? ROLE_RESIDENT : ROLE_ADMINISTRATOR;
+        return new IssueHistoryEntry(issueId, 1, HistoryEntryType.REPORT_RECEIVED, HistoryVisibility.PUBLIC, role,
+                Issue.INITIAL_VERSION, at);
+    }
+
+    /**
+     * An administrator decided category and urgency. Public: residents who
+     * may follow the issue see that it was triaged, and as what, never why.
+     */
+    public static IssueHistoryEntry triageDecided(Issue triaged, int sequence) {
+        return new IssueHistoryEntry(triaged.id(), sequence, HistoryEntryType.TRIAGE_DECIDED, HistoryVisibility.PUBLIC,
+                ROLE_ADMINISTRATOR, triaged.version(), triaged.updatedAt());
+    }
+
+    /** An unconfirmed suggestion moved the issue to {@code in_triage}. Internal. */
+    public static IssueHistoryEntry triageSuggested(Issue inTriage, int sequence) {
+        return new IssueHistoryEntry(inTriage.id(), sequence, HistoryEntryType.TRIAGE_SUGGESTED,
+                HistoryVisibility.INTERNAL, ROLE_SYSTEM, inTriage.version(), inTriage.updatedAt());
     }
 }

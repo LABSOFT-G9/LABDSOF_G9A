@@ -157,6 +157,14 @@ class ReportSubmissionIT extends IntegrationTestSupport {
         assertThat(malformed.status()).isEqualTo(400);
         assertThat(malformed.body()).doesNotContain("Secret-marker");
 
+        // A text that is not a JSON string is malformed, never turned into text.
+        for (String notAString : List.of("12345678901", "true", "[\"Water in the garage\"]")) {
+            Response wrongType = api.post("/reports", token, UUID.randomUUID().toString(),
+                    "{\"buildingId\": \"" + BUILDING_A + "\", \"areaId\": \"" + AREA_A_GARAGE + "\", \"text\": "
+                            + notAString + "}");
+            assertThat(wrongType.status()).as(notAString).isEqualTo(400);
+        }
+
         Response noKey = api.post("/reports", token, null, report(BUILDING_A, AREA_A_GARAGE, TEXT));
         assertThat(noKey.status()).isEqualTo(400);
         assertThat(noKey.json().get("errors"))
