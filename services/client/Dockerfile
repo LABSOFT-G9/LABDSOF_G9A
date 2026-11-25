@@ -4,9 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-# Which adapters the bundle wires (src/app/container.ts). "mock" until the backend and Keycloak are deployed;
-# build with --build-arg VITE_ADAPTERS=http to use the real API behind Traefik.
-ARG VITE_ADAPTERS=mock
+# Which adapters the bundle wires (src/app/container.ts). Images use the real API and sign-in behind Traefik
+# (EN-02-04, #139). Build with --build-arg VITE_ADAPTERS=mock for a backend-free image; `npm run dev` stays mock
+# through its own default (src/app/config.ts) unless .env.local says otherwise.
+ARG VITE_ADAPTERS=http
 ENV VITE_ADAPTERS=${VITE_ADAPTERS}
 RUN npm run build
 
