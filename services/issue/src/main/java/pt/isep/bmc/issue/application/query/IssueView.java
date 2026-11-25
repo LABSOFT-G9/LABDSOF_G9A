@@ -12,6 +12,8 @@ import pt.isep.bmc.issue.domain.issue.IssueState;
  * report text and nobody's identity: the area label says what it is about.
  *
  * @param triage     the current human decision, or empty while category and urgency are undecided
+ * @param suggestion the unconfirmed suggestion, for administrators of the building only; empty once a
+ *                   person decided, and when no suggestion was applied
  * @param summary    the published summary, or empty while the issue is not shared with the building
  * @param impact     the impact count and the caller's own confirmation; empty while there is no summary
  * @param subscribed the caller's own notification choice; off by default
@@ -25,6 +27,7 @@ public record IssueView(
         long version,
         Instant createdAt,
         Optional<TriageView> triage,
+        Optional<SuggestionView> suggestion,
         Optional<SummaryView> summary,
         Optional<ImpactView> impact,
         boolean subscribed) {
@@ -33,6 +36,7 @@ public record IssueView(
         Objects.requireNonNull(issueId, "issueId");
         Objects.requireNonNull(buildingId, "buildingId");
         Objects.requireNonNull(triage, "triage");
+        Objects.requireNonNull(suggestion, "suggestion");
         Objects.requireNonNull(summary, "summary");
         Objects.requireNonNull(impact, "impact");
     }
@@ -40,6 +44,12 @@ public record IssueView(
     /** The same issue with the internal triage reason removed. */
     public IssueView withoutTriageReason() {
         return new IssueView(issueId, buildingId, buildingName, areaLabel, state, version, createdAt,
-                triage.map(TriageView::withoutReason), summary, impact, subscribed);
+                triage.map(TriageView::withoutReason), suggestion, summary, impact, subscribed);
+    }
+
+    /** The same issue without the suggestion, for a caller who does not administer its building. */
+    public IssueView withoutSuggestion() {
+        return new IssueView(issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage,
+                Optional.empty(), summary, impact, subscribed);
     }
 }

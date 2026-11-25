@@ -3,7 +3,7 @@ package pt.isep.bmc.issue.domain.issue;
 /** Kinds of history entry. Later stories add intervention and closure entries. */
 public enum HistoryEntryType {
     REPORT_RECEIVED("report_received"),
-    /** An unconfirmed suggestion arrived (AI, rules or fallback). Internal. */
+    /** A triage suggestion arrived (AI, rules or fallback), applied or late. Internal. */
     TRIAGE_SUGGESTED("triage_suggested"),
     /** An administrator decided category and urgency. Public; the reason is not. */
     TRIAGE_DECIDED("triage_decided"),

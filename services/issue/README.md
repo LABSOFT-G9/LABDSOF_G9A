@@ -8,6 +8,7 @@ Implemented so far:
 - US-02-01 ([#87](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/87)): manual triage with `If-Match`, the triage rows of the state table, issue queries and history projected by role.
 - EN-02-04 ([#80](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/80)): tokens from the Keycloak realm `bmc`; `GET /me` passes on the account's email and platform roles; the seeded memberships are announced through the outbox.
 - US-04-01 ([#89](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/89)): the shared summary an administrator publishes, who sees a shared issue, impact confirmations and subscriptions.
+- US-03-03 ([#108](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/108)), in part: a triage suggestion is recorded by issue version, once per event, and shown to administrators as unconfirmed. The consumer that reads `TriageSuggested` from `issue.inbox` comes with EN-02-02 ([#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)).
 
 ## Architecture
 
@@ -19,13 +20,13 @@ pt.isep.bmc.issue
 │   ├── building/      BuildingId, Area, AreaKind
 │   ├── membership/    Membership, UserId (Keycloak sub), BuildingAccess (access matrix rules), PlatformRole
 │   ├── report/        Report, ReportText (10–4,000 code points), ReportIntake (domain service)
-│   ├── issue/         Issue, IssueState, IssueTriage (domain service), TriageDecision, TriageReason, IssueHistoryEntry
+│   ├── issue/         Issue, IssueState, IssueTriage and SuggestionIntake (domain services), TriageDecision, TriageSuggestion, IssueHistoryEntry
 │   ├── event/         DomainEvent: ReportSubmitted, TriageRequested, IssueTriaged, IssueStateChanged, MembershipGranted, MembershipRevoked
 │   └── shared/        DomainException (sealed): validation, invalid area, access denied, forbidden, version conflict, invalid transition
 ├── application/       use cases and ports; depends only on domain
 │   ├── port/in/       SubmitReportUseCase, DecideTriageUseCase, GetReportQuery, GetIssueQuery, GetProfileQuery, ...
 │   ├── port/out/      repositories, EventOutbox, IdempotencyStore, TransactionRunner, IdGenerator, read models
-│   ├── command/       SubmitReportService, DecideTriageService, PurgeExpiredIdempotencyKeysService, MembershipAnnouncementService
+│   ├── command/       SubmitReportService, DecideTriageService, RecordTriageSuggestionService, MembershipAnnouncementService, ...
 │   ├── query/         ReportQueryService, IssueQueryService, ProfileQueryService, BuildingAreasQueryService
 │   ├── idempotency/   IdempotencyKey, IdempotentExecutor (one effect per key)
 │   └── error/         NotFoundException, IdempotencyKeyReusedException, StorageUnavailableException
@@ -50,8 +51,8 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
 | `GET /reports?buildingId=&page=&size=` | Any user | Own reports, plus every report of the buildings the caller administers, newest first. No text |
 | `GET /me` | Any user | `{userId, displayName, email, platformRoles, memberships}`. Memberships (with building names) come only from this service's data. `email` and `platformRoles` (for example `["platform_staff"]`) are passed on from the access token for display and grant nothing here; `displayName` is the stored profile name, else the token's `name` |
 | `GET /issues?buildingId=&page=&size=` | Any user | Issues of the buildings the caller administers, the issues the caller reported, and the issues with a published summary in the buildings the caller belongs to, newest first. Each item: `{issueId, buildingId, buildingName, areaLabel, state, version, createdAt, triage, suggestion, summary, impact, subscribed}`. No report text, no triage reason |
-| `GET /issues/{id}` | Administrators of the building; whoever reported it; once a summary is published, every member of the building | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is `null` until US-03-03. `summary` is `null` until published, else `{text, publishedAt}`. `impact` is `null` until published, else `{count, mine}`. `subscribed` is the caller's own choice |
-| `GET /issues/{id}/history` | The same | `{items: [{sequence, type, visibility, actorRole, occurredAt, category, urgency, reason}]}`, oldest first. Residents get public entries only, without reasons. Roles, never identities |
+| `GET /issues/{id}` | Administrators of the building; whoever reported it; once a summary is published, every member of the building | The same item, `ETag` with the version. `triage` is `null` until decided, else `{category, urgency, reason, decidedAt, decisionSource: "human"}`; `reason` is `null` for residents. `suggestion` is for administrators of the building only: `null` for everyone else, while no suggestion was applied, and once a person decided; else `{category, urgency, origin, rationale, needsReview, failureCode, suggestedAt, rulesVersion, modelVersion}`, with `rationale` `null` in the list. `summary` is `null` until published, else `{text, publishedAt}`. `impact` is `null` until published, else `{count, mine}`. `subscribed` is the caller's own choice |
+| `GET /issues/{id}/history` | The same | `{items: [{sequence, type, visibility, actorRole, occurredAt, category, urgency, reason, origin, applied}]}`, oldest first. Residents get public entries only, without reasons. `origin` and `applied` are set on `triage_suggested` entries only, which are internal. Roles, never identities |
 | `POST /issues/{id}/triage` + `If-Match: "<version>"` + `Idempotency-Key` | Administrators of the building | Body `{category, urgency, reason}`. `200`, `ETag` with the new version, `{issueId, state: "triaged", version, category, urgency, decisionSource: "human"}` |
 | `POST /issues/{id}/publication` + `If-Match: "<version>"` + `Idempotency-Key` | Administrators of the building | Body `{summary}`. `200`, `ETag` with the new version, `{issueId, version, summary: {text, publishedAt}}`. Publishing again replaces the summary |
 | `PUT` / `DELETE /issues/{id}/impact` | Residents of the building, for themselves, once a summary is published | `200`, `{count, mine}`. Safe to repeat |
@@ -76,7 +77,14 @@ Paths are service-relative. The edge serves them under `/api/issue` and strips t
   - From `received`, `in_triage` or `triaged` to `triaged`; a decision can be corrected by deciding again, and every decision is kept. From any later state: `409 INVALID_TRANSITION`.
   - `If-Match` is the quoted version the administrator was looking at. If the issue changed since: `409 VERSION_CONFLICT`, and nothing is overwritten. Of several decisions based on the same version, exactly one wins.
   - The decision, the issue's next version, the history entry and the `IssueTriaged` and `IssueStateChanged` outbox rows are one transaction. Events never carry the reason.
-  - Works without AI. A suggestion never sets category or urgency, and a late one changes nothing (`Issue.suggestTriage`); recording suggestions is US-03-03 ([#108](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/108)).
+  - Works without AI. A suggestion never sets category or urgency, and a late one changes nothing (`Issue.suggestTriage`).
+- **Triage suggestions** (US-03, technical design 3.1, 3.3 and 4.4). They arrive in `TriageSuggested`, not through the API: `RecordTriageSuggestionUseCase` is what the queue consumer calls.
+  - **Applied.** A suggestion computed from the issue's current version, while the issue is `received`, moves it to `in_triage` with the next version. The suggestion, the issue, the internal `triage_suggested` history entry and the `IssueStateChanged` outbox row are one transaction. A decision sent with the version from before the suggestion gets `409 VERSION_CONFLICT`.
+  - **Late.** Any other suggestion (the issue moved on, or a person already decided) is stored and gets its own history entry with `applied: false`. It changes no state, version, category or urgency and writes no event. Publishing a summary also moves the version, so a suggestion that arrives after it is late.
+  - **Never a decision.** `issues.category` and `issues.urgency` stay empty until an administrator decides. Once decided, `suggestion` is `null`; the history keeps every suggestion. A suggestion never reads or changes the critical check.
+  - **Once per event.** The event ID is the key of the stored suggestion and is looked up under the issue's lock, so a repeated delivery, even a concurrent one, writes nothing. The `processed_events` table of the shared starter comes with the consumer.
+  - **Refused.** An unknown issue (`NotFoundException`), or a category, urgency, origin, rationale (1 to 240 characters) or label that breaks the contract (`ValidationException`): nothing is stored. The consumer will send such an event to the dead-letter queue.
+  - **Privacy.** The rationale is written from a private report: only administrators of the building read it, on the issue itself. It is never in a list, a history entry, an event or a log.
 - **Sharing with the building** (US-04, access matrix).
   - **Summary.** Plain text, trimmed, 10 to 500 characters; reasons `required`, `too_short`, `too_long`, `invalid_characters`. Only an administrator of the building publishes it. It is the only text about an issue that residents see; the report text stays private. Every published summary is kept.
   - **Version.** Publishing raises the issue's version and nothing else: state, category and urgency stay. `If-Match` and `Idempotency-Key` work as for triage. The summary, the issue's next version, a public `summary_published` history entry and the `IssueSummaryPublished` and `IssueStateChanged` outbox rows are one transaction. Events carry the summary's ID, never its text.

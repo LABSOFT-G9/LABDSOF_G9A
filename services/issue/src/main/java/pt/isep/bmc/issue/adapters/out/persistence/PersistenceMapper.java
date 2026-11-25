@@ -12,6 +12,7 @@ import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SuggestionOrigin;
 import pt.isep.bmc.issue.domain.issue.SummaryId;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import pt.isep.bmc.issue.domain.issue.TriageReason;
@@ -93,6 +94,11 @@ final class PersistenceMapper {
     static IssueUrgency urgency(String stored) {
         return IssueUrgency.fromValue(stored)
                 .orElseThrow(() -> new IllegalStateException("unknown stored urgency"));
+    }
+
+    static SuggestionOrigin origin(String stored) {
+        return SuggestionOrigin.fromValue(stored)
+                .orElseThrow(() -> new IllegalStateException("unknown stored suggestion origin"));
     }
 
     static ReportEntity toEntity(Report report) {

@@ -15,12 +15,14 @@ import pt.isep.bmc.issue.application.query.IssueListCriteria;
 import pt.isep.bmc.issue.application.query.IssuePage;
 import pt.isep.bmc.issue.application.query.ImpactView;
 import pt.isep.bmc.issue.application.query.IssueView;
+import pt.isep.bmc.issue.application.query.SuggestionView;
 import pt.isep.bmc.issue.application.query.SummaryView;
 import pt.isep.bmc.issue.application.query.TriageView;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
+import pt.isep.bmc.issue.domain.issue.SuggestionRationale;
 import pt.isep.bmc.issue.domain.issue.SummaryText;
 import pt.isep.bmc.issue.domain.issue.TriageReason;
 import pt.isep.bmc.issue.domain.membership.UserId;
@@ -28,18 +30,24 @@ import pt.isep.bmc.issue.domain.membership.UserId;
 /**
  * Query side for issues (CQRS as packages, ADR-009): SQL projections over
  * the same tables. The current decision of an issue is the decision whose
- * resulting version is the newest one for that issue.
+ * resulting version is the newest one for that issue. Its suggestion is the
+ * one that was applied, and only while nobody has decided: a late suggestion
+ * is in the history, never here.
  */
 @Repository
 class JdbcIssueReadModel implements IssueReadModel {
 
     /**
-     * {@code %s}: extra columns of the current decision ({@code d}).
+     * {@code %s}: the internal texts, for one issue only: the reason of the
+     * current decision ({@code d}) and the rationale of the suggestion ({@code g}).
      * {@code :caller} is whose own impact confirmation and subscription to show.
      */
     private static final String SELECT = """
             SELECT i.id, i.building_id, b.name AS building_name, a.label AS area_label, i.state, i.version,
                    i.category, i.urgency, i.created_at, d.decided_at%s,
+                   g.category AS suggested_category, g.urgency AS suggested_urgency,
+                   g.origin AS suggestion_origin, g.needs_review, g.failure_code,
+                   g.rules_version, g.model_version, g.recorded_at AS suggested_at,
                    s.text AS summary_text, s.published_at AS summary_published_at,
                    (SELECT COUNT(*) FROM impact_confirmations c WHERE c.issue_id = i.id) AS impact_count,
                    EXISTS (SELECT 1 FROM impact_confirmations c
@@ -54,7 +62,15 @@ class JdbcIssueReadModel implements IssueReadModel {
                      ON d.issue_id = i.id
                     AND d.resulting_version = (SELECT MAX(x.resulting_version)
                                                  FROM triage_decisions x WHERE x.issue_id = i.id)
+              LEFT JOIN triage_suggestions g
+                     ON g.issue_id = i.id
+                    AND i.category IS NULL
+                    AND g.applied
+                    AND g.history_sequence = (SELECT MAX(y.history_sequence)
+                                                FROM triage_suggestions y WHERE y.issue_id = i.id AND y.applied)
             """;
+
+    private static final String INTERNAL_TEXTS = ", d.reason, g.rationale";
 
     private final JdbcClient jdbc;
 
@@ -64,7 +80,7 @@ class JdbcIssueReadModel implements IssueReadModel {
 
     @Override
     public Optional<IssueView> findView(IssueId id, UserId caller) {
-        return jdbc.sql(SELECT.formatted(", d.reason") + " WHERE i.id = :id")
+        return jdbc.sql(SELECT.formatted(INTERNAL_TEXTS) + " WHERE i.id = :id")
                 .param("id", id.toString())
                 .param("caller", caller.value())
                 .query((rs, n) -> view(rs, true))
@@ -116,12 +132,18 @@ class JdbcIssueReadModel implements IssueReadModel {
     public List<IssueHistoryItem> findHistory(IssueId id) {
         return jdbc.sql("""
                         SELECT h.sequence, h.type, h.visibility, h.actor_role, h.occurred_at,
-                               d.category, d.urgency, d.reason
+                               COALESCE(d.category, g.category) AS category,
+                               COALESCE(d.urgency, g.urgency) AS urgency,
+                               d.reason, g.origin, g.applied
                           FROM issue_history h
                           LEFT JOIN triage_decisions d
                                  ON h.type = 'triage_decided'
                                 AND d.issue_id = h.issue_id
                                 AND d.resulting_version = h.issue_version
+                          LEFT JOIN triage_suggestions g
+                                 ON h.type = 'triage_suggested'
+                                AND g.issue_id = h.issue_id
+                                AND g.history_sequence = h.sequence
                          WHERE h.issue_id = :id
                          ORDER BY h.sequence
                         """)
@@ -134,19 +156,40 @@ class JdbcIssueReadModel implements IssueReadModel {
                         Timestamps.fromColumn(rs.getObject("occurred_at", LocalDateTime.class)),
                         Optional.ofNullable(rs.getString("category")).map(PersistenceMapper::category),
                         Optional.ofNullable(rs.getString("urgency")).map(PersistenceMapper::urgency),
-                        Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore)))
+                        Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore),
+                        Optional.ofNullable(rs.getString("origin")).map(PersistenceMapper::origin),
+                        // Read as an object: NULL on every entry that is not a suggestion.
+                        Optional.ofNullable(rs.getObject("applied", Boolean.class))))
                 .list();
     }
 
-    private static IssueView view(ResultSet rs, boolean withReason) throws SQLException {
+    /** @param withInternalTexts whether the query selected {@link #INTERNAL_TEXTS} */
+    private static IssueView view(ResultSet rs, boolean withInternalTexts) throws SQLException {
         String category = rs.getString("category");
         Optional<TriageView> triage = category == null
                 ? Optional.empty()
                 : Optional.of(new TriageView(
                         PersistenceMapper.category(category),
                         PersistenceMapper.urgency(rs.getString("urgency")),
-                        withReason ? Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore) : Optional.empty(),
+                        withInternalTexts
+                                ? Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore)
+                                : Optional.empty(),
                         Timestamps.fromColumn(rs.getObject("decided_at", LocalDateTime.class))));
+        String suggestedCategory = rs.getString("suggested_category");
+        Optional<SuggestionView> suggestion = suggestedCategory == null
+                ? Optional.empty()
+                : Optional.of(new SuggestionView(
+                        PersistenceMapper.category(suggestedCategory),
+                        PersistenceMapper.urgency(rs.getString("suggested_urgency")),
+                        PersistenceMapper.origin(rs.getString("suggestion_origin")),
+                        withInternalTexts
+                                ? Optional.of(SuggestionRationale.restore(rs.getString("rationale")))
+                                : Optional.empty(),
+                        rs.getBoolean("needs_review"),
+                        Optional.ofNullable(rs.getString("failure_code")),
+                        Timestamps.fromColumn(rs.getObject("suggested_at", LocalDateTime.class)),
+                        Optional.ofNullable(rs.getString("rules_version")),
+                        Optional.ofNullable(rs.getString("model_version"))));
         String summaryText = rs.getString("summary_text");
         Optional<SummaryView> summary = summaryText == null
                 ? Optional.empty()
@@ -166,6 +209,7 @@ class JdbcIssueReadModel implements IssueReadModel {
                 rs.getLong("version"),
                 Timestamps.fromColumn(rs.getObject("created_at", LocalDateTime.class)),
                 triage,
+                suggestion,
                 summary,
                 impact,
                 rs.getBoolean("subscribed"));

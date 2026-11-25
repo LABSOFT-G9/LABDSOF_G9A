@@ -44,10 +44,13 @@ import pt.isep.bmc.issue.application.query.ImpactView;
 import pt.isep.bmc.issue.application.query.IssueHistoryItem;
 import pt.isep.bmc.issue.application.query.IssuePage;
 import pt.isep.bmc.issue.application.query.IssueView;
+import pt.isep.bmc.issue.application.query.SuggestionView;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SuggestionOrigin;
+import pt.isep.bmc.issue.domain.issue.SuggestionRationale;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import pt.isep.bmc.issue.domain.issue.TriageReason;
 import pt.isep.bmc.issue.domain.shared.FieldViolation;
@@ -258,13 +261,26 @@ class IssueController {
                 issue.version(),
                 DateTimeFormatter.ISO_INSTANT.format(issue.createdAt()),
                 triage,
-                null,
+                issue.suggestion().map(IssueController::suggestion).orElse(null),
                 issue.summary()
                         .map(s -> new IssueResponse.Summary(
                                 s.text().value(), DateTimeFormatter.ISO_INSTANT.format(s.publishedAt())))
                         .orElse(null),
                 issue.impact().map(IssueController::impact).orElse(null),
                 issue.subscribed());
+    }
+
+    private static IssueResponse.Suggestion suggestion(SuggestionView suggestion) {
+        return new IssueResponse.Suggestion(
+                suggestion.category().value(),
+                suggestion.urgency().value(),
+                suggestion.origin().value(),
+                suggestion.rationale().map(SuggestionRationale::value).orElse(null),
+                suggestion.needsReview(),
+                suggestion.failureCode().orElse(null),
+                DateTimeFormatter.ISO_INSTANT.format(suggestion.suggestedAt()),
+                suggestion.rulesVersion().orElse(null),
+                suggestion.modelVersion().orElse(null));
     }
 
     private static IssueResponse.Impact impact(ImpactView impact) {
@@ -280,6 +296,8 @@ class IssueController {
                 DateTimeFormatter.ISO_INSTANT.format(item.occurredAt()),
                 item.category().map(IssueCategory::value).orElse(null),
                 item.urgency().map(IssueUrgency::value).orElse(null),
-                item.reason().map(TriageReason::value).orElse(null));
+                item.reason().map(TriageReason::value).orElse(null),
+                item.origin().map(SuggestionOrigin::value).orElse(null),
+                item.applied().orElse(null));
     }
 }

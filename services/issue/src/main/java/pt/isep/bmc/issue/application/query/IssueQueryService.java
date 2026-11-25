@@ -24,11 +24,11 @@ import pt.isep.bmc.issue.domain.membership.UserId;
  *
  * <ul>
  *   <li>Administrators of the building: everything, including internal
- *       history and triage reasons.</li>
+ *       history, triage reasons and the unconfirmed suggestion.</li>
  *   <li>Whoever reported the issue and, once a summary is published, every
  *       member of the building: its status, the decided category and urgency,
- *       the summary, the impact count and public history. Never a reason, an
- *       internal entry or anyone's report text.</li>
+ *       the summary, the impact count and public history. Never a reason, a
+ *       suggestion, an internal entry or anyone's report text.</li>
  *   <li>Everyone else, including contractors and other buildings'
  *       administrators: not found.</li>
  * </ul>
@@ -58,7 +58,7 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
     public IssueView get(UserId actor, IssueId issueId) {
         return transactions.readOnly(() -> {
             IssueView issue = visible(actor, issueId);
-            return administers(actor, issue.buildingId()) ? issue : issue.withoutTriageReason();
+            return administers(actor, issue.buildingId()) ? issue : issue.withoutTriageReason().withoutSuggestion();
         });
     }
 
@@ -66,8 +66,13 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
     public IssuePage list(UserId actor, Optional<BuildingId> building, int page, int size) {
         return transactions.readOnly(() -> {
             BuildingAccess access = access(actor);
-            return readModel.list(new IssueListCriteria(
+            IssuePage found = readModel.list(new IssueListCriteria(
                     actor, access.administeredBuildings(), access.memberBuildings(), building, page, size));
+            // One page mixes the buildings the caller administers with issues the caller only follows.
+            List<IssueView> items = found.items().stream()
+                    .map(issue -> access.administers(issue.buildingId()) ? issue : issue.withoutSuggestion())
+                    .toList();
+            return new IssuePage(items, found.page(), found.size(), found.hasMore());
         });
     }
 
