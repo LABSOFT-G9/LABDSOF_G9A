@@ -199,6 +199,8 @@ A bad value fails at start-up (`src/app/config.ts`).
 `Dockerfile` builds with Node and serves `dist/` with nginx (`nginx.conf`):
 
 - SPA fallback, and a 404 (not `index.html`) for missing hashed assets;
+- a 404 (not `index.html`) on the edge's paths (`/api`, `/oidc`, `/logout`, `/auth`). They reach this container only
+  while Traefik does not route their backend (starting or down), and a `200` there would read as "ready" or "exposed";
 - `immutable` caching for `/assets/*` and `no-cache` for the rest;
 - a restrictive Content-Security-Policy with `script-src 'self'`, `X-Frame-Options: DENY`, `nosniff`,
   `Referrer-Policy: no-referrer` and a `Permissions-Policy`.
@@ -208,7 +210,8 @@ server needs inline scripts. `test/static.test.ts` checks that:
 
 - `index.html` has no inline script;
 - the CSP is present;
-- nginx and `vite preview` send the same CSP string.
+- nginx and `vite preview` send the same CSP string;
+- nginx's 404 block names exactly the paths in `EDGE_PATHS` (`vite.config.ts`).
 
 ## Accessibility
 
