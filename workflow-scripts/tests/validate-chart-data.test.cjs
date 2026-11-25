@@ -2,15 +2,16 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const {audit,validateHistory,validateLive,report,SPRINTS}=require('../validate-chart-data.js');
+const {audit,validateHistory,validateCoverage,validateLive,report,SPRINTS}=require('../validate-chart-data.js');
 const now=new Date('2026-10-25T19:00:00Z');
 const issue=(id,sprint='A',status='Ready',labels=['Task'])=>({id,sprint,status,labels});
 const snapshot=(date,issues=[issue(1)])=>({date,issues});
 const live=(issues=[issue(1)])=>({checked:issues.length,liveIssues:issues,missing:[],statusOptions:['Backlog','Ready','Done'],activeNumbers:issues.map(i=>i.id)});
 const errors=result=>result.findings.filter(f=>f.level==='error');
-test('19h workflow is the single alert workflow and midnight metrics is not a dependency',()=>{
+test('18h Lisbon check runs after the 06h Lisbon collection and metrics is not a dependency',()=>{
  const yml=fs.readFileSync(path.join(__dirname,'../../.github/workflows/check-sprints.yml'),'utf8');
- assert.match(yml,/cron: "0 19 \* \* \*"/);assert.match(yml,/timezone: "Europe\/Lisbon"/);
+ assert.match(yml,/cron: "0 18 \* \* \*"/);
+ assert.match(fs.readFileSync(path.join(__dirname,'../../.github/workflows/metrics.yml'),'utf8'),/cron: "0 6 \* \* \*"/);assert.match(yml,/timezone: "Europe\/Lisbon"/);
  assert.match(yml,/node workflow-scripts\/validate-chart-data.js/);assert.doesNotMatch(yml,/workflow_run:/);
  const html=fs.readFileSync(path.join(__dirname,'../burndown.html'),'utf8');
  for(const dates of Object.values(SPRINTS)) {assert.ok(html.includes(dates.start));assert.ok(html.includes(dates.end));}
@@ -110,4 +111,30 @@ test('live issues need exactly one type label; stored history must be labelled t
  const legacy=await audit({now,history:[snapshot('2026-10-24T00:00:00Z',[{id:1,sprint:'A',status:'Ready'}]),snapshot('2026-10-25T00:00:00Z',[issue(1,'A','Ready',['bug'])])],loadLive:async()=>live()});
  assert.equal(errors(legacy).filter(f=>f.check==='Issue type').length,2);
  assert.ok(errors(validateHistory([snapshot('2026-10-25T00:00:00Z',[issue(1,'A','Ready','Task')])],now)).some(f=>f.message.includes('labels')));
+});test('daily coverage: old gaps warn, yesterday fails, today fails only after the 12:00 UTC deadline',()=>{
+ const valid=dates=>validateHistory(dates.map(date=>snapshot(date)),new Date('2026-11-30T00:00:00Z')).valid;
+ const history=valid(['2026-11-01T22:00:00Z','2026-11-03T23:00:00Z','2026-11-04T01:00:00Z','2026-11-06T05:00:00Z']);
+ const late=validateCoverage(history,new Date('2026-11-08T18:00:00Z'));
+ assert.deepEqual(late.map(f=>f.level),['warning','error','error']);
+ assert.match(late[0].message,/2026-11-02, 2026-11-05\./);assert.match(late[1].message,/yesterday \(2026-11-07 UTC\)/);
+ assert.match(late[2].message,/today \(2026-11-08 UTC\)/);
+ assert.equal(validateCoverage(history,new Date('2026-11-08T09:00:00Z')).at(-1).level,'warning');
+ const full=valid(['2026-11-05T23:59:00Z','2026-11-06T00:01:00Z','2026-11-07T07:00:00Z']);
+ assert.equal(validateCoverage(full,new Date('2026-11-07T18:00:00Z')).length,0);
+ assert.equal(validateCoverage([],new Date('2026-11-07T18:00:00Z')).length,0);
+ assert.equal(validateCoverage(valid(['2027-01-03T10:00:00Z']),new Date('2027-01-20T18:00:00Z')).length,0);
+});
+test('stored history has a snapshot for every UTC day up to the latest one',()=>{
+ const history=validateHistory(normalizeHistoryIdentity(readHistory()),new Date(8.64e15)).valid;
+ const latestDay=new Date(history.at(-1).time).toISOString().slice(0,10);
+ assert.deepEqual(validateCoverage(history,new Date(latestDay+'T23:00:00Z')),[]);
+});
+test('filled gap days are marked as reconstructed and copied from a real collection',()=>{
+ const history=readHistory(), filled=history.filter(s=>s.reconstruction?.kind==='missed-collection');
+ assert.deepEqual(filled.map(s=>s.date.slice(0,10)),['2026-11-09','2026-11-11','2026-11-16','2026-11-19','2026-11-23']);
+ for(const s of filled){
+  assert.equal(s.reconstruction.syntheticSnapshot,true);
+  const source=history.find(o=>o.date===s.reconstruction.copiedFrom);
+  assert.ok(source&&!source.reconstruction);assert.deepEqual(s.issues,source.issues);
+ }
 });
