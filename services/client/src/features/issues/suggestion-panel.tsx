@@ -1,4 +1,4 @@
-import { Clock, Info, ShieldQuestion, Siren, Sparkles, TriangleAlert } from "lucide-react";
+import { Clock, Info, ShieldQuestion, Siren, TriangleAlert } from "lucide-react";
 import { useId } from "react";
 import {
   type CriticalCheck,
@@ -8,6 +8,7 @@ import {
   TRIAGE_PENDING_AFTER_MS,
 } from "@/contracts/issue";
 import { signalText } from "@/features/issues/critical-signals";
+import { ORIGIN_ICONS } from "@/features/issues/origin-icons";
 import { t } from "@/shared/i18n";
 import { formatDateTime, timeAgo } from "@/shared/lib/format";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
@@ -57,6 +58,13 @@ export function SuggestionPanel({
     );
   }
 
+  const OriginIcon = ORIGIN_ICONS[suggestion.origin];
+  // What produced it: the model for `ai`, the rules version otherwise (US-14-03). Omitted when the service does not say.
+  const source =
+    suggestion.origin === "ai"
+      ? suggestion.modelVersion && t.issues.suggestion.model(suggestion.modelVersion)
+      : suggestion.rulesVersion && t.issues.suggestion.rules(suggestion.rulesVersion);
+
   return (
     <section aria-labelledby={`${id}-title`} className="space-y-3 rounded-lg border border-dashed p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -64,7 +72,7 @@ export function SuggestionPanel({
           {t.issues.suggestion.title}
         </h3>
         <Badge variant="outline" className="border-dashed">
-          <Sparkles aria-hidden />
+          <OriginIcon aria-hidden />
           {t.issues.suggestion.unconfirmed(t.issues.origins[suggestion.origin])}
         </Badge>
       </div>
@@ -74,6 +82,12 @@ export function SuggestionPanel({
         <dd>{t.issues.categories[suggestion.category]}</dd>
         <dt className="text-muted-foreground">{t.issues.urgencyLabel}</dt>
         <dd>{t.issues.urgency[suggestion.urgency]}</dd>
+        {source ? (
+          <>
+            <dt className="text-muted-foreground">{t.issues.suggestion.producedBy}</dt>
+            <dd>{source}</dd>
+          </>
+        ) : null}
       </dl>
 
       {suggestion.rationale ? (
@@ -168,6 +182,8 @@ export function CriticalCheckBanner({
         ) : null}
         {!issue.triage ? <p>{t.issues.critical.review}</p> : null}
         {pending ? <p>{t.issues.critical.pendingBody}</p> : null}
+        {/* US-14-03: which rule set raised it, as the suggestion panel names its rules version. */}
+        {check.rulesVersion ? <p className="text-xs">{t.issues.suggestion.rules(check.rulesVersion)}</p> : null}
       </AlertDescription>
     </Alert>
   );

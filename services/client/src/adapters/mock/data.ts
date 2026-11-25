@@ -147,6 +147,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         needsReview: false,
         failureCode: null,
         suggestedAt: at(2.9),
+        rulesVersion: null,
+        modelVersion: "mock-model-v1",
       },
       // Checked, nothing found: shows nothing.
       criticalCheck: { status: "completed", rulesVersion: "critical-alerts-v1", signals: [] },
@@ -160,6 +162,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           occurredAt: at(2.9),
           category: "electrical",
           urgency: "high",
+          origin: "ai",
+          applied: true,
         }),
       ],
     },
@@ -204,14 +208,25 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           urgency: "normal",
           reason: "Slow leak under the kitchen sink. No electrical risk.",
         }),
+        // US-14-03: the AI answered after the administrator had decided. Kept with its source; it changed nothing.
         entry(3, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(69.5),
+          category: "plumbing",
+          urgency: "low",
+          origin: "ai",
+          applied: false,
+        }),
+        entry(4, {
           type: "intervention_approved",
           visibility: "public",
           actorRole: "administrator",
           occurredAt: at(60),
         }),
-        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
-        entry(5, {
+        entry(5, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
+        entry(6, {
           type: "booking_confirmed_manually",
           visibility: "public",
           actorRole: "administrator",
@@ -275,6 +290,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         needsReview: true,
         failureCode: "timeout",
         suggestedAt: at(0.95),
+        rulesVersion: "rules-v1",
+        modelVersion: null,
       },
       criticalCheck: {
         status: "completed",
@@ -287,13 +304,30 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       reporterIds: [residentB1],
       history: [
         received(1),
+        // One internal entry per signal (#96).
         entry(2, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "smoke_or_fire",
+        }),
+        entry(3, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "water_near_electrics",
+        }),
+        entry(4, {
           type: "triage_suggested",
           visibility: "internal",
           actorRole: "system",
           occurredAt: at(0.95),
           category: "electrical",
           urgency: "normal",
+          origin: "fallback",
+          applied: true,
         }),
       ],
     },

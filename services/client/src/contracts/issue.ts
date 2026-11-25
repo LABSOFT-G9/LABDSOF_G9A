@@ -111,6 +111,8 @@ export type KnownFailureCode = (typeof KNOWN_FAILURE_CODES)[number];
  * - `needsReview`: the suggester itself asks for a careful look.
  * - `failureCode`: why the AI result was not used, on `fallback` only.
  * - `suggestedAt`: when the suggestion was recorded.
+ * - `rulesVersion` (`rules`, `fallback`) and `modelVersion` (`ai`): what produced it, so the administrator can tell
+ *   a rules result from a model's (US-14-03 #97). Null when that part did not run (technical design §4.4).
  * There is deliberately no confidence value: a model's confidence must not be shown as a reliable probability (US-03).
  */
 export const TriageSuggestionSchema = z.object({
@@ -121,6 +123,8 @@ export const TriageSuggestionSchema = z.object({
   needsReview: z.boolean().optional(),
   failureCode: z.string().nullish(),
   suggestedAt: z.iso.datetime({ offset: true }).nullish(),
+  rulesVersion: z.string().nullish(),
+  modelVersion: z.string().nullish(),
 });
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
 
@@ -191,14 +195,16 @@ export const HistoryActorSchema = z.enum(["resident", "administrator", "contract
 export type HistoryActor = z.infer<typeof HistoryActorSchema>;
 
 /**
- * Entry types the client explains. The first three exist in the service (#140); the others are ASSUMPTION names for the
- * Dispatch events Issue projects into history (technical design §3.3). Any other type is
+ * Entry types the client explains. The first three exist in the service (#140); `critical_alert_raised` is an
+ * ASSUMPTION for US-14-02 (#96), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
+ * (technical design §3.3). Any other type is
  * still shown, as a generic update, so a new type never breaks the page.
  */
 export const KNOWN_HISTORY_TYPES = [
   "report_received",
   "triage_suggested",
   "triage_decided",
+  "critical_alert_raised",
   "intervention_approved",
   "contractor_accepted",
   "contractor_declined",
@@ -222,6 +228,15 @@ export const HistoryEntrySchema = z.object({
   urgency: IssueUrgencySchema.nullable().optional(),
   /** Internal: administrators only. */
   reason: z.string().nullable().optional(),
+  /** `triage_suggested` only: who suggested it (agreed on #108, from `TriageSuggested.origin`). */
+  origin: SuggestionOriginSchema.nullish(),
+  /**
+   * `triage_suggested` only: whether the suggestion was applied. `false` when it named a version the issue had already
+   * left, before or after a decision (agreed on #108; technical design §3.3).
+   */
+  applied: z.boolean().optional(),
+  /** `critical_alert_raised` only: the matched rule's code (agreed on #96), worded by the client. */
+  code: z.string().nullish(),
 });
 export type HistoryEntry = z.infer<typeof HistoryEntrySchema>;
 export const HistorySchema = z.object({ items: z.array(HistoryEntrySchema) });

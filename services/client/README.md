@@ -231,7 +231,9 @@ keyboard pass each UI story records in its PR.
   the service as it is today still parses. Still `ASSUMPTION`: the `failureCode` values (#93, #95) and the signal
   codes (the `critical-alerts-v1` rule set). "Triage pending — classify manually" is worked out in the client from
   `createdAt` (2 minutes, technical design §5); an issue still waiting on a suggestion or on the critical check is
-  asked again every 10 seconds.
+  asked again every 10 seconds. US-14-03 adds `rulesVersion` and `modelVersion` on the suggestion (agreed on #108),
+  `origin` and `applied` on `triage_suggested` history entries (#108), and one `critical_alert_raised` entry per
+  signal, with its `code` (#96).
 - `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
   HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
 - The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
