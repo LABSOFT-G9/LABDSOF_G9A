@@ -159,7 +159,9 @@ jobs:
       # A failure stops the job before signing, so a vulnerable image is never
       # signed and deploy.yml refuses it. Only findings that have a fix fail the
       # build (ignore-unfixed): unfixed ones cannot be acted on and are tracked
-      # by Dependabot and the base-image updates instead.
+      # by Dependabot and the base-image updates instead. Accepted findings are
+      # listed in .trivyignore.yaml, each limited to one file path, so an
+      # exception for one image does not hide the finding in another.
       - name: Container scan of the pushed digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0; tags on this action were force-pushed in 2026, so the commit is pinned
         env:
@@ -170,6 +172,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+          trivyignores: .trivyignore.yaml
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:

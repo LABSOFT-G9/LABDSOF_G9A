@@ -1,0 +1,17 @@
+# Accepted container-scan findings (dev.yml, Trivy). Each entry names the file
+# it applies to (`paths`), the reason (`statement`) and an expiry date
+# (`expired_at`): after that date Trivy reports it again. An entry without
+# `paths` would hide the finding in every image, so always give the path.
+# Review every addition (DevOps approval).
+vulnerabilities:
+  # Found by the local Trivy run for EN-02-04 on 2026-11-24; accepted by DevOps
+  # on PR #139 (2026-11-25). The jar cannot be swapped without breaking
+  # Keycloak's build index.
+  - id: CVE-2026-102554
+    paths:
+      - "opt/keycloak/lib/lib/main/com.google.guava.guava-33.6.0-jre.jar"
+    statement: >-
+      Guava 33.6.0 bundled in stock Keycloak 26.8.2 (infra/keycloak); no fixed
+      Keycloak release yet. Denial of service on deserialising untrusted data,
+      not a data leak. Remove when Keycloak ships Guava 33.7.2 or later.
+    expired_at: 2026-12-22
