@@ -3,6 +3,10 @@ const { checkSprints, annotation, escapeMarkdown } = require('./check-sprints.js
 const { SPRINTS, SPRINT_KEYS, TYPE_LABELS, issueType, readHistory, historyFileName } = require('./history-files.js');
 const { normalizeHistoryIdentity } = require('./history-identity.js');
 const MAX_AGE_HOURS = 26;
+const DAY_MS = 86400000;
+// Today's collection starts at 06:00 Lisbon; after 12:00 UTC a missing snapshot is late enough to fail.
+const TODAY_DEADLINE_UTC_HOUR = 12;
+const utcDay = time => new Date(time).toISOString().slice(0, 10);
 const normalize = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
 const sprintKey = value => /^(?:sprint\s+)?([abc])$/i.exec(typeof value === 'string' ? value.trim() : '')?.[1].toUpperCase() ?? null;
 const finding = (level, check, message, ids = []) => ({ level, check, message, ids });
@@ -73,7 +77,29 @@ function validateHistory(history, now, statusOptions = null) {
       if (removed.length) findings.push(finding('warning','Scope','Issues disappeared between the two latest valid snapshots. Check removals, archiving or transfers; this is not proof of completion.',removed));
     }
   }
-  return { findings, latest };
+  return { findings, latest, valid };
+}
+
+// The charts plot one value per UTC day, so a UTC day without a snapshot is a gap.
+// Checks from the first valid snapshot to today, within the sprint calendar.
+function validateCoverage(snapshots, now) {
+  if (!snapshots.length) return [];
+  const findings = [], days = new Set(snapshots.map(snapshot => utcDay(snapshot.time)));
+  const today = utcDay(now.getTime()), yesterday = utcDay(now.getTime() - DAY_MS), end = SPRINTS.C.end;
+  const missing = [];
+  for (let time = Date.parse(utcDay(Math.min(...snapshots.map(snapshot => snapshot.time))) + 'T00:00:00Z'); ; time += DAY_MS) {
+    const day = utcDay(time);
+    if (day >= today || day > end) break;
+    if (!days.has(day)) missing.push(day);
+  }
+  const older = missing.filter(day => day !== yesterday);
+  if (older.length) findings.push(finding('warning','Daily coverage',`No snapshot on ${older.length} past UTC day(s): ${older.join(', ')}. The burndown shows them as gaps. They can no longer be collected; fill them only with documented reconstruction metadata.`));
+  if (missing.includes(yesterday)) findings.push(finding('error','Daily coverage',`No snapshot for yesterday (${yesterday} UTC), so the burndown has a new gap. Check the Metrics Snapshot runs and fix the cause.`));
+  if (today <= end && !days.has(today)) {
+    const level = now.getUTCHours() >= TODAY_DEADLINE_UTC_HOUR ? 'error' : 'warning';
+    findings.push(finding(level,'Daily coverage',`No snapshot yet for today (${today} UTC). Run Metrics Snapshot manually before 00:00 UTC, or today becomes a gap.`));
+  }
+  return findings;
 }
 
 function validateLive(live, now, latest) {
@@ -96,7 +122,7 @@ function validateLive(live, now, latest) {
   if (latest) {
     const active=new Set(live.activeNumbers);
     const removed=latest.issues.filter(issue=>!active.has(issue.id)).map(issue=>issue.id);
-    if (removed.length) findings.push(finding('warning','Scope','Issues in the latest snapshot are no longer active items in this repository/project. Review before the midnight collection.',removed));
+    if (removed.length) findings.push(finding('warning','Scope','Issues in the latest snapshot are no longer active items in this repository/project. Review before the next collection.',removed));
   }
   return findings;
 }
@@ -108,7 +134,7 @@ async function audit({ history: storedHistory, historyText, now = new Date(), lo
   try {
     const history=normalizeHistoryIdentity(storedHistory ?? JSON.parse(historyText.replace(/^\uFEFF/,'')));
     const result=validateHistory(history,now,live?.statusOptions);
-    findings.push(...result.findings); latest=result.latest;
+    findings.push(...result.findings, ...validateCoverage(result.valid,now)); latest=result.latest;
   } catch(error) { findings.push(finding('error','History',`Unable to validate history: ${error.message}`)); }
   if(live) findings.push(...validateLive(live,now,latest));
   return { findings, latestDate:latest?.date ?? null, checked:live?.checked ?? null, candidateCount:live?.candidateIssues?.length ?? null, now:now.toISOString() };
@@ -121,7 +147,7 @@ function report(result) {
     `Open issues checked: ${result.checked ?? 'unavailable'}. Latest valid snapshot: ${result.latestDate ?? 'unavailable'}.`,
     `Active project issues in collection candidate (including closed): ${result.candidateCount ?? 'unavailable'}.`,
     `${errors} error(s), ${warnings} warning(s).`,''];
-  if(!result.findings.length) lines.push('All checks passed. This validates current data, not the future midnight snapshot.');
+  if(!result.findings.length) lines.push('All checks passed. This validates current data, not the next scheduled snapshot.');
   else {
     lines.push('| Severity | Check | Details | Issues |','|---|---|---|---|');
     for(const f of result.findings) lines.push(`| ${f.level} | ${escapeMarkdown(f.check)} | ${escapeMarkdown(f.message)} | ${f.ids.map(id=>`[#${id}](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/${id})`).join(', ')} |`);
@@ -147,4 +173,4 @@ async function main() {
   if(result.findings.some(f=>f.level==='error')) process.exitCode=1;
 }
 if(require.main===module) main().catch(error=>{console.error('::error::Validation could not finish: '+annotation(error.message));process.exitCode=2;});
-module.exports={audit,validateHistory,validateLive,report,SPRINTS};
+module.exports={audit,validateHistory,validateCoverage,validateLive,report,SPRINTS};

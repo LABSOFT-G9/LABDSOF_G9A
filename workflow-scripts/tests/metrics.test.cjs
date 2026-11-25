@@ -282,3 +282,12 @@ test('burndown custom date range sets the period, validates dates and syncs pres
  get('date-from').value='2026-10-24';get('date-from').listeners.change();
  assert.equal(get('message').className,'error');assert.match(get('message').textContent,/must not be after/);assert.equal(get('export').disabled,true);
 });
+test('burndown labels a filled missed collection as not observed and names its source', () => {
+  const rows = build([snapshot('2026-11-08', [issue(1, 'Ready', 'B')]),
+    { date: '2026-11-09T00:00:00.000Z', issues: [issue(1, 'Ready', 'B')], reconstruction: { kind: 'missed-collection', syntheticSnapshot: true, copiedFrom: '2026-11-08T12:00:00Z' } },
+    snapshot('2026-11-10', [issue(1, 'Done', 'B')])], 'B');
+  const day = row(rows, '2026-11-09');
+  assert.equal(day.remaining, 1); assert.equal(day.reconstructed, true);
+  assert.match(day.quality, /^Filled missed collection \(not observed\): 2026-11-09; issues copied from 2026-11-08T12:00:00Z$/);
+  assert.doesNotMatch(row(rows, '2026-11-10').quality, /not observed/);
+});

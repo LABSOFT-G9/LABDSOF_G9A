@@ -2,7 +2,9 @@ name: Validate chart data
 
 on:
   schedule:
-    - cron: "0 15 * * *"
+    # After the 06:00 Lisbon collection, even if it starts late, and before the UTC day
+    # ends: a missing snapshot for today fails here while a manual run can still fill it.
+    - cron: "0 18 * * *" # Daily at 18:00 in Lisbon
       timezone: "Europe/Lisbon"
   workflow_dispatch:
 
