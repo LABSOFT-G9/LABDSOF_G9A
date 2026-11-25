@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// A report was stored and its issue created. Carries identifiers only, never
+// the report text. Envelope: subject = issueId, aggregateversion = issue version.
+message ReportSubmitted {
+  string report_id = 1;
+  string issue_id = 2;
+  string area_id = 3;
+}

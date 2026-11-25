@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package bmc.issue.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.issue.v1";
+
+// A building membership became active. Feeds Dispatch's administrator
+// projection, which applies it by `version`, so an older grant replayed after a
+// revocation is ignored. Envelope: subject = membershipId,
+// aggregateversion = membership version.
+message MembershipGranted {
+  string membership_id = 1;
+  // The identity provider's subject of the member.
+  string user_id = 2;
+  string building_id = 3;
+  // `resident` or `administrator`.
+  string role = 4;
+  int32 version = 5;
+}

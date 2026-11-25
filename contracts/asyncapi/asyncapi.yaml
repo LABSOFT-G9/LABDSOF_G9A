@@ -1,0 +1,542 @@
+# Channels of the BMC event bus (ADR-003, technical design 4.4 and 5).
+#
+# Every message is a CloudEvents 1.0 structured JSON document. Its `data` member
+# is the proto3 JSON form of the Protobuf message named in `x-proto-message`;
+# the .proto files in ../proto are the only source of the payload fields.
+# Queues, bindings and dead-letter queues are declared by the deployment, never
+# by a service.
+asyncapi: 3.0.0
+info:
+  title: BMC events
+  version: 1.0.0
+  description: >-
+    Events exchanged by the Issue, Dispatch, Notification and AI triage services
+    through the topic exchange `bmc.events`. The routing key is
+    `<producer>.<eventType>`. Delivery is at least once: a consumer records the
+    event `id` in the same transaction as its effect and ignores a repeat.
+defaultContentType: application/cloudevents+json
+servers:
+  broker:
+    host: rabbitmq:5672
+    protocol: amqp
+    description: RabbitMQ 4, reachable only on the internal network.
+channels:
+  issueEvents:
+    address: 'issue.{eventType}'
+    description: Events published by the Issue service.
+    parameters:
+      eventType:
+        description: The CloudEvents `type` of the message.
+        enum:
+          - ReportSubmitted
+          - TriageRequested
+          - IssueTriaged
+          - IssueSummaryPublished
+          - IssueStateChanged
+          - MembershipGranted
+          - MembershipRevoked
+          - IssueResolved
+          - IssueCancelled
+          - IssueReopened
+          - NotificationRequested
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: bmc.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      ReportSubmitted:
+        $ref: '#/components/messages/ReportSubmitted'
+      TriageRequested:
+        $ref: '#/components/messages/TriageRequested'
+      IssueTriaged:
+        $ref: '#/components/messages/IssueTriaged'
+      IssueSummaryPublished:
+        $ref: '#/components/messages/IssueSummaryPublished'
+      IssueStateChanged:
+        $ref: '#/components/messages/IssueStateChanged'
+      MembershipGranted:
+        $ref: '#/components/messages/MembershipGranted'
+      MembershipRevoked:
+        $ref: '#/components/messages/MembershipRevoked'
+      IssueResolved:
+        $ref: '#/components/messages/IssueResolved'
+      IssueCancelled:
+        $ref: '#/components/messages/IssueCancelled'
+      IssueReopened:
+        $ref: '#/components/messages/IssueReopened'
+      NotificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+  dispatchEvents:
+    address: 'dispatch.{eventType}'
+    description: Events published by the Dispatch service.
+    parameters:
+      eventType:
+        description: The CloudEvents `type` of the message.
+        enum:
+          - InterventionApproved
+          - ContractorResponded
+          - InterventionDeclined
+          - InterventionCancellationPending
+          - InterventionCancelled
+          - BookingConfirmed
+          - BookingStateChanged
+          - InterventionStarted
+          - CompletionReported
+          - ReworkRequested
+          - NotificationRequested
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: bmc.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      InterventionApproved:
+        $ref: '#/components/messages/InterventionApproved'
+      ContractorResponded:
+        $ref: '#/components/messages/ContractorResponded'
+      InterventionDeclined:
+        $ref: '#/components/messages/InterventionDeclined'
+      InterventionCancellationPending:
+        $ref: '#/components/messages/InterventionCancellationPending'
+      InterventionCancelled:
+        $ref: '#/components/messages/InterventionCancelled'
+      BookingConfirmed:
+        $ref: '#/components/messages/BookingConfirmed'
+      BookingStateChanged:
+        $ref: '#/components/messages/BookingStateChanged'
+      InterventionStarted:
+        $ref: '#/components/messages/InterventionStarted'
+      CompletionReported:
+        $ref: '#/components/messages/CompletionReported'
+      ReworkRequested:
+        $ref: '#/components/messages/ReworkRequested'
+      NotificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+  aiTriageEvents:
+    address: 'ai-triage.{eventType}'
+    description: Events published by the AI triage service.
+    parameters:
+      eventType:
+        description: The CloudEvents `type` of the message.
+        enum:
+          - TriageSuggested
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: bmc.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      TriageSuggested:
+        $ref: '#/components/messages/TriageSuggested'
+  issueInbox:
+    address: issue.inbox
+    description: >-
+      Quorum queue read by the Issue service. Bound to `ai-triage.TriageSuggested` and to the Dispatch events below.
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: issue.inbox
+          durable: true
+          exclusive: false
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      TriageSuggested:
+        $ref: '#/components/messages/TriageSuggested'
+      InterventionApproved:
+        $ref: '#/components/messages/InterventionApproved'
+      ContractorResponded:
+        $ref: '#/components/messages/ContractorResponded'
+      InterventionDeclined:
+        $ref: '#/components/messages/InterventionDeclined'
+      InterventionCancellationPending:
+        $ref: '#/components/messages/InterventionCancellationPending'
+      InterventionCancelled:
+        $ref: '#/components/messages/InterventionCancelled'
+      BookingConfirmed:
+        $ref: '#/components/messages/BookingConfirmed'
+      BookingStateChanged:
+        $ref: '#/components/messages/BookingStateChanged'
+      InterventionStarted:
+        $ref: '#/components/messages/InterventionStarted'
+      CompletionReported:
+        $ref: '#/components/messages/CompletionReported'
+      ReworkRequested:
+        $ref: '#/components/messages/ReworkRequested'
+  dispatchInbox:
+    address: dispatch.inbox
+    description: >-
+      Quorum queue read by the Dispatch service. Bound to the Issue events that feed its issue and administrator projections.
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: dispatch.inbox
+          durable: true
+          exclusive: false
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      IssueStateChanged:
+        $ref: '#/components/messages/IssueStateChanged'
+      MembershipGranted:
+        $ref: '#/components/messages/MembershipGranted'
+      MembershipRevoked:
+        $ref: '#/components/messages/MembershipRevoked'
+      IssueResolved:
+        $ref: '#/components/messages/IssueResolved'
+      IssueCancelled:
+        $ref: '#/components/messages/IssueCancelled'
+  notificationInbox:
+    address: notification.inbox
+    description: >-
+      Quorum queue read by the Notification service. Bound to `issue.NotificationRequested` and `dispatch.NotificationRequested`.
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: notification.inbox
+          durable: true
+          exclusive: false
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      NotificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+  aiTriageRequests:
+    address: ai-triage.requests
+    description: >-
+      Quorum queue read by the AI triage service. Bound only to `issue.TriageRequested`, the one event with report text.
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: ai-triage.requests
+          durable: true
+          exclusive: false
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      TriageRequested:
+        $ref: '#/components/messages/TriageRequested'
+operations:
+  issuePublish:
+    action: send
+    channel:
+      $ref: '#/channels/issueEvents'
+    summary: Issue publishes its outbox rows with `mandatory` and publisher confirms.
+  issueConsume:
+    action: receive
+    channel:
+      $ref: '#/channels/issueInbox'
+    summary: Issue applies suggestions and Dispatch events by version.
+  dispatchPublish:
+    action: send
+    channel:
+      $ref: '#/channels/dispatchEvents'
+    summary: Dispatch publishes its outbox rows with `mandatory` and publisher confirms.
+  dispatchConsume:
+    action: receive
+    channel:
+      $ref: '#/channels/dispatchInbox'
+    summary: Dispatch keeps its issue and administrator projections.
+  aiTriagePublish:
+    action: send
+    channel:
+      $ref: '#/channels/aiTriageEvents'
+    summary: The AI triage service publishes a suggestion before it acknowledges the request.
+  aiTriageConsume:
+    action: receive
+    channel:
+      $ref: '#/channels/aiTriageRequests'
+    summary: The AI triage service classifies one report per request.
+  notificationConsume:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationInbox'
+    summary: Notification creates one notification per `notificationId`.
+components:
+  messages:
+    ReportSubmitted:
+      name: ReportSubmitted
+      title: ReportSubmitted
+      summary: A report was stored and its issue created.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.ReportSubmitted
+      x-proto-file: ../proto/bmc/issue/v1/report_submitted.proto
+    TriageRequested:
+      name: TriageRequested
+      title: TriageRequested
+      summary: Ask the AI triage service for a suggestion. Carries private report text; never fanned out or logged.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.TriageRequested
+      x-proto-file: ../proto/bmc/issue/v1/triage_requested.proto
+    IssueTriaged:
+      name: IssueTriaged
+      title: IssueTriaged
+      summary: An administrator recorded a triage decision.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueTriaged
+      x-proto-file: ../proto/bmc/issue/v1/issue_triaged.proto
+    IssueSummaryPublished:
+      name: IssueSummaryPublished
+      title: IssueSummaryPublished
+      summary: An administrator published or changed the shared summary.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueSummaryPublished
+      x-proto-file: ../proto/bmc/issue/v1/issue_summary_published.proto
+    IssueStateChanged:
+      name: IssueStateChanged
+      title: IssueStateChanged
+      summary: The issue as Dispatch needs it for its projection.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueStateChanged
+      x-proto-file: ../proto/bmc/issue/v1/issue_state_changed.proto
+    MembershipGranted:
+      name: MembershipGranted
+      title: MembershipGranted
+      summary: A building membership became active.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.MembershipGranted
+      x-proto-file: ../proto/bmc/issue/v1/membership_granted.proto
+    MembershipRevoked:
+      name: MembershipRevoked
+      title: MembershipRevoked
+      summary: A building membership was revoked.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.MembershipRevoked
+      x-proto-file: ../proto/bmc/issue/v1/membership_revoked.proto
+    IssueResolved:
+      name: IssueResolved
+      title: IssueResolved
+      summary: The issue was closed as resolved.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueResolved
+      x-proto-file: ../proto/bmc/issue/v1/issue_resolved.proto
+    IssueCancelled:
+      name: IssueCancelled
+      title: IssueCancelled
+      summary: The issue was cancelled.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueCancelled
+      x-proto-file: ../proto/bmc/issue/v1/issue_cancelled.proto
+    IssueReopened:
+      name: IssueReopened
+      title: IssueReopened
+      summary: A resolved issue went back to triage.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.issue.v1.IssueReopened
+      x-proto-file: ../proto/bmc/issue/v1/issue_reopened.proto
+    InterventionApproved:
+      name: InterventionApproved
+      title: InterventionApproved
+      summary: An administrator approved a proposal and the request was sent.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionApproved
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_approved.proto
+    ContractorResponded:
+      name: ContractorResponded
+      title: ContractorResponded
+      summary: The assigned contractor answered the approved proposal.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.ContractorResponded
+      x-proto-file: ../proto/bmc/dispatch/v1/contractor_responded.proto
+    InterventionDeclined:
+      name: InterventionDeclined
+      title: InterventionDeclined
+      summary: The contractor declined the request.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionDeclined
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_declined.proto
+    InterventionCancellationPending:
+      name: InterventionCancellationPending
+      title: InterventionCancellationPending
+      summary: A cancellation waits for a booking to be cancelled or reconciled.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionCancellationPending
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_cancellation_pending.proto
+    InterventionCancelled:
+      name: InterventionCancelled
+      title: InterventionCancelled
+      summary: The intervention was cancelled.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionCancelled
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_cancelled.proto
+    BookingConfirmed:
+      name: BookingConfirmed
+      title: BookingConfirmed
+      summary: A booking was confirmed, by the calendar or by hand.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.BookingConfirmed
+      x-proto-file: ../proto/bmc/dispatch/v1/booking_confirmed.proto
+    BookingStateChanged:
+      name: BookingStateChanged
+      title: BookingStateChanged
+      summary: A booking changed to a state other than confirmed.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.BookingStateChanged
+      x-proto-file: ../proto/bmc/dispatch/v1/booking_state_changed.proto
+    InterventionStarted:
+      name: InterventionStarted
+      title: InterventionStarted
+      summary: The contractor started the work.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionStarted
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_started.proto
+    CompletionReported:
+      name: CompletionReported
+      title: CompletionReported
+      summary: The work was reported complete. Not a closure.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.CompletionReported
+      x-proto-file: ../proto/bmc/dispatch/v1/completion_reported.proto
+    ReworkRequested:
+      name: ReworkRequested
+      title: ReworkRequested
+      summary: A reported completion was sent back for rework.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.ReworkRequested
+      x-proto-file: ../proto/bmc/dispatch/v1/rework_requested.proto
+    TriageSuggested:
+      name: TriageSuggested
+      title: TriageSuggested
+      summary: A category and urgency suggestion for one issue version. Never a decision.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.aitriage.v1.TriageSuggested
+      x-proto-file: ../proto/bmc/aitriage/v1/triage_suggested.proto
+    NotificationRequested:
+      name: NotificationRequested
+      title: NotificationRequested
+      summary: Ask the Notification service to notify the recipients the producer chose.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.notification.v1.NotificationRequested
+      x-proto-file: ../proto/bmc/notification/v1/notification_requested.proto
+  schemas:
+    CloudEvent:
+      type: object
+      description: >-
+        CloudEvents 1.0 envelope in structured JSON mode. The extension
+        attributes carry what every consumer needs before it reads `data`.
+      required:
+        - specversion
+        - id
+        - type
+        - source
+        - subject
+        - time
+        - datacontenttype
+        - schemaversion
+        - aggregateversion
+        - buildingid
+        - correlationid
+        - data
+      properties:
+        specversion:
+          type: string
+          const: '1.0'
+        id:
+          type: string
+          format: uuid
+          description: The event ID. Consumers deduplicate on it.
+        type:
+          type: string
+          description: The event type, for example `IssueStateChanged`. Equal to the message name.
+        source:
+          type: string
+          enum:
+            - issue
+            - dispatch
+            - ai-triage
+          description: >-
+            The producing service. A consumer rejects, without retry, a message
+            whose source differs from the prefix of its routing key.
+        subject:
+          type: string
+          description: ID of the aggregate the event is about (issue, membership or intervention).
+        time:
+          type: string
+          format: date-time
+          description: When it happened, RFC 3339 in UTC.
+        datacontenttype:
+          type: string
+          const: application/json
+        schemaversion:
+          type: integer
+          description: >-
+            Major version of the payload schema; equal to the version in the
+            Protobuf package (`v1` is 1). A consumer rejects, without retry, a
+            version it does not support.
+        aggregateversion:
+          type: integer
+          description: Version of the aggregate after the change. Consumers apply events by this version.
+        buildingid:
+          type: string
+          format: uuid
+          description: The building the event belongs to. Not an authorisation by itself.
+        correlationid:
+          type: string
+          description: The `X-Correlation-Id` of the request that caused the event.
+        traceparent:
+          type: string
+          description: W3C trace context, when the producer has one.
+        data:
+          type: object
+          description: The payload, in the proto3 JSON mapping of the message named by `x-proto-message`.

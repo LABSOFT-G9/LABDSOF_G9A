@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package bmc.dispatch.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.dispatch.v1";
+
+// A booking changed to a state other than confirmed.
+message BookingStateChanged {
+  string issue_id = 1;
+  // `requested`, `uncertain`, `rejected`, `failed` or `discrepancy`.
+  string booking_state = 2;
+  // The intervention state after this event: `awaiting_approval`, `sent`,
+  // `scheduling_pending`, `booked`, `in_progress`, `completion_reported`,
+  // `declined`, `cancellation_pending`, `cancelled` or `closed`.
+  string intervention_state = 3;
+}

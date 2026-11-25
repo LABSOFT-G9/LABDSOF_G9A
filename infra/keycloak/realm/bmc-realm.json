@@ -1,0 +1,83 @@
+{
+  "realm": "bmc",
+  "enabled": true,
+  "displayName": "BMC",
+  "displayNameHtml": "Building Maintenance Coordinator",
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Any registered person. Grants no access by itself: building memberships live in the Issue service."
+      },
+      {
+        "name": "platform_staff",
+        "description": "Project team members who validate contractor registrations. Assigned by hand."
+      },
+      {
+        "name": "default-roles-bmc",
+        "description": "Roles every new account gets.",
+        "composite": true,
+        "composites": { "realm": ["user"] }
+      }
+    ]
+  },
+  "defaultRole": { "name": "default-roles-bmc" },
+  "clients": [
+    {
+      "clientId": "bmc-edge",
+      "name": "BMC edge (Traefik OIDC middleware)",
+      "description": "Backend-for-Frontend session held by the traefik-oidc-auth plugin (ADR-005).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${BMC_EDGE_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "rootUrl": "${BMC_PUBLIC_URL}",
+      "baseUrl": "/",
+      "redirectUris": ["${BMC_PUBLIC_URL}/oidc/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${BMC_PUBLIC_URL}/oidc/callback"
+      },
+      "protocolMappers": [
+        {
+          "name": "bmc-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "bmc-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "smtpServer": {
+    "host": "${BMC_SMTP_HOST}",
+    "port": "${BMC_SMTP_PORT}",
+    "from": "${BMC_SMTP_FROM}",
+    "fromDisplayName": "BMC",
+    "auth": "false",
+    "starttls": "false",
+    "ssl": "false"
+  }
+}

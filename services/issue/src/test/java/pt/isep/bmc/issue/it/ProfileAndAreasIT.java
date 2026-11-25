@@ -24,7 +24,53 @@ class ProfileAndAreasIT extends IntegrationTestSupport {
         assertThat(api.get("/me", tokens.token(CONTRACTOR)).json().get("memberships")).isEqualTo(List.of());
         Map<String, Object> stranger = api.get("/me", tokens.token(STRANGER)).json();
         assertThat(stranger.get("displayName")).isNull();
+        assertThat(stranger.get("email")).isNull();
+        assertThat(stranger.get("platformRoles")).isEqualTo(List.of());
         assertThat(stranger.get("memberships")).isEqualTo(List.of());
+    }
+
+    @Test
+    void mePassesOnWhatTheIdentityProviderSaysOfTheAccount() {
+        Map<String, Object> staff = api.get("/me", tokens.token(STRANGER, claims -> claims
+                .claim("name", "Synthetic Newcomer")
+                .claim("email", "synthetic.newcomer@bmc.example")
+                .claim("realm_access", Map.of("roles", List.of("default-roles-bmc", "user", "platform_staff"))))).json();
+        // No profile row yet: the name comes from the token. Unknown realm roles are left out.
+        assertThat(staff).containsEntry("displayName", "Synthetic Newcomer")
+                .containsEntry("email", "synthetic.newcomer@bmc.example")
+                .containsEntry("platformRoles", List.of("platform_staff"))
+                .containsEntry("memberships", List.of());
+
+        // A stored profile name wins over the token's; a plain user has no platform role.
+        Map<String, Object> resident = api.get("/me", tokens.token(RESIDENT_A1, claims -> claims
+                .claim("name", "Someone Else")
+                .claim("preferred_username", "synthetic.resident.a1@bmc.example")
+                .claim("realm_access", Map.of("roles", List.of("user"))))).json();
+        assertThat(resident).containsEntry("displayName", "Synthetic Resident A1")
+                .containsEntry("platformRoles", List.of());
+        assertThat(resident.get("email")).isNull();
+
+        // Without `name`, the username is shown; malformed claims are ignored, never an error.
+        Map<String, Object> odd = api.get("/me", tokens.token(STRANGER, claims -> claims
+                .claim("preferred_username", "synthetic.user")
+                .claim("email", 42)
+                .claim("realm_access", "platform_staff"))).json();
+        assertThat(odd).containsEntry("displayName", "synthetic.user").containsEntry("platformRoles", List.of());
+        assertThat(odd.get("email")).isNull();
+    }
+
+    @Test
+    void platformRolesInATokenGrantNothingInThisService() {
+        String staff = tokens.token(PLATFORM_STAFF, claims -> claims
+                .claim("realm_access", Map.of("roles", List.of("platform_staff"))));
+        String reportId = (String) api.post("/reports", tokens.token(RESIDENT_A1), java.util.UUID.randomUUID().toString(),
+                report(BUILDING_A, AREA_A_GARAGE, TEXT)).json().get("reportId");
+
+        assertThat(api.get("/reports/" + reportId, staff).status()).isEqualTo(404);
+        assertThat(api.get("/reports", staff).json().get("items")).isEqualTo(List.of());
+        assertThat(api.get("/buildings/" + BUILDING_A + "/areas", staff).status()).isEqualTo(404);
+        assertThat(api.post("/reports", staff, java.util.UUID.randomUUID().toString(),
+                report(BUILDING_A, AREA_A_GARAGE, TEXT)).status()).isEqualTo(404);
     }
 
     @Test
