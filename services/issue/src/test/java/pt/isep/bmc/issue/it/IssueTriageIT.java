@@ -204,6 +204,65 @@ class IssueTriageIT extends IntegrationTestSupport {
         assertThat(count("triage_decisions")).isEqualTo(1);
     }
 
+    @Test
+    void aRetryByAnAdministratorWhoWasRevokedIsRefusedLikeANewDecision() {
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        String key = UUID.randomUUID().toString();
+        Map<String, Object> body = triageBody("plumbing", "high", REASON);
+        assertThat(triage(ADMIN_A, issueId, "\"1\"", key, body).status()).isEqualTo(200);
+
+        setMembershipStatus(ADMIN_A, "revoked");
+        try {
+            Response retry = triage(ADMIN_A, issueId, "\"1\"", key, body);
+
+            assertThat(retry.status()).isEqualTo(404);
+            assertThat(retry.json()).containsEntry("code", "NOT_FOUND");
+            assertThat(retry.header("ETag")).isNull();
+            assertThat(retry.body()).doesNotContain("plumbing").doesNotContain(REASON);
+        } finally {
+            setMembershipStatus(ADMIN_A, "active");
+        }
+
+        // With the membership back, the same key replays the original receipt; nothing was stored twice.
+        Response again = triage(ADMIN_A, issueId, "\"1\"", key, body);
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(again.header("ETag")).isEqualTo("\"2\"");
+        assertThat(count("triage_decisions")).isEqualTo(1);
+        assertThat(count("issue_history")).isEqualTo(2);
+    }
+
+    @Test
+    void aFieldThatIsNotAJsonStringIsRejectedAndNothingIsStored() {
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        jdbc.sql("DELETE FROM outbox").update();
+        jdbc.sql("DELETE FROM idempotency_keys").update();
+
+        for (String body : List.of(
+                "{\"category\": \"plumbing\", \"urgency\": \"high\", \"reason\": 12345}",
+                "{\"category\": \"plumbing\", \"urgency\": \"high\", \"reason\": 1.5}",
+                "{\"category\": \"plumbing\", \"urgency\": \"high\", \"reason\": true}",
+                "{\"category\": \"plumbing\", \"urgency\": \"high\", \"reason\": [\"Leak\"]}",
+                "{\"category\": \"plumbing\", \"urgency\": \"high\", \"reason\": {\"text\": \"Leak\"}}",
+                "{\"category\": 1, \"urgency\": \"high\", \"reason\": \"Leak in the garage\"}",
+                "{\"category\": \"plumbing\", \"urgency\": false, \"reason\": \"Leak in the garage\"}")) {
+            Response response = triage(ADMIN_A, issueId, "\"1\"", UUID.randomUUID().toString(), body);
+
+            assertThat(response.status()).as(body).isEqualTo(400);
+            assertThat(response.body()).as(body).doesNotContain("12345");
+        }
+        assertNothingChanged(issueId);
+
+        // A JSON string that looks like a number is still a reason.
+        assertThat(triage(ADMIN_A, issueId, 1, "plumbing", "high", "12345").status()).isEqualTo(200);
+    }
+
+    private void setMembershipStatus(String sub, String status) {
+        jdbc.sql("UPDATE memberships SET status = :status WHERE user_id = :user AND role = 'administrator'")
+                .param("status", status)
+                .param("user", sub)
+                .update();
+    }
+
     /** Repeated: a lock or deadlock problem shows up as a 503 in some runs only. */
     @RepeatedTest(5)
     void ofSeveralDecisionsBasedOnTheSameVersionExactlyOneWins() throws Exception {

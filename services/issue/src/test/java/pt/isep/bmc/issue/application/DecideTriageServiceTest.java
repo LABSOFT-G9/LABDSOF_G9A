@@ -148,6 +148,37 @@ class DecideTriageServiceTest {
     }
 
     @Test
+    void aRetryIsAnsweredByTheCallersPermissionsNow() {
+        service.decide(command(ADMIN, "k1", 1, "plumbing", "high", REASON));
+        revoke(ADMIN);
+
+        // Not an administrator any more and never reported it: the issue does not exist for this caller.
+        assertThatThrownBy(() -> service.decide(command(ADMIN, "k1", 1, "plumbing", "high", REASON)))
+                .isInstanceOf(AccessDeniedException.class);
+
+        // The same person also reported it, so they still see it, but may not decide or read the decision again.
+        ReportId reportId = new ReportId(UUID.randomUUID());
+        ports.reports.put(reportId, Report.restore(reportId, issue.id(), A, GARAGE.id(), ADMIN,
+                ReportText.restore("Water dripping in the garage."), ReportSource.RESIDENT, issue.createdAt()));
+        assertThatThrownBy(() -> service.decide(command(ADMIN, "k1", 1, "plumbing", "high", REASON)))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThat(ports.decisions).hasSize(1);
+        assertThat(ports.history).hasSize(2);
+        assertThat(ports.outbox).hasSize(2);
+        assertThat(ports.keys).hasSize(1);
+        // Someone who still administers the building is not affected.
+        assertThat(service.decide(command(OTHER_ADMIN, "k2", 2, "electrical", "low", REASON)).replayed()).isFalse();
+        assertThat(service.decide(command(OTHER_ADMIN, "k2", 2, "electrical", "low", REASON)).replayed()).isTrue();
+    }
+
+    void revoke(UserId user) {
+        ports.memberships.replaceAll(m -> m.userId().equals(user)
+                ? new Membership(m.id(), user, A, m.role(), MembershipStatus.REVOKED, m.validFrom(), null, 2)
+                : m);
+    }
+
+    @Test
     void theSameKeyWithADifferentRequestIsRefusedAndChangesNothing() {
         service.decide(command(ADMIN, "k1", 1, "plumbing", "high", REASON));
         assertThatThrownBy(() -> service.decide(command(ADMIN, "k1", 1, "plumbing", "low", REASON)))

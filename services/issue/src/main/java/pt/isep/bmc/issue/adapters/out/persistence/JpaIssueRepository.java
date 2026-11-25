@@ -26,6 +26,12 @@ class JpaIssueRepository implements IssueRepository {
     }
 
     @Override
+    public Optional<Issue> find(IssueId id) {
+        return Optional.ofNullable(entityManager.find(IssueEntity.class, id.toString()))
+                .map(PersistenceMapper::toDomain);
+    }
+
+    @Override
     public Optional<Issue> findForUpdate(IssueId id) {
         // SELECT ... FOR UPDATE: the row lock is held until the transaction ends.
         return Optional.ofNullable(entityManager.find(IssueEntity.class, id.toString(), LockModeType.PESSIMISTIC_WRITE))

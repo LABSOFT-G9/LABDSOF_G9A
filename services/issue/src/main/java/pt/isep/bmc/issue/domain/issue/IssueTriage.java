@@ -53,12 +53,7 @@ public final class IssueTriage {
             int sequence,
             String areaLabel,
             Instant now) {
-        if (!access.canViewIssue(issue.buildingId(), callerReported)) {
-            throw new AccessDeniedException();
-        }
-        if (!access.administers(issue.buildingId())) {
-            throw new ForbiddenException();
-        }
+        authorise(access, issue, callerReported);
 
         List<FieldViolation> violations = new ArrayList<>();
         Optional<IssueCategory> category = choice(rawCategory, FIELD_CATEGORY, IssueCategory.fromValue(rawCategory), violations);
@@ -79,6 +74,22 @@ public final class IssueTriage {
                         new IssueTriaged(triaged.id(), triaged.buildingId(), triaged.version(), category.get(),
                                 urgency.get(), now),
                         IssueStateChanged.of(triaged, areaLabel)));
+    }
+
+    /**
+     * Checks 1 and 2 on their own: who may decide the triage of {@code issue}
+     * and, with that, be told what was decided. Also run before a stored
+     * receipt is returned again, so a retry is answered by today's permissions.
+     *
+     * @param callerReported whether the caller authored a report of this issue
+     */
+    public static void authorise(BuildingAccess access, Issue issue, boolean callerReported) {
+        if (!access.canViewIssue(issue.buildingId(), callerReported)) {
+            throw new AccessDeniedException();
+        }
+        if (!access.administers(issue.buildingId())) {
+            throw new ForbiddenException();
+        }
     }
 
     private static <T> Optional<T> choice(String raw, String field, Optional<T> parsed, List<FieldViolation> violations) {
