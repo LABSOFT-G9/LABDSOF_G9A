@@ -277,7 +277,7 @@ describe("triage (administrator)", () => {
   it("marks entries only administrators can see", async () => {
     signInAs("administrator-a");
     renderApp(`/issues/${SUGGESTED}`);
-    await screen.findByText("Triage suggested (not a decision)");
+    await screen.findByText("Triage suggested by the AI (not a decision)");
     expect(screen.getByText("Internal: administrators only")).toBeInTheDocument();
   });
 
@@ -325,5 +325,568 @@ describe("status and history (resident)", () => {
     await user.click(await screen.findByRole("link", { name: "Follow the issue" }));
     await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
     await screen.findByText("Report received");
+  });
+});
+
+describe("suggestion (US-03-02)", () => {
+  const CRITICAL = "0199f2a1-0000-7000-8000-000000002005"; // Building B, Garage: AI timed out, fallback, critical alert
+  const PENDING = "0199f2a1-0000-7000-8000-000000002002"; // Garage level -1, received 20 hours ago, no suggestion
+  const NOW = new Date("2026-11-24T10:00:00Z");
+  const stubbed = (overrides: Partial<Issue>): Issue => ({
+    issueId: "i1",
+    buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+    buildingName: "Synthetic Building A",
+    areaLabel: "Entrance hall",
+    state: "received",
+    version: 1,
+    createdAt: NOW.toISOString(),
+    triage: null,
+    suggestion: null,
+    ...overrides,
+  });
+  const renderStubbed = (issue: Issue) =>
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }) }),
+        clock: { now: () => NOW },
+      },
+    });
+
+  it("shows the suggestion as unconfirmed, with its origin and explanation", async () => {
+    signInAs("administrator-a");
+    renderApp(`/issues/${SUGGESTED}`);
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText("Unconfirmed · AI")).toBeInTheDocument();
+    expect(within(panel).getByText("Electrical")).toBeInTheDocument();
+    expect(within(panel).getByText("High")).toBeInTheDocument();
+    expect(within(panel).getByText(/exposed wires next to the light switch/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Not a decision until you save one below/)).toBeInTheDocument();
+    expect(within(panel).queryByText("AI could not be used")).not.toBeInTheDocument();
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+  });
+
+  it("never reads an unfinished critical check as nothing found", async () => {
+    signInAs("administrator-a");
+    const { router } = renderApp("/issues");
+    const garage = await screen.findByRole("link", { name: "Garage level -1" });
+    expect(within(card(garage)).getByText("Critical check pending")).toBeInTheDocument();
+    // Entrance hall's check finished with no signals: nothing to show.
+    const hall = screen.getByRole("link", { name: "Entrance hall" });
+    expect(within(card(hall)).queryByText(/Critical/)).not.toBeInTheDocument();
+
+    await router.navigate({ to: "/issues/$issueId", params: { issueId: PENDING } });
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    const note = screen
+      .getByText("Critical check not finished", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(note).toHaveTextContent("Review the report yourself for danger.");
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+  });
+
+  it("words an unknown critical rule code in general terms", async () => {
+    signInAs("administrator-a");
+    renderStubbed(
+      stubbed({
+        criticalCheck: {
+          status: "completed",
+          rulesVersion: "critical-alerts-v2",
+          signals: [{ code: "something_new", raisedAt: NOW.toISOString() }],
+        },
+      }),
+    );
+    await screen.findByText("A critical-alert rule matched this report.");
+  });
+
+  it("says when the suggestion arrived while the administrator was deciding, and decides on it after reload", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const waiting = stubbed({ createdAt: new Date(NOW.getTime() - 30_000).toISOString() });
+    const arrived: Issue = {
+      ...waiting,
+      state: "in_triage",
+      version: 2,
+      suggestion: { category: "lift", urgency: "high", origin: "ai", rationale: "Mentions the lift." },
+    };
+    const getIssue = vi.fn<() => Promise<Issue>>().mockResolvedValueOnce(waiting).mockResolvedValue(arrived);
+    const triage = vi.fn(async () => ({
+      issueId: "i1",
+      state: "triaged" as const,
+      version: 3,
+      category: "plumbing" as const,
+      urgency: "high" as const,
+      decisionSource: "human" as const,
+    }));
+    const { router } = renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), triage }),
+        clock: { now: () => NOW },
+      },
+    });
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Category" }), "Plumbing");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "High");
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Water on the floor.");
+
+    // The poll (or any refetch) brings the suggestion and version 2.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    await screen.findByText("A suggestion arrived while you were deciding");
+    expect(screen.getByText(/Reload to decide on the current version; your choices stay in the form./)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Reload the issue" }));
+    await waitFor(() => expect(screen.queryByText("A suggestion arrived while you were deciding")).toBeNull());
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveDisplayValue("Plumbing");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+    expect(triage).toHaveBeenCalledWith("i1", 2, expect.anything(), expect.any(String));
+  });
+
+  it("keeps a critical alert in view when the suggestion disagrees, and after the decision", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-b");
+    const { router } = renderApp("/issues");
+    const garage = await screen.findByRole("link", { name: "Garage" });
+    expect(within(card(garage)).getByText("Critical alert")).toBeInTheDocument();
+    expect(within(card(garage)).getByText("Unconfirmed suggestion (rules, AI unavailable)")).toBeInTheDocument();
+
+    await router.navigate({ to: "/issues/$issueId", params: { issueId: CRITICAL } });
+    await screen.findByRole("heading", { level: 1, name: "Garage" });
+    const banner = screen
+      .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(banner).toHaveAttribute("role", "note");
+    expect(banner).toHaveTextContent("The report mentions smoke or fire.");
+    expect(banner).toHaveTextContent("The report mentions water near electrics.");
+    expect(banner).toHaveTextContent("The suggestion says Normal, but the alert still stands.");
+    expect(banner).toHaveTextContent("no suggestion can clear or lower this alert");
+
+    const panel = screen.getByRole("region", { name: "Suggestion" });
+    expect(panel).toHaveTextContent("AI could not be used");
+    expect(panel).toHaveTextContent(
+      "The AI did not answer in time. This suggestion comes from the fallback rules instead.",
+    );
+    expect(panel).toHaveTextContent("The suggester asks for a careful review of this one.");
+
+    // Confirming the lower suggested urgency is the administrator's call; the alert does not go away because of it.
+    await user.click(screen.getByRole("button", { name: "Fill in the suggestion" }));
+    expect(screen.getByRole("combobox", { name: "Urgency" })).toHaveDisplayValue("Normal");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Urgency" }), "Critical");
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Smoke reported: treat as critical.");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Suggestion" })).not.toBeInTheDocument());
+    const after = screen
+      .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(after).toHaveTextContent("The report mentions smoke or fire.");
+    expect(after).not.toHaveTextContent("The suggestion says");
+  });
+
+  it("says triage is pending, to classify manually, when no suggestion arrived within 2 minutes", async () => {
+    signInAs("administrator-a");
+    renderApp(`/issues/${PENDING}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    expect(screen.getByText("Triage pending — classify manually")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Suggestion" })).not.toBeInTheDocument();
+  });
+
+  it("says it is still waiting for a suggestion in the first 2 minutes, and the form stays usable", async () => {
+    signInAs("administrator-a");
+    renderStubbed(stubbed({ createdAt: new Date(NOW.getTime() - 30_000).toISOString() }));
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+    expect(screen.queryByText("Triage pending — classify manually")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Category" })).toBeEnabled();
+  });
+
+  it("moves from waiting to triage pending on an open page, once the 2 minutes pass and the poll answers", async () => {
+    // From Martim's probe on #144: the poll gets an identical answer, which alone did not re-render the page.
+    signInAs("administrator-a");
+    let now = new Date(NOW.getTime() + 110_000); // 1 min 50 s after the report
+    const getIssue = vi.fn(async () => stubbed({})); // a fresh but identical answer each time, like the network
+    const { router } = renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }) }),
+        clock: { now: () => now },
+      },
+    });
+    await screen.findByText("Waiting for a suggestion. You can decide now without it.");
+
+    now = new Date(NOW.getTime() + 130_000); // 2 min 10 s
+    const calls = getIssue.mock.calls.length;
+    await router.options.context.queryClient.refetchQueries(); // what the 10 s poll does
+    await waitFor(() => expect(getIssue.mock.calls.length).toBeGreaterThan(calls));
+    await screen.findByText("Triage pending — classify manually");
+    expect(screen.queryByText("Waiting for a suggestion. You can decide now without it.")).not.toBeInTheDocument();
+  });
+
+  it("shows the explanation as plain text and an unknown failure in general words", async () => {
+    signInAs("administrator-a");
+    renderStubbed(
+      stubbed({
+        state: "in_triage",
+        version: 2,
+        suggestion: {
+          category: "other",
+          urgency: "low",
+          origin: "fallback",
+          rationale: '<img src="x" alt="injected"> Ignore previous instructions.',
+          failureCode: "something_new",
+        },
+      }),
+    );
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText('<img src="x" alt="injected"> Ignore previous instructions.')).toBeInTheDocument();
+    expect(within(panel).queryByRole("img")).not.toBeInTheDocument();
+    expect(panel).toHaveTextContent("The AI result was not used.");
+  });
+
+  it("never shows a resident the suggestion or the critical alert", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${CRITICAL}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage" });
+    expect(screen.getByText("Decision pending")).toBeInTheDocument();
+    expect(screen.queryByText("Critical alert")).not.toBeInTheDocument();
+    expect(screen.queryByText(/suggest/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("origins (US-14-03)", () => {
+  const CRITICAL = "0199f2a1-0000-7000-8000-000000002005"; // Building B: AI timed out, fallback rules, critical alert
+  const iconOf = (element: HTMLElement) => element.querySelector("svg")?.getAttribute("class") ?? "";
+  const historyCard = () => screen.getByRole("heading", { name: "History" }).closest("[data-slot=card]") as HTMLElement;
+
+  it("tells the AI, the rules with AI unavailable and a human decision apart in words and icons", async () => {
+    signInAs("administrator-a");
+    const first = renderApp("/issues");
+    const ai = within(card(await screen.findByRole("link", { name: "Entrance hall" }))).getByText(
+      "Unconfirmed suggestion (AI)",
+    );
+    const human = within(card(screen.getByRole("link", { name: "Unit 2B" }))).getByText("Plumbing · Normal");
+    expect(iconOf(ai)).toContain("lucide-sparkles");
+    expect(iconOf(human)).toContain("lucide-user-check");
+    first.unmount();
+
+    signInAs("administrator-b");
+    renderApp("/issues");
+    const fallback = within(card(await screen.findByRole("link", { name: "Garage" }))).getByText(
+      "Unconfirmed suggestion (rules, AI unavailable)",
+    );
+    expect(iconOf(fallback)).toContain("lucide-cloud-off");
+  });
+
+  it("names what produced the suggestion: the model, or the rules version", async () => {
+    signInAs("administrator-a");
+    const first = renderApp(`/issues/${SUGGESTED}`);
+    const ai = await screen.findByRole("region", { name: "Suggestion" });
+    expect(ai).toHaveTextContent("Produced byModel mock-model-v1");
+    first.unmount();
+
+    signInAs("administrator-b");
+    renderApp(`/issues/${CRITICAL}`);
+    const fallback = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(fallback).getByText("Unconfirmed · rules, AI unavailable")).toBeInTheDocument();
+    expect(fallback).toHaveTextContent("Produced byRules rules-v1");
+    // The critical check names its own rule set, separate from the classification rules.
+    const banner = screen
+      .getByText("Critical alert", { selector: "[data-slot=alert-title]" })
+      .closest("[data-slot=alert]") as HTMLElement;
+    expect(banner).toHaveTextContent("Rules critical-alerts-v1");
+  });
+
+  it("shows a rules result with AI turned off as rules, without claiming the AI failed", async () => {
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: { category: "lift", urgency: "normal", origin: "rules", rulesVersion: "rules-v1" },
+    };
+    renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }) }) },
+    });
+    const panel = await screen.findByRole("region", { name: "Suggestion" });
+    expect(within(panel).getByText("Unconfirmed · rules")).toBeInTheDocument();
+    expect(iconOf(within(panel).getByText("Unconfirmed · rules"))).toContain("lucide-list-checks");
+    expect(panel).toHaveTextContent("Rules rules-v1");
+    expect(panel).not.toHaveTextContent("AI could not be used");
+  });
+
+  it("shows in the history who suggested, the critical alert, and a late suggestion as not applied", async () => {
+    signInAs("administrator-b");
+    const first = renderApp(`/issues/${CRITICAL}`);
+    await screen.findByText("Triage suggested by the rules: AI unavailable (not a decision)");
+    // One entry per signal, each naming its rule in words.
+    expect(within(historyCard()).getAllByText("Critical alert raised")).toHaveLength(2);
+    expect(within(historyCard()).getByText("The report mentions smoke or fire.")).toBeInTheDocument();
+    expect(within(historyCard()).getByText("The report mentions water near electrics.")).toBeInTheDocument();
+    expect(within(historyCard()).queryByText(/Not applied/)).not.toBeInTheDocument();
+    first.unmount();
+
+    signInAs("administrator-a");
+    renderApp(`/issues/${SCHEDULED}`);
+    const late = await screen.findByText("Triage suggested by the AI (not a decision)");
+    expect(late.closest("li")).toHaveTextContent("Not applied: the issue had already moved on");
+    expect(late.closest("li")).toHaveTextContent("Plumbing · Low");
+    // The decision itself is untouched by the late result.
+    expect(screen.getByText("Plumbing · Normal", { selector: "[data-slot=badge]" })).toBeInTheDocument();
+  });
+
+  it("marks a suggestion not applied from its flag, not from where it sits in the history", async () => {
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 3,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const suggested = (sequence: number, applied: boolean | undefined) => ({
+      sequence,
+      type: "triage_suggested",
+      visibility: "internal" as const,
+      actorRole: "system" as const,
+      occurredAt: "2026-11-24T10:00:30Z",
+      origin: "ai" as const,
+      category: sequence === 1 ? ("lift" as const) : sequence === 2 ? ("plumbing" as const) : ("other" as const),
+      urgency: "low" as const,
+      ...(applied === undefined ? {} : { applied }),
+    });
+    // No decision at all: the second suggestion named a version the issue had left (a request classified twice).
+    const items = [suggested(1, true), suggested(2, false), suggested(3, undefined)];
+    renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items }) }) },
+    });
+    const rows = await screen.findAllByText("Triage suggested by the AI (not a decision)");
+    expect(rows.map((row) => row.closest("li")!.textContent?.includes("Not applied"))).toEqual([false, true, false]);
+  });
+
+  it("keeps a suggestion entry without an origin generic", async () => {
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "in_triage",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const entry = {
+      sequence: 2,
+      type: "triage_suggested",
+      visibility: "internal" as const,
+      actorRole: "system" as const,
+      occurredAt: "2026-11-24T10:00:30Z",
+    };
+    renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [entry] }) }) },
+    });
+    await screen.findByText("Triage suggested (not a decision)");
+  });
+
+  it("never shows a resident who suggested or the critical alert in the history", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${CRITICAL}`);
+    await screen.findByText("Report received");
+    expect(within(historyCard()).queryByText(/suggested|Critical alert/)).not.toBeInTheDocument();
+  });
+});
+
+describe("shared issue (US-04-02)", () => {
+  const SHARED = "0199f2a1-0000-7000-8000-000000002002"; // Garage level -1: shared with Building A, Resident A2's report
+  const sharedCard = () => screen.getByRole("heading", { name: "Shared with the building" }).closest("section")!;
+
+  it("shows residents of the building the shared summary and count, not the report", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp("/issues");
+    const link = await screen.findByRole("link", { name: "Garage level -1" });
+    expect(within(card(link)).getByText("Shared")).toBeInTheDocument();
+
+    await user.click(link);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    const shared = sharedCard();
+    expect(shared).toHaveTextContent("The garage door on level -1 does not close fully.");
+    expect(shared).toHaveTextContent("1 resident says this affects them.");
+    expect(shared).toHaveTextContent("Only the number is shown, never who.");
+    expect(screen.queryByRole("button", { name: "Save decision" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share with the building" })).not.toBeInTheDocument();
+  });
+
+  it("confirms and withdraws the impact by keyboard, with messages in words, and keeps the status", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+
+    const confirm = screen.getByRole("button", { name: "This affects me too" });
+    expect(confirm).toHaveAccessibleDescription(expect.stringContaining("It does not change the urgency"));
+    confirm.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByText("Your confirmation was recorded.");
+    expect(sharedCard()).toHaveTextContent("2 residents say this affects them.");
+    expect(sharedCard()).toHaveTextContent("You said this affects you.");
+
+    await user.click(screen.getByRole("button", { name: "Withdraw my confirmation" }));
+    await screen.findByText("Your confirmation was withdrawn. You can still follow this issue here.");
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+    // Withdrawing never removes access: the status and history are still there.
+    expect(screen.getAllByText("Received").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+  });
+
+  it("subscribes and unsubscribes separately from the impact", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    renderApp(`/issues/${SHARED}`);
+    const box = await screen.findByRole("checkbox", { name: "Notify me when this issue changes" });
+    expect(box).not.toBeChecked();
+
+    await user.click(box);
+    await screen.findByText("You will be notified when this issue changes.");
+    expect(box).toBeChecked();
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+
+    box.focus();
+    await user.keyboard(" ");
+    await screen.findByText("Notifications for this issue are off. You can still check its status here.");
+    expect(box).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "This affects me too" })).toBeInTheDocument();
+  });
+
+  it("shows a failed confirmation as an error and changes nothing", async () => {
+    const user = userEvent.setup();
+    signInAs("resident-a1");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Garage level -1",
+      state: "received",
+      version: 2,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The garage door does not close.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 1, mine: false },
+      subscribed: false,
+    };
+    const setImpact = vi.fn(async () => {
+      throw new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Try again later.", "c-503");
+    });
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), setImpact }),
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "This affects me too" }));
+    await screen.findByText(/c-503/);
+    expect(sharedCard()).toHaveTextContent("1 resident says this affects them.");
+    expect(screen.queryByText("Your confirmation was recorded.")).not.toBeInTheDocument();
+  });
+
+  it("is not visible to another building's residents", async () => {
+    signInAs("resident-b1");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Page not found" });
+  });
+
+  it("lets the administrator share a summary after a triage decision, without a false conflict", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    renderApp(`/issues/${SUGGESTED}`);
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    expect(screen.getByText(/Not shared yet/)).toBeInTheDocument();
+
+    // Triage first: it moves the version.
+    await user.click(screen.getByRole("button", { name: "Fill in the suggestion" }));
+    await user.type(screen.getByRole("textbox", { name: "Reason" }), "Exposed wiring by the door.");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+    await screen.findByText("Decision saved.");
+
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    await user.type(summary, "Too short");
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    expect(await screen.findByText("Use at least 10 characters.")).toBeInTheDocument();
+    expect(summary).toHaveFocus();
+    expect(summary).toHaveAccessibleDescription(expect.stringContaining("Use at least 10 characters."));
+
+    await user.clear(summary);
+    await user.type(summary, "The entrance light switch is unsafe. An electrician is being arranged.");
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    await screen.findByText("Summary shared with the building.");
+    expect(screen.queryByText("Someone changed this issue")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("The entrance light switch is unsafe. An electrician is being arranged."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No resident has said this affects them yet.")).toBeInTheDocument();
+    const history = screen.getByRole("heading", { name: "History" }).closest("[data-slot=card]") as HTMLElement;
+    await waitFor(() => expect(within(history).getByText("Summary shared with the building")).toBeInTheDocument());
+  });
+
+  it("lets the administrator change the summary, or cancel, and shows the count but no confirm button", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    expect(screen.getByText("1 resident says this affects them.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "This affects me too" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText(/does not close fully/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    await user.clear(summary);
+    await user.type(summary, "The garage door on level -1 is being repaired on Thursday.");
+    await user.click(screen.getByRole("button", { name: "Update the summary" }));
+    await screen.findByText("Summary shared with the building.");
+    expect(screen.getByText("The garage door on level -1 is being repaired on Thursday.")).toBeInTheDocument();
+  });
+
+  it("on a conflict, overwrites nothing and offers to reload", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const issue: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 3,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+    };
+    const publish = vi.fn(async () => {
+      throw new ApiError(409, "VERSION_CONFLICT", "Changed.", "c-409", { currentVersion: 4, currentState: "triaged" });
+    });
+    renderApp("/issues/i1", {
+      services: {
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), publish }),
+      },
+    });
+    await user.type(
+      await screen.findByRole("textbox", { name: "Summary for residents" }),
+      "The entrance light is out.",
+    );
+    await user.click(screen.getByRole("button", { name: "Share the summary" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Someone changed this issue");
+    expect(publish).toHaveBeenCalledWith("i1", 3, { summary: "The entrance light is out." }, expect.any(String));
+    expect(screen.getByRole("textbox", { name: "Summary for residents" })).toHaveValue("The entrance light is out.");
+    expect(within(alert).getByRole("button", { name: "Reload the issue" })).toBeInTheDocument();
   });
 });

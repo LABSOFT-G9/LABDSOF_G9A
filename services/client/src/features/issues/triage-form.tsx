@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, Info, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
-import { type FormEvent, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useRef, useState } from "react";
 import { useServices } from "@/app/context";
 import {
   codePointLength,
@@ -56,7 +56,14 @@ const fromIssue = (issue: Issue): TriageDraft => ({
  * service refuses it (`409`) and nothing is overwritten. The form then says so, keeps the administrator's choices, and
  * offers to reload the issue. A suggestion can fill the form, but only saving makes it a decision.
  */
-export function TriageForm({ issue }: { issue: Issue }) {
+export function TriageForm({
+  issue,
+  intro,
+}: {
+  issue: Issue;
+  /** Shown under the form's heading, before the fields: what the administrator decides from (the suggestion). */
+  intro?: ReactNode;
+}) {
   const { issues } = useServices();
   const queryClient = useQueryClient();
   const mutation = useMutation(triageMutation(issues, queryClient, issue.issueId));
@@ -70,6 +77,8 @@ export function TriageForm({ issue }: { issue: Issue }) {
    * retry identical to the first attempt (same key, same `If-Match`), which the service replays instead of refusing.
    */
   const [basis, setBasis] = useState(issue.version);
+  /** Whether the version the form is based on already had a suggestion, to tell "a suggestion arrived" apart. */
+  const [basisSuggested, setBasisSuggested] = useState(!!issue.suggestion);
   const idempotencyKey = useRef<string | null>(null);
 
   const fieldId = (field: Field) => `${id}-${field}`;
@@ -108,6 +117,7 @@ export function TriageForm({ issue }: { issue: Issue }) {
         onSuccess: (result) => {
           idempotencyKey.current = null;
           setBasis(result.version);
+          setBasisSuggested(false);
           setSaved(true);
           setDraft((current) => ({ ...current, reason: "" }));
         },
@@ -132,13 +142,18 @@ export function TriageForm({ issue }: { issue: Issue }) {
     ]);
     // The administrator has now seen the latest version: decide on it from here.
     const latest = queryClient.getQueryData(issueQuery(issues, issue.issueId).queryKey);
-    if (latest) setBasis(latest.version);
+    if (latest) {
+      setBasis(latest.version);
+      setBasisSuggested(!!latest.suggestion);
+    }
   }
 
   const failure = mutation.isError && !serverFieldErrors(mutation.error) ? mutation.error : null;
   const conflict = isApiError(failure, 409) ? failure : null;
   // A background refetch brought a newer version than the one the form is based on.
   const changedMeanwhile = issue.version > basis && !conflict && !mutation.isPending;
+  // The common case (#144 review): the suggestion the page said not to wait for arrived and moved the version.
+  const suggestionArrived = changedMeanwhile && !basisSuggested && !!issue.suggestion && !issue.triage;
   const describedBy = (field: Field, ...extra: string[]) =>
     [...extra, errors[field] ? `${fieldId(field)}-error` : null].filter(Boolean).join(" ") || undefined;
   const fieldError = (field: Field) =>
@@ -154,6 +169,8 @@ export function TriageForm({ issue }: { issue: Issue }) {
       <h2 id={`${id}-title`} className="text-base font-semibold">
         {issue.triage ? t.issues.triageEditTitle : t.issues.triageTitle}
       </h2>
+
+      {intro}
 
       {Object.keys(errors).length > 0 ? (
         <p role="alert" className="text-destructive text-sm font-medium">
@@ -236,9 +253,11 @@ export function TriageForm({ issue }: { issue: Issue }) {
       {changedMeanwhile ? (
         <Alert>
           <Info aria-hidden />
-          <AlertTitle>{t.issues.changedMeanwhileTitle}</AlertTitle>
+          <AlertTitle>
+            {suggestionArrived ? t.issues.suggestionArrivedTitle : t.issues.changedMeanwhileTitle}
+          </AlertTitle>
           <AlertDescription>
-            <p>{t.issues.changedMeanwhileBody}</p>
+            <p>{suggestionArrived ? t.issues.suggestionArrivedBody : t.issues.changedMeanwhileBody}</p>
             <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void reload()}>
               <RefreshCw aria-hidden />
               {t.issues.reload}

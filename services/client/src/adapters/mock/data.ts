@@ -110,10 +110,14 @@ export const PERSONAS: readonly MockPersona[] = [
 const hoursAgo = (now: Date, hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
 
 /** An issue as the mock Issue service stores it: the full record, before projecting it for the caller. */
-export interface MockIssueRecord extends Issue {
+export interface MockIssueRecord extends Omit<Issue, "impact" | "subscribed"> {
   /** Users whose reports belong to this issue: they may follow it. */
   readonly reporterIds: readonly string[];
   readonly history: readonly HistoryEntry[];
+  /** Residents who said the issue affects them (US-04). The service exposes only the count. */
+  readonly impactUserIds?: readonly string[];
+  /** Users subscribed to the issue's notifications (US-04). */
+  readonly subscriberIds?: readonly string[];
 }
 
 const issueId = (suffix: string) => `0199f2a1-0000-7000-8000-${suffix}`;
@@ -139,7 +143,19 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       version: 2,
       createdAt: at(3),
       triage: null,
-      suggestion: { category: "electrical", urgency: "high", origin: "ai" },
+      suggestion: {
+        category: "electrical",
+        urgency: "high",
+        origin: "ai",
+        rationale: "Mentions exposed wires next to the light switch by the main door.",
+        needsReview: false,
+        failureCode: null,
+        suggestedAt: at(2.9),
+        rulesVersion: null,
+        modelVersion: "mock-model-v1",
+      },
+      // Checked, nothing found: shows nothing.
+      criticalCheck: { status: "completed", rulesVersion: "critical-alerts-v1", signals: [] },
       reporterIds: [residentA1],
       history: [
         received(3),
@@ -150,6 +166,8 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           occurredAt: at(2.9),
           category: "electrical",
           urgency: "high",
+          origin: "ai",
+          applied: true,
         }),
       ],
     },
@@ -158,12 +176,24 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       ...BUILDINGS.a,
       areaLabel: "Garage level -1",
       state: "received",
-      version: 1,
+      version: 2,
       createdAt: at(20),
       triage: null,
       suggestion: null,
+      // The critical check has not finished: never read as "nothing found" (#96).
+      criticalCheck: { status: "pending", rulesVersion: null, signals: [] },
+      // US-04: shared with Building A's residents. The report text stays private; only this summary is shown.
+      summary: {
+        text: "The garage door on level -1 does not close fully. The administrator is arranging a repair.",
+        publishedAt: at(18),
+      },
       reporterIds: [residentA2],
-      history: [received(20)],
+      impactUserIds: [residentA2],
+      subscriberIds: [residentA2],
+      history: [
+        received(20),
+        entry(2, { type: "summary_published", visibility: "public", actorRole: "administrator", occurredAt: at(18) }),
+      ],
     },
     {
       issueId: issueId("000000002003"),
@@ -192,14 +222,25 @@ export function seedIssues(now: Date): MockIssueRecord[] {
           urgency: "normal",
           reason: "Slow leak under the kitchen sink. No electrical risk.",
         }),
+        // US-14-03: the AI answered after the administrator had decided. Kept with its source; it changed nothing.
         entry(3, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(69.5),
+          category: "plumbing",
+          urgency: "low",
+          origin: "ai",
+          applied: false,
+        }),
+        entry(4, {
           type: "intervention_approved",
           visibility: "public",
           actorRole: "administrator",
           occurredAt: at(60),
         }),
-        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
-        entry(5, {
+        entry(5, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(50) }),
+        entry(6, {
           type: "booking_confirmed_manually",
           visibility: "public",
           actorRole: "administrator",
@@ -243,6 +284,65 @@ export function seedIssues(now: Date): MockIssueRecord[] {
         entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(27) }),
         entry(5, { type: "booking_confirmed", visibility: "public", actorRole: "system", occurredAt: at(26) }),
         entry(6, { type: "intervention_started", visibility: "public", actorRole: "contractor", occurredAt: at(2) }),
+      ],
+    },
+    {
+      // US-03/US-14: the AI timed out, so the fallback rules answered with a lower urgency than Issue's own critical
+      // check. The alert stays; the administrator decides.
+      issueId: issueId("000000002005"),
+      ...BUILDINGS.b,
+      areaLabel: "Garage",
+      state: "in_triage",
+      version: 2,
+      createdAt: at(1),
+      triage: null,
+      suggestion: {
+        category: "electrical",
+        urgency: "normal",
+        origin: "fallback",
+        rationale: "Rules matched “socket” and “sparks”: electrical.",
+        needsReview: true,
+        failureCode: "timeout",
+        suggestedAt: at(0.95),
+        rulesVersion: "rules-v1",
+        modelVersion: null,
+      },
+      criticalCheck: {
+        status: "completed",
+        rulesVersion: "critical-alerts-v1",
+        signals: [
+          { code: "smoke_or_fire", raisedAt: at(1) },
+          { code: "water_near_electrics", raisedAt: at(1) },
+        ],
+      },
+      reporterIds: [residentB1],
+      history: [
+        received(1),
+        // One internal entry per signal (#96).
+        entry(2, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "smoke_or_fire",
+        }),
+        entry(3, {
+          type: "critical_alert_raised",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(1),
+          code: "water_near_electrics",
+        }),
+        entry(4, {
+          type: "triage_suggested",
+          visibility: "internal",
+          actorRole: "system",
+          occurredAt: at(0.95),
+          category: "electrical",
+          urgency: "normal",
+          origin: "fallback",
+          applied: true,
+        }),
       ],
     },
   ];

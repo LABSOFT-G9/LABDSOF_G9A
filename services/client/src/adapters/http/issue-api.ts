@@ -3,10 +3,13 @@ import {
   AreaListSchema,
   HistorySchema,
   IssuePageSchema,
+  ImpactSchema,
   IssueSchema,
+  PublicationResultSchema,
   ReportPageSchema,
   ReportReceiptSchema,
   ReportSchema,
+  SubscriptionSchema,
   TriageResultSchema,
 } from "@/contracts/issue";
 import type { IssueApi } from "@/ports/issue-api";
@@ -40,6 +43,21 @@ export function httpIssueApi(http: HttpClient): IssueApi {
         body: decision,
         ifMatch: version,
         idempotencyKey,
+      }),
+    publish: (issueId, version, publication, idempotencyKey) =>
+      http.request("POST", `${PREFIX}/issues/${segment(issueId)}/publication`, {
+        schema: PublicationResultSchema,
+        body: publication,
+        ifMatch: version,
+        idempotencyKey,
+      }),
+    setImpact: (issueId, affected) =>
+      http.request(affected ? "PUT" : "DELETE", `${PREFIX}/issues/${segment(issueId)}/impact`, {
+        schema: ImpactSchema,
+      }),
+    setSubscription: (issueId, subscribed) =>
+      http.request(subscribed ? "PUT" : "DELETE", `${PREFIX}/issues/${segment(issueId)}/subscription`, {
+        schema: SubscriptionSchema,
       }),
   };
 }

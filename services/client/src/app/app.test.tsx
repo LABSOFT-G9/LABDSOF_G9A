@@ -20,9 +20,10 @@ describe("app (mock adapters)", () => {
     await screen.findByRole("heading", { level: 1, name: "Issues" });
     expect(router.state.location.pathname).toBe("/issues");
     expect(await screen.findByRole("link", { name: "Entrance hall" })).toBeInTheDocument();
-    // Scope filtering: Resident A1 follows only the issues of their own reports, never Building B's.
+    // Scope filtering: Resident A1 sees their own reports' issues and the one shared with Building A, never Building B's.
+    expect(screen.getByRole("link", { name: "Garage level -1" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Roof terrace" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Garage level -1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Garage" })).not.toBeInTheDocument();
   });
 
   it("returns to a target with a query and a hash after sign-in", async () => {
