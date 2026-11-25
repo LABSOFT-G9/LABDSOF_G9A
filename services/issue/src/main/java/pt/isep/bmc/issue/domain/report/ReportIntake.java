@@ -69,6 +69,6 @@ public final class ReportIntake {
                 history,
                 List.of(
                         new ReportSubmitted(reportId, issueId, selected.id(), buildingId, issue.version(), now),
-                        new TriageRequested(issueId, issue.version(), buildingId, selected.kind(), text, now)));
+                        new TriageRequested(issueId, issue.triageRequestVersion(), buildingId, selected.kind(), text, now)));
     }
 }

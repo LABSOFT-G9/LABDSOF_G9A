@@ -125,18 +125,37 @@ public final class Issue {
     }
 
     /**
+     * The issue version triage was asked for: the one {@code TriageRequested}
+     * carries and a suggestion must name to be applied. Triage is asked once,
+     * when the issue is received, so this is the first version. A story that
+     * asks again (the report an issue is triaged from changes) must store the
+     * version of the latest request instead.
+     */
+    public long triageRequestVersion() {
+        return INITIAL_VERSION;
+    }
+
+    /**
      * A triage suggestion arrived (AI, rules or fallback; technical design
      * 3.1 and 3.3). It moves a {@code received} issue to {@code in_triage},
-     * and only if it was computed from the issue's current version. It never
-     * sets category or urgency: those stay undecided until a person decides.
+     * and only if it answers the triage request ({@link #triageRequestVersion()}).
+     * It never sets category or urgency: those stay undecided until a person
+     * decides.
      *
-     * @param sourceVersion the issue version the suggestion was computed from
+     * <p>The suggestion is checked against the request, not against the
+     * current version: a summary published in the meantime moves the version
+     * but not the report the suggestion was computed from. A decision or an
+     * earlier suggestion takes the issue out of {@code received}, and that is
+     * what makes a suggestion late.
+     *
+     * @param sourceVersion the issue version the suggestion says it was computed from
      * @return the next version of the issue, or empty when the suggestion is
-     *         late (the issue has moved on, or a decision was already made)
-     *         and must not change anything
+     *         late (a person decided, another suggestion was applied, or it
+     *         names a version triage was never asked for) and must not change
+     *         anything
      */
     public Optional<Issue> suggestTriage(long sourceVersion, Instant now) {
-        if (state != IssueState.RECEIVED || sourceVersion != version) {
+        if (state != IssueState.RECEIVED || sourceVersion != triageRequestVersion()) {
             return Optional.empty();
         }
         return Optional.of(new Issue(id, buildingId, areaId, IssueState.IN_TRIAGE, version + 1, category, urgency,

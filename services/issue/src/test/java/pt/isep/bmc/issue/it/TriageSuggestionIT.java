@@ -28,8 +28,9 @@ import pt.isep.bmc.issue.support.IntegrationTestSupport;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * US-03-03 on real MySQL: a {@code TriageSuggested} suggestion is recorded by
- * issue version, once per event, and never competes with a person's decision
+ * US-03-03 on real MySQL: a {@code TriageSuggested} suggestion is applied when
+ * it answers the triage request and the issue is still {@code received}, is
+ * recorded once per event, and never competes with a person's decision
  * (technical design 3.1, 3.3 and 4.6). The suggestion enters through the use
  * case the queue consumer will call; the consumer itself comes with EN-02-02.
  */
@@ -242,16 +243,69 @@ class TriageSuggestionIT extends IntegrationTestSupport {
     }
 
     @Test
-    void aSummaryPublishedBeforeTheSuggestionMakesItLate() {
+    void aSummaryPublishedBeforeTheSuggestionDoesNotMakeItLate() {
         String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
         assertThat(publish(ADMIN_A, issueId, 1, "A leak in the garage is being looked at.").status()).isEqualTo(200);
 
-        // The request was written at version 1; publishing moved the issue to version 2.
-        assertThat(record(issueId, ai(UUID.randomUUID(), 1))).isEqualTo(SuggestionResult.RECORDED_LATE);
+        // Triage was asked for at version 1. Publishing moved the issue to version 2, not the report.
+        assertThat(record(issueId, ai(UUID.randomUUID(), 1))).isEqualTo(SuggestionResult.APPLIED);
+
+        Response read = api.get("/issues/" + issueId, tokens.token(ADMIN_A));
+        assertThat(read.header("ETag")).isEqualTo("\"3\"");
+        assertThat(read.json()).containsEntry("state", "in_triage").containsEntry("version", 3)
+                .containsEntry("triage", null);
+        assertThat(suggestionOf(read.json())).containsEntry("category", "plumbing").containsEntry("origin", "ai")
+                .containsEntry("rationale", RATIONALE);
+        assertThat(itemsOf(api.get("/issues/" + issueId + "/history", tokens.token(ADMIN_A)).json()))
+                .extracting(e -> e.get("type"), e -> e.get("applied")).containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("report_received", null),
+                        org.assertj.core.groups.Tuple.tuple("summary_published", null),
+                        org.assertj.core.groups.Tuple.tuple("triage_suggested", true));
+
+        // The residents the issue was shared with see the new state, and no suggestion.
+        Response neighbour = api.get("/issues/" + issueId, tokens.token(RESIDENT_A2));
+        assertThat(neighbour.status()).isEqualTo(200);
+        assertThat(neighbour.json()).containsEntry("state", "in_triage").containsEntry("suggestion", null);
+        assertThat(neighbour.body()).doesNotContain(RATIONALE, "model-x-1");
+    }
+
+    @Test
+    void aSuggestionThatNamesAVersionTriageWasNotAskedForIsLate() {
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        assertThat(publish(ADMIN_A, issueId, 1, "A leak in the garage is being looked at.").status()).isEqualTo(200);
+
+        // Version 2 is the issue's current version, but no TriageRequested ever named it.
+        assertThat(record(issueId, ai(UUID.randomUUID(), 2))).isEqualTo(SuggestionResult.RECORDED_LATE);
 
         Response read = api.get("/issues/" + issueId, tokens.token(ADMIN_A));
         assertThat(read.json()).containsEntry("state", "received").containsEntry("version", 2)
                 .containsEntry("suggestion", null);
+    }
+
+    @RepeatedTest(5)
+    void aSuggestionAndASummaryAtTheSameTimeNeverLoseTheSuggestion() throws Exception {
+        String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
+        List<Callable<Object>> calls = List.of(
+                () -> record(issueId, ai(UUID.randomUUID(), 1)),
+                () -> publish(ADMIN_A, issueId, 1, "A leak in the garage is being looked at."));
+
+        List<Object> results = runTogether(calls);
+
+        // Whichever took the issue first, the suggestion answers the request and is applied.
+        assertThat(results.get(0)).isEqualTo(SuggestionResult.APPLIED);
+        int published = ((Response) results.get(1)).status();
+        Map<String, Object> issue = jdbc.sql("SELECT state, version FROM issues WHERE id = :id")
+                .param("id", issueId).query().singleRow();
+        if (published == 200) {
+            // The summary took version 1: the suggestion follows it.
+            assertThat(issue).containsEntry("state", "in_triage").containsEntry("version", 3L);
+        } else {
+            // The suggestion took version 1: the summary was based on a version that is gone.
+            assertThat(published).isEqualTo(409);
+            assertThat(issue).containsEntry("state", "in_triage").containsEntry("version", 2L);
+        }
+        assertThat(suggestionOf(api.get("/issues/" + issueId, tokens.token(ADMIN_A)).json()))
+                .containsEntry("category", "plumbing");
     }
 
     @Test

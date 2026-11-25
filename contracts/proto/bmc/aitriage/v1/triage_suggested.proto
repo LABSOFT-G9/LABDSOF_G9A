@@ -5,9 +5,10 @@ package bmc.aitriage.v1;
 option java_multiple_files = true;
 option java_package = "pt.isep.bmc.contracts.aitriage.v1";
 
-// The AI triage service's suggestion for one issue version. A suggestion, not
-// a decision: Issue applies it only if the issue is still at `issue_version`,
-// and it never clears or lowers a critical alert.
+// The AI triage service's suggestion for one triage request. A suggestion, not
+// a decision: Issue applies it only if `issue_version` is the version triage
+// was requested for and nobody decided in the meantime, and it never clears or
+// lowers a critical alert.
 message TriageSuggested {
   string issue_id = 1;
   // Copied from the `TriageRequested` it answers.

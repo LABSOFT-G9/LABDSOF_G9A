@@ -26,6 +26,7 @@ import pt.isep.bmc.issue.domain.issue.SuggestionIntake;
 import pt.isep.bmc.issue.domain.issue.SuggestionOrigin;
 import pt.isep.bmc.issue.domain.issue.SuggestionOutcome;
 import pt.isep.bmc.issue.domain.issue.SuggestionProvenance;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 import pt.isep.bmc.issue.domain.shared.FieldViolation;
 import pt.isep.bmc.issue.domain.shared.ValidationException;
 
@@ -53,7 +54,7 @@ class SuggestionIntakeTest {
     }
 
     @Test
-    void aSuggestionForTheCurrentVersionMovesAReceivedIssueToInTriageAndDecidesNothing() {
+    void aSuggestionForTheRequestedVersionMovesAReceivedIssueToInTriageAndDecidesNothing() {
         SuggestionOutcome outcome = SuggestionIntake.record(issue(IssueState.RECEIVED, 1), ai(1), 2, "Garage", NOW);
 
         Issue next = outcome.issue().orElseThrow();
@@ -87,11 +88,29 @@ class SuggestionIntakeTest {
         assertThat(event.dispatchable()).isFalse();
     }
 
+    /** Publishing moves the version, not the report the suggestion was computed from. */
     @Test
-    void aSuggestionForAnOlderVersionIsKeptAsLateAndChangesNothing() {
+    void aSuggestionStillAppliesAfterASummaryWasPublished() {
+        SummaryId summary = new SummaryId(UUID.randomUUID());
+        Issue shared = issue(IssueState.RECEIVED, 1).publishSummary(1, summary, CREATED.plusSeconds(5));
+
+        SuggestionOutcome outcome = SuggestionIntake.record(shared, ai(1), 3, "Garage", NOW);
+
+        Issue next = outcome.issue().orElseThrow();
+        assertThat(next.state()).isEqualTo(IssueState.IN_TRIAGE);
+        assertThat(next.version()).isEqualTo(3);
+        assertThat(next.publishedSummaryId()).contains(summary);
+        assertThat(outcome.suggestion().applied()).isTrue();
+        assertThat(outcome.suggestion().sourceVersion()).isEqualTo(1);
+        assertThat(outcome.history().issueVersion()).isEqualTo(3);
+        assertThat(outcome.events()).containsExactly(IssueStateChanged.of(next, "Garage"));
+    }
+
+    @Test
+    void aSuggestionForAVersionTriageWasNotAskedForIsKeptAsLateAndChangesNothing() {
         Issue current = issue(IssueState.RECEIVED, 2);
 
-        SuggestionOutcome outcome = SuggestionIntake.record(current, ai(1), 3, "Garage", NOW);
+        SuggestionOutcome outcome = SuggestionIntake.record(current, ai(2), 3, "Garage", NOW);
 
         assertThat(outcome.issue()).isEmpty();
         assertThat(outcome.events()).isEmpty();
@@ -108,8 +127,8 @@ class SuggestionIntakeTest {
     void aSuggestionNeverChangesAnIssueThatLeftReceived(IssueState state) {
         Issue current = issue(state, 5);
 
-        // Even one computed from the very version the issue has now.
-        SuggestionOutcome outcome = SuggestionIntake.record(current, ai(5), 4, "Garage", NOW);
+        // Even one that answers the triage request.
+        SuggestionOutcome outcome = SuggestionIntake.record(current, ai(1), 4, "Garage", NOW);
 
         assertThat(outcome.issue()).isEmpty();
         assertThat(outcome.events()).isEmpty();

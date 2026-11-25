@@ -16,11 +16,12 @@ import pt.isep.bmc.issue.domain.shared.ValidationException;
  * <ul>
  *   <li>A suggestion that does not match the contract is refused whole
  *       ({@link ValidationException}): nothing of it is stored.</li>
- *   <li>A suggestion computed from the issue's current version, while the
+ *   <li>A suggestion that names the version triage was asked for, while the
  *       issue is still {@code received}, moves it to {@code in_triage} with the
- *       next version.</li>
- *   <li>Any other suggestion is late: the issue moved on, or a person already
- *       decided. It is stored and shown in the internal history, and changes
+ *       next version. A summary published in between does not prevent it.</li>
+ *   <li>Any other suggestion is late: a person already decided, another
+ *       suggestion was applied, or it names a version triage was never asked
+ *       for. It is stored and shown in the internal history, and changes
  *       nothing else.</li>
  * </ul>
  * A suggestion never sets the issue's category or urgency and never touches
