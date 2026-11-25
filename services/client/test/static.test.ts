@@ -47,6 +47,25 @@ describe("static delivery", () => {
     for (const path of ["/api", "/oidc", "/logout", "/auth"]) expect(edge).toContain(`"${path}"`);
   });
 
+  it("nginx answers 404 on every edge path, never index.html, and only on those", () => {
+    // While a backend is starting or down, Traefik does not route it and its path falls through to this container.
+    const edge = [
+      ...(read("vite.config.ts").match(/const EDGE_PATHS = \[([^\]]+)\]/)?.[1] ?? "").matchAll(/"\/([^"]+)"/g),
+    ]
+      .map(([, name]) => name)
+      .sort();
+    const block = read("nginx.conf").match(/location ~ \^\/\(([^)]+)\)\(\/\|\$\) \{\s*return 404;\s*\}/);
+    expect(block, "nginx.conf has no `location ~ ^/(...)(/|$) { return 404; }` block").not.toBeNull();
+    expect(block![1].split("|").sort()).toEqual(edge);
+
+    const pattern = new RegExp(`^/(${block![1]})(/|$)`);
+    for (const path of ["/auth", "/auth/admin/", "/auth/realms/bmc/.well-known/openid-configuration", "/api/issue/me"])
+      expect(path).toMatch(pattern);
+    for (const path of ["/oidc/login", "/logout"]) expect(path).toMatch(pattern);
+    for (const path of ["/", "/reports", "/issues/1", "/authors", "/apiary", "/assets/index.js"])
+      expect(path).not.toMatch(pattern);
+  });
+
   it("index.html declares no manifest of its own (vite-plugin-pwa injects it)", () => {
     expect(read("index.html")).not.toContain('rel="manifest"');
   });
