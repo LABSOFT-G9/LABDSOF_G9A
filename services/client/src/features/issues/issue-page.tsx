@@ -7,6 +7,7 @@ import { hasBuildingRole, useSession } from "@/features/auth";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
+import { tagUrgency } from "@/features/issues/service-tag";
 import { PublishSummary, SharedIssuePanel } from "@/features/issues/shared-issue";
 import { CriticalCheckBanner, SuggestionPanel } from "@/features/issues/suggestion-panel";
 import { TriageForm } from "@/features/issues/triage-form";
@@ -52,8 +53,9 @@ export function IssuePage({ issueId }: { issueId: string }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,22rem)]">
         <div className="space-y-6">
           {issue.criticalCheck ? <CriticalCheckBanner check={issue.criticalCheck} issue={issue} now={now} /> : null}
-          <Card>
-            <CardContent>
+          <section className="service-tag" data-urgency={tagUrgency(issue)} aria-label={t.issues.status}>
+            <span className="service-tag__stub" aria-hidden />
+            <div className="p-5">
               <dl className="grid gap-3 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
                 <dt className="text-muted-foreground">{t.issues.status}</dt>
                 <dd>
@@ -81,8 +83,8 @@ export function IssuePage({ issueId }: { issueId: string }) {
                   <time dateTime={issue.createdAt}>{formatDateTime(issue.createdAt)}</time>
                 </dd>
               </dl>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
           {isAdministrator && TRIAGEABLE.includes(issue.state) ? (
             <Card>
@@ -107,9 +109,9 @@ export function IssuePage({ issueId }: { issueId: string }) {
           ) : null}
         </div>
 
-        <Card>
+        <Card className="self-start">
           <CardHeader>
-            <h2 className="text-base font-semibold">{t.issues.history}</h2>
+            <h2 className="text-lg">{t.issues.history}</h2>
           </CardHeader>
           <CardContent>
             {history.isPending ? (

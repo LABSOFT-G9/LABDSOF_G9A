@@ -1,81 +1,89 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/archivo/wdth.css";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * BMC — black on white, white on black. Minimal and quiet: neutrals only, contrast from weight and spacing rather
- * than colour. The only hues are semantic (destructive, warning, success), and they are always paired with an icon
- * and text, never colour alone (NFR-07).
+ * BMC: the building's own materials. Plaster walls, sheets of paper, the slate of a lobby directory board, and one
+ * signal colour, tag yellow, kept for the service tag on an issue (urgency). Everything else is neutral: contrast
+ * comes from weight, width and spacing. Hues are semantic and always paired with an icon and text, never colour
+ * alone (NFR-07).
+ *
+ *   plaster #E9ECE8   page          sheet  #FBFCFA  surfaces       slate #1D2B35  ink, directory board
+ *   tag     #E8B931   urgency only  fault  #B8322A  critical       ok    #2E7650  done
  */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.145 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.48 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.55 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.62 0.14 70);
-  --success: oklch(0.55 0.13 150);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.88 0 0);
-  --ring: oklch(0.145 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.145 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.95 0 0);
-  --sidebar-accent-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.145 0 0);
+  --radius: 0.25rem;
+  --background: #e9ece8;
+  --foreground: #1d2b35;
+  --card: #fbfcfa;
+  --card-foreground: #1d2b35;
+  --popover: #fbfcfa;
+  --popover-foreground: #1d2b35;
+  --primary: #1d2b35;
+  --primary-foreground: #f4f6f3;
+  --secondary: #dde2de;
+  --secondary-foreground: #1d2b35;
+  --muted: #dde2de;
+  --muted-foreground: #4f5e68;
+  --accent: #dde2de;
+  --accent-foreground: #1d2b35;
+  --destructive: #b8322a;
+  --destructive-foreground: #fbfcfa;
+  --warning: #8a6400;
+  --success: #2e7650;
+  --tag: #e8b931;
+  --tag-foreground: #1d2b35;
+  --border: #c8cec9;
+  --input: #a9b3ad;
+  --ring: #1d2b35;
+  --sidebar: #1d2b35;
+  --sidebar-foreground: #e3e8e4;
+  --sidebar-primary: #e8b931;
+  --sidebar-primary-foreground: #1d2b35;
+  --sidebar-accent: #2a3b47;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2f414d;
+  --sidebar-ring: #e8b931;
 }
 
 .dark {
-  --background: oklch(0.13 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.17 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.19 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.72 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.7 0.19 22);
-  --destructive-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.8 0.14 75);
-  --success: oklch(0.75 0.15 150);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.985 0 0);
-  --sidebar: oklch(0.155 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.985 0 0);
-  --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.24 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.985 0 0);
+  --background: #131c22;
+  --foreground: #e3e8e4;
+  --card: #1a262e;
+  --card-foreground: #e3e8e4;
+  --popover: #1f2c35;
+  --popover-foreground: #e3e8e4;
+  --primary: #e3e8e4;
+  --primary-foreground: #131c22;
+  --secondary: #24333d;
+  --secondary-foreground: #e3e8e4;
+  --muted: #24333d;
+  --muted-foreground: #9fadb5;
+  --accent: #24333d;
+  --accent-foreground: #e3e8e4;
+  --destructive: #e3675d;
+  --destructive-foreground: #131c22;
+  --warning: #e8b931;
+  --success: #62b98a;
+  --tag: #e8b931;
+  --tag-foreground: #1d2b35;
+  --border: #2c3b45;
+  --input: #3d4f5a;
+  --ring: #e3e8e4;
+  --sidebar: #0e161b;
+  --sidebar-foreground: #d5dcd7;
+  --sidebar-primary: #e8b931;
+  --sidebar-primary-foreground: #1d2b35;
+  --sidebar-accent: #1d2b35;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1f2d36;
+  --sidebar-ring: #e8b931;
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -98,6 +106,8 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-warning: var(--warning);
   --color-success: var(--success);
+  --color-tag: var(--tag);
+  --color-tag-foreground: var(--tag-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -129,12 +139,17 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
+    line-height: 1.5;
   }
+  /* Headings are set like building signage: Archivo condensed (width 75), bold, tight. Body stays at width 100. */
   h1,
   h2,
-  h3 {
-    @apply tracking-tight;
+  h3,
+  .signage {
+    font-stretch: 75%;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    line-height: 1.1;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
@@ -152,5 +167,64 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/*
+ * The service tag: the one bold element. A manila-style stub on the left edge of an issue, with a punched hole,
+ * filled by urgency. Decorative only: the urgency is always written next to it (NFR-07).
+ */
+@layer components {
+  .service-tag {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .service-tag__stub {
+    position: relative;
+    border-right: 1px dashed var(--border);
+    border-radius: var(--radius) 0 0 var(--radius);
+    background: var(--muted);
+  }
+  /* The punched hole with its reinforcing ring. */
+  .service-tag__stub::before {
+    content: "";
+    position: absolute;
+    top: 0.875rem;
+    left: 50%;
+    width: 0.75rem;
+    height: 0.75rem;
+    translate: -50% 0;
+    border-radius: 9999px;
+    background: var(--background);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--foreground) 14%, transparent);
+  }
+  .service-tag[data-urgency="pending"] .service-tag__stub {
+    background: transparent;
+  }
+  .service-tag[data-urgency="low"] .service-tag__stub {
+    background: var(--muted);
+  }
+  .service-tag[data-urgency="normal"] .service-tag__stub {
+    background: color-mix(in srgb, var(--tag) 35%, var(--card));
+  }
+  .service-tag[data-urgency="high"] .service-tag__stub {
+    background: var(--tag);
+  }
+  .service-tag[data-urgency="critical"] .service-tag__stub {
+    background: repeating-linear-gradient(-45deg, var(--tag) 0 0.5rem, var(--foreground) 0.5rem 1rem);
+  }
+  .dark .service-tag[data-urgency="critical"] .service-tag__stub {
+    background: repeating-linear-gradient(-45deg, var(--tag) 0 0.5rem, #0e161b 0.5rem 1rem);
+  }
+  .service-tag[data-urgency="critical"] {
+    border-color: color-mix(in srgb, var(--destructive) 55%, var(--border));
+  }
+  .service-tag:has(a:focus-visible) {
+    outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent);
+    outline-offset: 2px;
   }
 }

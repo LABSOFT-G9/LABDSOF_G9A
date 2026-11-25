@@ -53,8 +53,8 @@ export function AppShell({ session, children }: { session: Session; children: Re
       <Sidebar collapsible="icon" className="hidden md:flex">
         <SidebarHeader>
           <Link to="/dashboard" className="flex items-center gap-2 px-1 py-1.5">
-            <Logo className="size-7 shrink-0" />
-            <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
+            <Logo className="size-7 shrink-0" onBoard />
+            <span className="signage text-base leading-tight group-data-[collapsible=icon]:hidden">
               {t.app.fullName}
             </span>
           </Link>
