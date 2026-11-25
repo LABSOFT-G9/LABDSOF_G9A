@@ -2,7 +2,9 @@ name: Metrics Snapshot
 
 on:
   schedule:
-    - cron: "0 18 * * *" # Daily at midnight in Lisbon
+    # Charts group snapshots by UTC day. GitHub has started this run up to ~10 hours
+    # late; at 06:00 Lisbon (05:00-06:00 UTC) a late run still lands on the same UTC day.
+    - cron: "0 6 * * *" # Daily at 06:00 in Lisbon
       timezone: "Europe/Lisbon"
   workflow_dispatch:
 
