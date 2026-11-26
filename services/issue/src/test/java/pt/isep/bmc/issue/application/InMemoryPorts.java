@@ -18,10 +18,13 @@ import pt.isep.bmc.issue.application.port.out.IdGenerator;
 import pt.isep.bmc.issue.application.port.out.IdempotencyRecord;
 import pt.isep.bmc.issue.application.port.out.IdempotencyScope;
 import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
+import pt.isep.bmc.issue.application.port.out.ImpactRepository;
 import pt.isep.bmc.issue.application.port.out.IssueRepository;
 import pt.isep.bmc.issue.application.port.out.MembershipRepository;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
+import pt.isep.bmc.issue.application.port.out.SubscriptionRepository;
+import pt.isep.bmc.issue.application.port.out.SummaryRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
 import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
@@ -31,8 +34,10 @@ import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
+import pt.isep.bmc.issue.domain.issue.IssueSummary;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
 import pt.isep.bmc.issue.domain.issue.TriageSuggestion;
+import pt.isep.bmc.issue.domain.membership.BuildingAccess;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.UserId;
 import pt.isep.bmc.issue.domain.report.Report;
@@ -55,6 +60,9 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     public final List<TriageDecision> decisions = new ArrayList<>();
     public final List<TriageSuggestion> suggestions = new ArrayList<>();
+    public final List<IssueSummary> summaries = new ArrayList<>();
+    public final List<Mark> confirmations = new ArrayList<>();
+    public final List<Mark> subscriptions = new ArrayList<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
     public RuntimeException failNextTransaction;
@@ -253,5 +261,94 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     @Override
     public UUID newId() {
         return UUID.randomUUID();
+    }
+
+    /** One user's impact confirmation or subscription for an issue. */
+    public record Mark(IssueId issueId, UserId userId) {
+    }
+
+    /**
+     * Summaries, impact confirmations and subscriptions have methods whose
+     * signatures collide with other ports, so each is its own view of this
+     * object, sharing its rollback.
+     */
+    public SummaryRepository summaryRepository() {
+        return new SummaryRepository() {
+            @Override
+            public void add(IssueSummary summary) {
+                summaries.add(summary);
+                journal(() -> summaries.remove(summary));
+            }
+
+            @Override
+            public Optional<IssueSummary> find(IssueId issueId, long resultingVersion) {
+                return summaries.stream()
+                        .filter(s -> s.issueId().equals(issueId) && s.resultingVersion() == resultingVersion)
+                        .findFirst();
+            }
+        };
+    }
+
+    public ImpactRepository impactRepository() {
+        return new ImpactRepository() {
+            @Override
+            public boolean exists(IssueId issueId, UserId userId) {
+                return confirmations.contains(new Mark(issueId, userId));
+            }
+
+            @Override
+            public void add(IssueId issueId, UserId userId, Instant confirmedAt) {
+                addMark(confirmations, new Mark(issueId, userId));
+            }
+
+            @Override
+            public void remove(IssueId issueId, UserId userId) {
+                removeMark(confirmations, new Mark(issueId, userId));
+            }
+
+            /** As in the SQL: only confirmations of people who are active residents of the issue's building. */
+            @Override
+            public long count(IssueId issueId, Instant now) {
+                BuildingId building = InMemoryPorts.this.find(issueId).orElseThrow().buildingId();
+                return confirmations.stream()
+                        .filter(mark -> mark.issueId().equals(issueId))
+                        .filter(mark -> BuildingAccess.of(mark.userId(), findByUser(mark.userId()), now)
+                                .isResidentOf(building))
+                        .count();
+            }
+        };
+    }
+
+    public SubscriptionRepository subscriptionRepository() {
+        return new SubscriptionRepository() {
+            @Override
+            public boolean exists(IssueId issueId, UserId userId) {
+                return subscriptions.contains(new Mark(issueId, userId));
+            }
+
+            @Override
+            public void add(IssueId issueId, UserId userId, Instant subscribedAt) {
+                addMark(subscriptions, new Mark(issueId, userId));
+            }
+
+            @Override
+            public void remove(IssueId issueId, UserId userId) {
+                removeMark(subscriptions, new Mark(issueId, userId));
+            }
+        };
+    }
+
+    private void addMark(List<Mark> marks, Mark mark) {
+        if (marks.contains(mark)) {
+            throw new IllegalStateException("one row per user and issue");
+        }
+        marks.add(mark);
+        journal(() -> marks.remove(mark));
+    }
+
+    private void removeMark(List<Mark> marks, Mark mark) {
+        if (marks.remove(mark)) {
+            journal(() -> marks.add(mark));
+        }
     }
 }
