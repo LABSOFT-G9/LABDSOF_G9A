@@ -61,6 +61,20 @@ public final class Api {
         return send(request.build());
     }
 
+    /** Any method with a JSON body and extra headers; a {@code null} header value leaves the header out. */
+    public Response send(String method, String path, String token, Map<String, String> headers, Object body) {
+        HttpRequest.Builder request = request(path, token)
+                .header("Content-Type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(
+                        body instanceof String s ? s : JSON.writeValueAsString(body)));
+        headers.forEach((name, value) -> {
+            if (value != null) {
+                request.header(name, value);
+            }
+        });
+        return send(request.build());
+    }
+
     public Response get(String path, String token) {
         return send(request(path, token).GET().build());
     }
@@ -89,6 +103,18 @@ public final class Api {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** A JSON object nested in a response body. */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> map(Object value) {
+        return (Map<String, Object>) value;
+    }
+
+    /** A JSON array nested in a response body. */
+    @SuppressWarnings("unchecked")
+    public static List<Object> list(Object value) {
+        return (List<Object>) value;
     }
 
     /** Status, headers and the body parsed as a JSON object or list. */

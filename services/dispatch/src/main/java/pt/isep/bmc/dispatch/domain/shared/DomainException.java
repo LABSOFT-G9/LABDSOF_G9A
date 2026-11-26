@@ -8,7 +8,8 @@ package pt.isep.bmc.dispatch.domain.shared;
  * <p>Messages never contain user-supplied text, so they are safe to log and to
  * return.
  */
-public abstract sealed class DomainException extends RuntimeException permits ValidationException {
+public abstract sealed class DomainException extends RuntimeException
+        permits AccessDeniedException, InvalidTransitionException, ValidationException, VersionConflictException {
 
     private final String code;
 

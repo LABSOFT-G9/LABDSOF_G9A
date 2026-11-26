@@ -5,17 +5,20 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 import pt.isep.bmc.dispatch.application.error.StorageUnavailableException;
+import pt.isep.bmc.dispatch.application.port.out.TransactionConflictException;
 import pt.isep.bmc.dispatch.application.port.out.TransactionRunner;
 
 /**
- * {@link TransactionRunner} over Spring's transaction manager. Database
- * failures become {@link StorageUnavailableException}; everything else (domain
- * and application errors) passes through unchanged after the rollback.
+ * {@link TransactionRunner} over Spring's transaction manager. A deadlock or
+ * lock wait timeout becomes {@link TransactionConflictException}, other
+ * database failures {@link StorageUnavailableException}; everything else
+ * (domain and application errors) passes through unchanged after the rollback.
  *
  * <p>Logs only exception class names: driver messages can contain values.
  */
@@ -46,6 +49,9 @@ class SpringTransactionRunner implements TransactionRunner {
     private static <T> T run(TransactionTemplate template, Supplier<T> work) {
         try {
             return template.execute(status -> work.get());
+        } catch (PessimisticLockingFailureException e) {
+            log.info("Transaction rolled back by a concurrent one: {}", rootCause(e).getClass().getName());
+            throw new TransactionConflictException(e);
         } catch (DataAccessException | TransactionException | PersistenceException e) {
             log.warn("Database operation failed: {} (root cause {})",
                     e.getClass().getName(), rootCause(e).getClass().getName());

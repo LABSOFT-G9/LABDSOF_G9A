@@ -18,13 +18,17 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import pt.isep.bmc.dispatch.application.error.IdempotencyKeyReusedException;
 import pt.isep.bmc.dispatch.application.error.NotFoundException;
 import pt.isep.bmc.dispatch.application.error.StorageUnavailableException;
+import pt.isep.bmc.dispatch.application.port.out.TransactionConflictException;
+import pt.isep.bmc.dispatch.domain.shared.AccessDeniedException;
 import pt.isep.bmc.dispatch.domain.shared.DomainException;
+import pt.isep.bmc.dispatch.domain.shared.InvalidTransitionException;
 import pt.isep.bmc.dispatch.domain.shared.ValidationException;
+import pt.isep.bmc.dispatch.domain.shared.VersionConflictException;
 
 /**
  * Maps errors to {@code application/problem+json} (technical design 4.1):
- * {@code 400} validation, {@code 404} unknown or outside scope, {@code 422}
- * idempotency key reused, {@code 503} database unavailable. Unexpected errors
+ * {@code 400} validation, {@code 404} unknown or outside scope, {@code 409}
+ * stale version or invalid transition, {@code 422} idempotency key reused, {@code 503} database unavailable. Unexpected errors
  * answer {@code 500} without details; only the exception class is logged.
  */
 @RestControllerAdvice
@@ -42,10 +46,32 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(problem);
     }
 
-    @ExceptionHandler(NotFoundException.class)
+    @ExceptionHandler({AccessDeniedException.class, NotFoundException.class})
     ResponseEntity<ProblemDetail> notFound(RuntimeException e, HttpServletRequest request) {
         return respond(Problems.of(HttpStatus.NOT_FOUND, "NOT_FOUND",
                 "The resource does not exist or is outside your scope.", CorrelationIdFilter.of(request)));
+    }
+
+    /** Stale {@code If-Match}: tells the client what the resource is now, and changes nothing. */
+    @ExceptionHandler(VersionConflictException.class)
+    ResponseEntity<ProblemDetail> versionConflict(VersionConflictException e, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, e, request);
+        problem.setProperty("currentVersion", e.currentVersion());
+        problem.setProperty("currentState", e.currentState());
+        return respond(problem);
+    }
+
+    /**
+     * Not allowed in the current state. For an issue that already has an
+     * active intervention, {@code activeInterventionId} names it, so the
+     * administrator can open it instead.
+     */
+    @ExceptionHandler(InvalidTransitionException.class)
+    ResponseEntity<ProblemDetail> invalidTransition(InvalidTransitionException e, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.CONFLICT, e, request);
+        problem.setProperty("currentState", e.currentState());
+        e.activeInterventionId().ifPresent(id -> problem.setProperty("activeInterventionId", id.toString()));
+        return respond(problem);
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)
@@ -54,8 +80,9 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 e.getMessage(), CorrelationIdFilter.of(request)));
     }
 
-    @ExceptionHandler(StorageUnavailableException.class)
-    ResponseEntity<ProblemDetail> storage(StorageUnavailableException e, HttpServletRequest request) {
+    /** The database failed, or rolled the request back for a concurrent one: nothing was changed, try again. */
+    @ExceptionHandler({StorageUnavailableException.class, TransactionConflictException.class})
+    ResponseEntity<ProblemDetail> storage(RuntimeException e, HttpServletRequest request) {
         ProblemDetail problem = Problems.of(HttpStatus.SERVICE_UNAVAILABLE, "DEPENDENCY_UNAVAILABLE",
                 "The request could not be completed. Nothing was changed; please try again.",
                 CorrelationIdFilter.of(request));
