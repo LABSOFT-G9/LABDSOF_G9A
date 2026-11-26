@@ -8,7 +8,9 @@ option java_package = "pt.isep.bmc.contracts.dispatch.v1";
 // A cancellation started but a booking must be cancelled or reconciled first.
 message InterventionCancellationPending {
   string issue_id = 1;
-  // A code, never free text. OPEN: the values are settled in US-07 and US-09.
+  // A code, never free text. An administrator's cancellation (US-08-01):
+  // `no_longer_needed`, `contractor_unavailable`, `rescheduling` or `other`.
+  // US-09 adds the codes for Issue's closure events.
   string reason_code = 2;
   // The intervention state after this event: `awaiting_approval`, `sent`,
   // `scheduling_pending`, `booked`, `in_progress`, `completion_reported`,

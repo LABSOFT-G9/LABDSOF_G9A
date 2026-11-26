@@ -275,7 +275,7 @@ Idempotency-Key: 0199f2a2-0000-7000-8000-000000004001
   "summary": "Plumbing intervention" }
 ```
 
-No answer within 5 s, so the booking becomes `uncertain`. Before any re-send, Dispatch reconciles:
+As built in US-08-01, Dispatch sends the building ID as `buildingCode` and a summary made from the category only, and stores both, so every re-send is the same request. No answer within 5 s, so the booking becomes `uncertain`. Before any re-send, Dispatch reconciles:
 
 ```http
 GET /bookings?requestId=0199f2a2-0000-7000-8000-000000004001
