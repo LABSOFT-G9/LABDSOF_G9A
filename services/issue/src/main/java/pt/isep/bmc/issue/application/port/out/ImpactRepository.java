@@ -18,5 +18,11 @@ public interface ImpactRepository {
     /** Withdrawing deletes the confirmation. */
     void remove(IssueId issueId, UserId userId);
 
-    long count(IssueId issueId);
+    /**
+     * How many residents the issue affects: the confirmations whose author is
+     * an active resident of the issue's building at {@code now}. A
+     * confirmation stays stored when its author leaves the building, but it
+     * is not counted until the membership is active again.
+     */
+    long count(IssueId issueId, Instant now);
 }

@@ -11,6 +11,19 @@ import pt.isep.bmc.issue.domain.membership.UserId;
 @Repository
 class JdbcImpactRepository implements ImpactRepository {
 
+    /**
+     * True for a confirmation {@code c} of issue {@code i} whose author is an
+     * active resident of the issue's building at {@code :now}, as in
+     * {@code Membership.isActiveAt}. Only these confirmations are counted or
+     * shown as the caller's own.
+     */
+    static final String BY_ACTIVE_RESIDENT = """
+            EXISTS (SELECT 1 FROM memberships m
+                     WHERE m.user_id = c.user_id AND m.building_id = i.building_id
+                       AND m.role = 'resident' AND m.status = 'active'
+                       AND m.valid_from <= :now AND (m.valid_until IS NULL OR m.valid_until > :now))
+            """;
+
     private final JdbcClient jdbc;
 
     JdbcImpactRepository(JdbcClient jdbc) {
@@ -44,9 +57,11 @@ class JdbcImpactRepository implements ImpactRepository {
     }
 
     @Override
-    public long count(IssueId issueId) {
-        return jdbc.sql("SELECT COUNT(*) FROM impact_confirmations WHERE issue_id = :issueId")
+    public long count(IssueId issueId, Instant now) {
+        return jdbc.sql("SELECT COUNT(*) FROM impact_confirmations c JOIN issues i ON i.id = c.issue_id"
+                        + " WHERE c.issue_id = :issueId AND " + BY_ACTIVE_RESIDENT)
                 .param("issueId", issueId.toString())
+                .param("now", Timestamps.toColumn(now))
                 .query(Long.class)
                 .single();
     }

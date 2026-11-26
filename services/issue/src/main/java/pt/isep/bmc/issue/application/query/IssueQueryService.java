@@ -1,6 +1,7 @@
 package pt.isep.bmc.issue.application.query;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import pt.isep.bmc.issue.application.error.NotFoundException;
@@ -65,9 +66,10 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
     @Override
     public IssuePage list(UserId actor, Optional<BuildingId> building, int page, int size) {
         return transactions.readOnly(() -> {
-            BuildingAccess access = access(actor);
+            Instant now = clock.instant();
+            BuildingAccess access = BuildingAccess.of(actor, memberships.findByUser(actor), now);
             return readModel.list(new IssueListCriteria(
-                    actor, access.administeredBuildings(), access.memberBuildings(), building, page, size));
+                    actor, access.administeredBuildings(), access.memberBuildings(), building, page, size, now));
         });
     }
 
@@ -88,7 +90,7 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
 
     /** The issue, or not found when it does not exist or the caller may not see it. */
     private IssueView visible(UserId actor, IssueId issueId) {
-        IssueView issue = readModel.findView(issueId, actor).orElseThrow(NotFoundException::new);
+        IssueView issue = readModel.findView(issueId, actor, clock.instant()).orElseThrow(NotFoundException::new);
         if (!access(actor).canViewIssue(issue.buildingId(), reports.existsByIssueAndAuthor(issueId, actor),
                 issue.summary().isPresent())) {
             throw new NotFoundException();

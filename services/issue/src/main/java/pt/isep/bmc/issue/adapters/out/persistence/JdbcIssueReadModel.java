@@ -2,6 +2,7 @@ package pt.isep.bmc.issue.adapters.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,14 +37,17 @@ class JdbcIssueReadModel implements IssueReadModel {
     /**
      * {@code %s}: extra columns of the current decision ({@code d}).
      * {@code :caller} is whose own impact confirmation and subscription to show.
+     * Impact counts, and shows as the caller's own, only the confirmations of
+     * people who are active residents of the building at {@code :now}.
      */
     private static final String SELECT = """
             SELECT i.id, i.building_id, b.name AS building_name, a.label AS area_label, i.state, i.version,
                    i.category, i.urgency, i.created_at, d.decided_at%s,
                    s.text AS summary_text, s.published_at AS summary_published_at,
-                   (SELECT COUNT(*) FROM impact_confirmations c WHERE c.issue_id = i.id) AS impact_count,
+                   (SELECT COUNT(*) FROM impact_confirmations c
+                     WHERE c.issue_id = i.id AND {counted}) AS impact_count,
                    EXISTS (SELECT 1 FROM impact_confirmations c
-                            WHERE c.issue_id = i.id AND c.user_id = :caller) AS impact_mine,
+                            WHERE c.issue_id = i.id AND c.user_id = :caller AND {counted}) AS impact_mine,
                    EXISTS (SELECT 1 FROM issue_subscriptions n
                             WHERE n.issue_id = i.id AND n.user_id = :caller) AS subscribed
               FROM issues i
@@ -54,7 +58,7 @@ class JdbcIssueReadModel implements IssueReadModel {
                      ON d.issue_id = i.id
                     AND d.resulting_version = (SELECT MAX(x.resulting_version)
                                                  FROM triage_decisions x WHERE x.issue_id = i.id)
-            """;
+            """.replace("{counted}", JdbcImpactRepository.BY_ACTIVE_RESIDENT.strip());
 
     private final JdbcClient jdbc;
 
@@ -63,10 +67,11 @@ class JdbcIssueReadModel implements IssueReadModel {
     }
 
     @Override
-    public Optional<IssueView> findView(IssueId id, UserId caller) {
+    public Optional<IssueView> findView(IssueId id, UserId caller, Instant now) {
         return jdbc.sql(SELECT.formatted(", d.reason") + " WHERE i.id = :id")
                 .param("id", id.toString())
                 .param("caller", caller.value())
+                .param("now", Timestamps.toColumn(now))
                 .query((rs, n) -> view(rs, true))
                 .optional();
     }
@@ -93,6 +98,7 @@ class JdbcIssueReadModel implements IssueReadModel {
         JdbcClient.StatementSpec statement = jdbc.sql(sql)
                 .param("reporter", criteria.reporter().value())
                 .param("caller", criteria.reporter().value())
+                .param("now", Timestamps.toColumn(criteria.now()))
                 .param("limit", criteria.size() + 1)
                 .param("offset", (long) criteria.page() * criteria.size());
         if (!administered.isEmpty()) {

@@ -1,5 +1,6 @@
 package pt.isep.bmc.issue.application.port.out;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import pt.isep.bmc.issue.application.query.IssueHistoryItem;
@@ -21,8 +22,9 @@ public interface IssueReadModel {
      * summary and impact count.
      *
      * @param caller whose own impact confirmation and subscription the view shows
+     * @param now    impact counts the confirmations of people who are active residents at this time
      */
-    Optional<IssueView> findView(IssueId id, UserId caller);
+    Optional<IssueView> findView(IssueId id, UserId caller, Instant now);
 
     /** Issues matching the criteria, newest first, without triage reasons. */
     IssuePage list(IssueListCriteria criteria);
