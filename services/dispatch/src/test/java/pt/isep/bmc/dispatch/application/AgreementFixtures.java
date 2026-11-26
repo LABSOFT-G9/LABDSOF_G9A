@@ -41,8 +41,8 @@ final class AgreementFixtures {
                 .interventionId();
         ports.keys.clear();
         clock.advance(Duration.ofMinutes(1));
-        approval = new ApproveProposalService(ports, ports, ports, ports, ports, ports, ports, ports, clock);
-        responses = new RespondToRequestService(ports, ports, ports, ports, ports, ports, ports, clock);
+        approval = new ApproveProposalService(ports, ports, ports, ports, ports, ports, ports, ports, ports, clock);
+        responses = new RespondToRequestService(ports, ports, ports, ports, ports, ports, ports, ports, clock);
         terms = new ChangeTermsService(ports, ports, ports, ports, ports, clock);
     }
 

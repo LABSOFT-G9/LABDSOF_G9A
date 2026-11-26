@@ -76,6 +76,29 @@ class LogPrivacyIT extends IntegrationTestSupport {
         assertThat(output.getAll()).contains("/response").doesNotContain("PrivateMarker", "Jane Synthetic");
     }
 
+    @Test
+    void theManualReasonAndTheCancellationNoteNeverReachTheLogs(CapturedOutput output) {
+        String interventionId = agreedIntervention();
+        calendar.script("create", "conflict");
+        runBookingWorker();
+        Map<String, Object> manual = new HashMap<>();
+        manual.put("window", Map.of("start", "2099-11-06T14:00:00Z", "end", "2099-11-06T16:00:00Z"));
+        manual.put("source", "phone");
+        manual.put("reason", MARKER + " agreed by phone.");
+        String path = "/interventions/" + interventionId;
+        assertThat(command(ADMIN_A, path + "/manual-confirmation", 3, UUID.randomUUID().toString(), manual)
+                .status()).isEqualTo(200);
+        manual.put("reason", MARKER + "x".repeat(600));
+        command(ADMIN_A, path + "/manual-confirmation", 4, UUID.randomUUID().toString(), manual);   // 400
+        Map<String, Object> cancel = new HashMap<>(Map.of("reasonCode", "other", "note", MARKER + " moved out."));
+        assertThat(command(ADMIN_A, path + "/cancellation", 4, UUID.randomUUID().toString(), cancel).status())
+                .isEqualTo(200);
+        command(ADMIN_A, path + "/cancellation", 4, UUID.randomUUID().toString(), cancel);           // 409
+        api.get(path, tokens.token(ADMIN_A));
+
+        assertThat(output.getAll()).contains("/cancellation").doesNotContain("PrivateMarker", "Jane Synthetic");
+    }
+
     private static Map<String, Object> withMarker(Map<String, Object> body) {
         body.put("scopeExtract", MARKER + " reports water above the garage light.");
         body.put("terms", MARKER + " asks to call before arriving.");

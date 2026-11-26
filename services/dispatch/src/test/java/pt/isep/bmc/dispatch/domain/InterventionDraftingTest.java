@@ -174,7 +174,8 @@ class InterventionDraftingTest {
                 .isInstanceOfSatisfying(VersionConflictException.class, e -> assertThat(e.currentVersion()).isEqualTo(1));
 
         Intervention sent = new Intervention(draft.id(), draft.issueId(), draft.buildingId(), draft.contractorId(),
-                InterventionState.SENT, 2, 1, Optional.of(1), Optional.empty(), true, 3, NOW, ADMIN_A, NOW, NOW);
+                InterventionState.SENT, 2, 1, Optional.of(1), Optional.empty(), true, Optional.empty(), Optional.empty(), 3,
+                NOW, ADMIN_A, NOW, NOW);
         assertThatThrownBy(() -> InterventionDrafting.replaceContractor(administratorOf(ADMIN_A, BUILDING_A), sent,
                 dispatchablePlumbing(), 1, PLUMBER.id(), Optional.of(PLUMBER), NOW))
                 .isInstanceOfSatisfying(InvalidTransitionException.class,

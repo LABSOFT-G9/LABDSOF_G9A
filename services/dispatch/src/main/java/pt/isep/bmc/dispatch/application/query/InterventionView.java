@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import pt.isep.bmc.dispatch.domain.contractor.ContractorId;
+import pt.isep.bmc.dispatch.domain.intervention.CancelReason;
 import pt.isep.bmc.dispatch.domain.intervention.DeclineReason;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionState;
@@ -26,6 +27,8 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
  * @param approvedProposalVersion the version sent and not superseded since
  * @param agreedProposalVersion   the version both parties agreed, for US-08
  * @param contractorContacted     whether a request was ever sent; the contractor sees the intervention from then on
+ * @param cancelNote              the administrator's text with a cancellation
+ * @param bookings                every booking, oldest first; the last one is the current booking (US-08)
  */
 public record InterventionView(
         InterventionId interventionId,
@@ -39,6 +42,9 @@ public record InterventionView(
         Optional<Integer> approvedProposalVersion,
         Optional<Integer> agreedProposalVersion,
         boolean contractorContacted,
+        Optional<CancelReason> cancelReason,
+        Optional<String> cancelNote,
+        List<BookingView> bookings,
         Instant createdAt,
         Instant updatedAt) implements InterventionRead {
 
@@ -48,6 +54,12 @@ public record InterventionView(
         Objects.requireNonNull(contractor, "contractor");
         Objects.requireNonNull(proposal, "proposal");
         proposals = List.copyOf(proposals);
+        bookings = List.copyOf(bookings);
+    }
+
+    /** The current booking: the latest one. */
+    public Optional<BookingView> booking() {
+        return bookings.isEmpty() ? Optional.empty() : Optional.of(bookings.getLast());
     }
 
     /** @param userId the contractor's login, used only to recognise the contractor; never shown */

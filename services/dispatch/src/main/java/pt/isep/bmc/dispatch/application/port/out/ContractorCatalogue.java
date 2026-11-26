@@ -16,4 +16,7 @@ public interface ContractorCatalogue {
      * not. The domain decides who is eligible; this only narrows the read.
      */
     List<Contractor> findCovering(BuildingId building);
+
+    /** The contractor's reference in the calendar (US-08); empty if the contractor cannot be booked there. */
+    Optional<String> findCalendarRef(ContractorId id);
 }

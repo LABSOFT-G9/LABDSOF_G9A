@@ -179,7 +179,7 @@ class ApproveProposalServiceTest {
         var failing = new pt.isep.bmc.dispatch.application.command.ApproveProposalService(ports, ports, ports, ports,
                 ports, event -> {
                     throw new IllegalStateException("simulated outbox failure");
-                }, ports, ports, f.clock);
+                }, ports, ports, ports, f.clock);
 
         assertThatThrownBy(() -> failing.approve(f.approve(ADMIN_A, "k1", 1, 1)))
                 .isInstanceOf(IllegalStateException.class);

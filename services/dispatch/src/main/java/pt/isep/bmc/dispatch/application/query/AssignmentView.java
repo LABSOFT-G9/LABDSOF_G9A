@@ -4,8 +4,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import pt.isep.bmc.dispatch.domain.booking.BookingSource;
+import pt.isep.bmc.dispatch.domain.booking.BookingState;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionState;
+import pt.isep.bmc.dispatch.domain.intervention.TimeWindow;
 
 /**
  * A request as the assigned contractor sees it (US-07, technical design
@@ -26,12 +29,17 @@ public record AssignmentView(
         Optional<Integer> awaitingResponseTo,
         Optional<Integer> agreedProposalVersion,
         List<InterventionView.Proposal> proposals,
+        Optional<Booking> booking,
         Instant updatedAt) implements InterventionRead {
 
     public AssignmentView {
         Objects.requireNonNull(interventionId, "interventionId");
         Objects.requireNonNull(work, "work");
         proposals = List.copyOf(proposals);
+    }
+
+    /** The current booking as the contractor needs it: its state, source and window. */
+    public record Booking(BookingState state, Optional<BookingSource> source, TimeWindow window) {
     }
 
     /** What the issue projection says about the work: category, urgency and where in the building. */
@@ -48,6 +56,7 @@ public record AssignmentView(
                 : Optional.empty();
         return new AssignmentView(view.interventionId(), view.state(), view.version(),
                 view.contractor(), work, awaiting,
-                view.agreedProposalVersion(), visible, view.updatedAt());
+                view.agreedProposalVersion(), visible,
+                view.booking().map(b -> new Booking(b.state(), b.source(), b.bookedWindow())), view.updatedAt());
     }
 }

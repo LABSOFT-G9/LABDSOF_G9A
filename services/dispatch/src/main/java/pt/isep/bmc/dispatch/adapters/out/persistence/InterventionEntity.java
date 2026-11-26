@@ -42,6 +42,12 @@ class InterventionEntity {
     @Column(name = "contractor_contacted", nullable = false)
     boolean contractorContacted;
 
+    @Column(name = "cancel_reason_code")
+    String cancelReasonCode;
+
+    @Column(name = "cancel_note", length = 500)
+    String cancelNote;
+
     @Column(name = "projected_issue_version", nullable = false)
     long projectedIssueVersion;
 

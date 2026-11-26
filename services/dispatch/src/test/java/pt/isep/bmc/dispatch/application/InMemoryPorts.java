@@ -9,11 +9,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import pt.isep.bmc.dispatch.application.port.out.BookingRepository;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateProjectionRowException;
@@ -28,6 +30,9 @@ import pt.isep.bmc.dispatch.application.port.out.MembershipProjectionRepository;
 import pt.isep.bmc.dispatch.application.port.out.OutboxEvent;
 import pt.isep.bmc.dispatch.application.port.out.TransactionConflictException;
 import pt.isep.bmc.dispatch.application.port.out.TransactionRunner;
+import pt.isep.bmc.dispatch.domain.booking.Booking;
+import pt.isep.bmc.dispatch.domain.booking.BookingAction;
+import pt.isep.bmc.dispatch.domain.booking.BookingId;
 import pt.isep.bmc.dispatch.domain.contractor.Contractor;
 import pt.isep.bmc.dispatch.domain.contractor.ContractorId;
 import pt.isep.bmc.dispatch.domain.intervention.ContractorResponse;
@@ -49,7 +54,7 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
  */
 public final class InMemoryPorts implements TransactionRunner, IssueProjectionRepository,
         MembershipProjectionRepository, ContractorCatalogue, InterventionRepository, EventOutbox, IdempotencyStore,
-        IdGenerator {
+        IdGenerator, BookingRepository {
 
     public final Map<IssueId, ProjectedIssue> issues = new HashMap<>();
     public final Map<MembershipId, ProjectedMembership> memberships = new HashMap<>();
@@ -58,6 +63,9 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     public final List<ProposalVersion> proposals = new ArrayList<>();
     public final List<ContractorResponse> responses = new ArrayList<>();
     public final List<OutboxEvent> outbox = new ArrayList<>();
+    public final Map<BookingId, Booking> bookings = new LinkedHashMap<>();
+    public final List<String> calls = new ArrayList<>();
+    public final Map<ContractorId, String> calendarRefs = new HashMap<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
@@ -182,6 +190,59 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     @Override
     public List<Contractor> findCovering(BuildingId building) {
         return contractors.values().stream().filter(c -> c.coverage().contains(building)).toList();
+    }
+
+    @Override
+    public Optional<String> findCalendarRef(ContractorId id) {
+        return Optional.ofNullable(calendarRefs.get(id));
+    }
+
+    // Bookings
+
+    @Override
+    public void add(Booking booking) {
+        if (bookings.values().stream().anyMatch(b -> b.isActive() && booking.isActive()
+                && b.interventionId().equals(booking.interventionId()))) {
+            throw new IllegalStateException("an intervention has one active booking");
+        }
+        put(bookings, booking.id(), booking);
+    }
+
+    @Override
+    public Optional<Booking> find(BookingId id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+
+    @Override
+    public Optional<Booking> findForUpdate(BookingId id) {
+        return find(id);
+    }
+
+    @Override
+    public Optional<Booking> findLatestForUpdate(InterventionId interventionId) {
+        return bookings.values().stream().filter(b -> b.interventionId().equals(interventionId))
+                .reduce((first, second) -> second);
+    }
+
+    @Override
+    public void update(Booking booking) {
+        Booking previous = bookings.get(booking.id());
+        if (previous == null || previous.version() != booking.version() - 1) {
+            throw new IllegalStateException("booking changed since it was read");
+        }
+        put(bookings, booking.id(), booking);
+    }
+
+    @Override
+    public Optional<Booking> lockNextDue(Instant now) {
+        return bookings.values().stream()
+                .filter(b -> b.nextAttemptAt().filter(due -> !due.isAfter(now)).isPresent())
+                .min(Comparator.comparing((Booking b) -> b.nextAttemptAt().orElseThrow()));
+    }
+
+    @Override
+    public void logCall(BookingId id, BookingAction action, String outcome, Instant at) {
+        calls.add(action.value() + ":" + outcome);
     }
 
     // Interventions

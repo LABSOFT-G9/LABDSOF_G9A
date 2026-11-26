@@ -23,3 +23,7 @@ INSERT INTO contractor_coverage (contractor_id, building_id) VALUES
   ('0199f2a0-0000-7000-8000-00000000e004', '0199f2a0-0000-7000-8000-00000000b002'),
   ('0199f2a0-0000-7000-8000-00000000e005', '0199f2a0-0000-7000-8000-00000000b001'),
   ('0199f2a0-0000-7000-8000-00000000e006', '0199f2a0-0000-7000-8000-00000000b001');
+-- US-08: calendar references. Plumbing Co. Twin (e002) has none, so it cannot be booked.
+UPDATE contractors SET calendar_ref = 'SIM-CTR-001' WHERE id = '0199f2a0-0000-7000-8000-00000000e001';
+UPDATE contractors SET calendar_ref = 'SIM-CTR-003' WHERE id = '0199f2a0-0000-7000-8000-00000000e003';
+UPDATE contractors SET calendar_ref = 'SIM-CTR-004' WHERE id = '0199f2a0-0000-7000-8000-00000000e004';

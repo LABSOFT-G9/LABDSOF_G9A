@@ -65,5 +65,11 @@ bmc:
     # Provisional name until EN01-U6 settles it; the client must send it.
     csrf-header: ${CSRF_HEADER:X-BMC-CSRF}
   seed-synthetic: ${BMC_SEED_SYNTHETIC:false}
+  # US-08: the calendar simulator (ADR-006) and the booking worker, which
+  # runs with the other scheduled jobs (bmc.scheduling.enabled).
+  calendar:
+    base-url: ${CALENDAR_BASE_URL:http://calendar-sim:8080}
+    timeout: PT5S
+    worker-interval: PT1S
   idempotency:
     purge-interval: PT1H

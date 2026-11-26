@@ -50,7 +50,7 @@ class ContractorResponseIT extends IntegrationTestSupport {
         assertThat(response.header("ETag")).isEqualTo("\"2\"");
         Map<String, Object> assignment = response.json();
         assertThat(assignment).containsOnlyKeys("interventionId", "state", "version", "contractor", "work",
-                "awaitingResponseTo", "agreedProposalVersion", "proposals", "updatedAt");
+                "awaitingResponseTo", "agreedProposalVersion", "proposals", "booking", "updatedAt");
         assertThat(assignment).containsEntry("state", "sent").containsEntry("awaitingResponseTo", 1);
         assertThat(Api.map(assignment.get("work"))).containsEntry("category", "plumbing")
                 .containsEntry("areaLabel", "Garage level -1");

@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.dispatch.application.port.out.InterventionRepository;
 import pt.isep.bmc.dispatch.domain.contractor.ContractorId;
+import pt.isep.bmc.dispatch.domain.intervention.CancelReason;
 import pt.isep.bmc.dispatch.domain.intervention.ContractorResponse;
 import pt.isep.bmc.dispatch.domain.intervention.Intervention;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
@@ -178,6 +179,8 @@ class JpaInterventionRepository implements InterventionRepository {
         entity.approvedProposalVersion = intervention.approvedProposalVersion().orElse(null);
         entity.agreedProposalVersion = intervention.agreedProposalVersion().orElse(null);
         entity.contractorContacted = intervention.contractorContacted();
+        entity.cancelReasonCode = intervention.cancelReason().map(CancelReason::value).orElse(null);
+        entity.cancelNote = intervention.cancelNote().orElse(null);
         entity.updatedAt = Timestamps.toColumn(intervention.updatedAt());
     }
 
@@ -202,6 +205,8 @@ class JpaInterventionRepository implements InterventionRepository {
                 Optional.ofNullable(entity.approvedProposalVersion),
                 Optional.ofNullable(entity.agreedProposalVersion),
                 entity.contractorContacted,
+                Optional.ofNullable(entity.cancelReasonCode).flatMap(CancelReason::fromValue),
+                Optional.ofNullable(entity.cancelNote),
                 entity.projectedIssueVersion,
                 Timestamps.fromColumn(entity.projectionAppliedAt),
                 new UserId(entity.createdBy),

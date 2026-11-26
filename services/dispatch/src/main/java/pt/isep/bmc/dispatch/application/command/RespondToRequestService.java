@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import pt.isep.bmc.dispatch.application.idempotency.IdempotentExecutor;
 import pt.isep.bmc.dispatch.application.port.in.RespondToRequestUseCase;
+import pt.isep.bmc.dispatch.application.port.out.BookingRepository;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
@@ -34,7 +35,8 @@ import pt.isep.bmc.dispatch.domain.shared.AccessDeniedException;
  * with {@code If-Match} and an idempotency key. The intervention, the
  * response, a counterproposal's new version, the key and the outbox row are
  * one transaction: {@code ContractorResponded} for an acceptance or a
- * counterproposal, {@code InterventionDeclined} for a decline.
+ * counterproposal, {@code InterventionDeclined} for a decline. An acceptance
+ * also saves the booking request for the agreed window (US-08).
  *
  * <p>Only the contractor whose login is the catalogue entry's, after the
  * request was sent, gets past {@code 404}: Dispatch authorises this from its
@@ -50,6 +52,7 @@ public final class RespondToRequestService implements RespondToRequestUseCase {
     private final ContractorCatalogue catalogue;
     private final InterventionRepository interventions;
     private final EventOutbox outbox;
+    private final BookingRepository bookings;
     private final IdempotencyStore idempotency;
     private final IdempotentExecutor idempotent;
     private final IdGenerator ids;
@@ -61,9 +64,11 @@ public final class RespondToRequestService implements RespondToRequestUseCase {
             ContractorCatalogue catalogue,
             InterventionRepository interventions,
             EventOutbox outbox,
+            BookingRepository bookings,
             IdempotencyStore idempotency,
             IdGenerator ids,
             Clock clock) {
+        this.bookings = bookings;
         this.issues = issues;
         this.catalogue = catalogue;
         this.interventions = interventions;
@@ -112,6 +117,8 @@ public final class RespondToRequestService implements RespondToRequestUseCase {
         outcome.counterproposal().ifPresent(interventions::addProposal);
         interventions.addResponse(outcome.response());
         outbox.append(new OutboxEvent(ids.newId(), event(next, request, now), command.correlationId()));
+        AgreedBookings.requestIfAgreed(next, answered.window(), issue, catalogue, bookings, outbox, ids,
+                command.correlationId(), now);
         return new ResponseRecorded(next.id(), next.state(), next.version(), next.currentProposalVersion(), false);
     }
 

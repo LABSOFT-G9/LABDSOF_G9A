@@ -39,6 +39,7 @@ final class ApplicationFixtures {
     static final Contractor PLUMBER = new Contractor(
             new ContractorId(UUID.fromString("0199f2a0-0000-7000-8000-00000000e001")), Optional.of(CONTRACTOR_LOGIN),
             "Synthetic Plumbing Co.", Set.of("plumbing"), Set.of(BUILDING_A), true, true);
+    static final String PLUMBER_CALENDAR_REF = "SIM-CTR-001";
     static final Contractor OTHER_PLUMBER = contractor(3, "Synthetic Aqua Plumbers", "plumbing", true, BUILDING_A);
     static final Contractor ELECTRICIAN = contractor(6, "Synthetic Electrical Ltd.", "electrical", true, BUILDING_A);
 
@@ -78,6 +79,7 @@ final class ApplicationFixtures {
         for (Contractor contractor : new Contractor[] {PLUMBER, OTHER_PLUMBER, ELECTRICIAN}) {
             ports.contractors.put(contractor.id(), contractor);
         }
+        ports.calendarRefs.put(PLUMBER.id(), PLUMBER_CALENDAR_REF);
         return ports;
     }
 

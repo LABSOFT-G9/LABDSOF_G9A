@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import pt.isep.bmc.dispatch.application.idempotency.IdempotentExecutor;
 import pt.isep.bmc.dispatch.application.port.in.ApproveProposalUseCase;
+import pt.isep.bmc.dispatch.application.port.out.BookingRepository;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
@@ -31,7 +32,9 @@ import pt.isep.bmc.dispatch.domain.shared.AccessDeniedException;
  * Approves a proposal version and sends the request (US-07), with {@code
  * If-Match} and an idempotency key. The intervention, the approval, the key
  * and the {@code InterventionApproved} outbox row are one transaction, so a
- * request is sent once however often the approval is repeated.
+ * request is sent once however often the approval is repeated. Approving a
+ * contractor's counterproposal agrees the terms, so it also saves the booking
+ * request (US-08).
  *
  * <p>Locks the issue projection row before the intervention row, in the same
  * order as every other command and the Issue event consumer.
@@ -47,6 +50,7 @@ public final class ApproveProposalService implements ApproveProposalUseCase {
     private final ContractorCatalogue catalogue;
     private final InterventionRepository interventions;
     private final EventOutbox outbox;
+    private final BookingRepository bookings;
     private final IdempotencyStore idempotency;
     private final IdempotentExecutor idempotent;
     private final IdGenerator ids;
@@ -59,9 +63,11 @@ public final class ApproveProposalService implements ApproveProposalUseCase {
             ContractorCatalogue catalogue,
             InterventionRepository interventions,
             EventOutbox outbox,
+            BookingRepository bookings,
             IdempotencyStore idempotency,
             IdGenerator ids,
             Clock clock) {
+        this.bookings = bookings;
         this.issues = issues;
         this.memberships = memberships;
         this.catalogue = catalogue;
@@ -108,6 +114,8 @@ public final class ApproveProposalService implements ApproveProposalUseCase {
         outbox.append(new OutboxEvent(ids.newId(), new InterventionApproved(approved.id().value(), approved.version(),
                 approved.buildingId(), now, approved.issueId(), outcome.contractorUserId(),
                 outcome.contractorDisplayName(), proposalVersion, approved.state()), command.correlationId()));
+        AgreedBookings.requestIfAgreed(approved, proposal.window(), issue, catalogue, bookings, outbox, ids,
+                command.correlationId(), now);
         return new ProposalApproved(approved.id(), approved.state(), approved.version(), proposalVersion, false);
     }
 
