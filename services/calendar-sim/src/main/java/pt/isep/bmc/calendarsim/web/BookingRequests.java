@@ -18,7 +18,7 @@ final class BookingRequests {
 
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
     private static final int CONTRACTOR_REF_MAX = 64;
-    private static final int BUILDING_CODE_MAX = 32;
+    private static final int BUILDING_CODE_MAX = 64;
     private static final int SUMMARY_MAX = 200;
 
     private BookingRequests() {

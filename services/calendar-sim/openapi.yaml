@@ -118,7 +118,7 @@ components:
         requestId: { type: string, pattern: '^[A-Za-z0-9-]{1,64}$' }
         contractorRef: { type: string, maxLength: 64 }
         window: { $ref: '#/components/schemas/Window' }
-        buildingCode: { type: string, maxLength: 32 }
+        buildingCode: { type: string, maxLength: 64, description: "An opaque building code; Dispatch sends the building ID." }
         summary: { type: string, maxLength: 200, description: No names, addresses or report text. }
     Booking:
       type: object

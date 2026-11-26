@@ -6,7 +6,7 @@ Spring Boot 4.1 on Java 25. Built for US-08-01 ([#103](https://github.com/LABSOF
 
 - **Internal network only.** Nothing routes to it from the edge, and it has no authentication.
 - **In memory.** A restart loses every booking, which is the `discrepancy` case of §4.5.
-- **No private data.** A request holds the booking ID, the contractor's calendar reference, the window, a building code and a short summary. Never a name, address or report text. Nothing is logged.
+- **No private data.** A request holds the booking ID, the contractor's calendar reference, the window, an opaque building code (Dispatch sends the building ID) and a short summary such as "Plumbing intervention". Never a name, address or report text. Nothing is logged.
 
 ## Calendar API
 
