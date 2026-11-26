@@ -31,7 +31,7 @@ No item failed, so no ADR is reopened. Two findings correct ADR-003 ([section 4]
 - **What ran:** the image of PR #139 (`infra/keycloak`, from `quay.io/keycloak/keycloak:26.8.2`, built with `KC_DB=mysql`) against `mysql:8.4` in the local stack, started from empty.
 - **Observed on 2026-11-24:** Keycloak's log shows `Realm 'bmc' imported` and `Bootstrap completed in 43.200000 seconds`; the synthetic accounts then sign in.
 - **In CI:** the job "Sign-in end to end (local stack)" passes on PR #139 at `4ce888b`.
-- **Note:** the stock 26.8.2 image has one HIGH finding in the scan (CVE-2026-102554), with a dated exception proposed in PR #139 for Martim to decide.
+- **Note:** the stock 26.8.2 image has one HIGH finding in the scan (CVE-2026-102554). DevOps accepted a dated exception on PR #139 (2026-11-25): it is in `.trivyignore.yaml`, limited to the Guava jar inside the Keycloak image, and expires on 2026-12-22.
 
 ### 2.2 Flyway on MySQL (item 2)
 
@@ -51,7 +51,7 @@ Checked by `scripts/e2e-signin.sh` of PR #139 (19 checks; passed locally on 2026
 | A bearer token sent by the client without a session is refused | Pass |
 | `SameSite=Strict` through the login redirects | Not tested in a browser: the script uses curl, which does not apply `SameSite` rules |
 | Keycloak's token sizes fit in the cookie | Not measured: sign-in works for the synthetic accounts, which have few claims |
-| Token renewal | Not tested: no check waits for an access token to expire |
+| Token renewal | Partly tested: observed by hand once on PR #139 (one session answered `200` at 0 s, 250 s and 380 s with a 300-second access token). No automated check waits for an access token to expire |
 
 Finding: the plugin ignores a return path given to `/oidc/login` and always lands on `/` (recorded on #80; the client has to keep the path itself).
 
@@ -192,7 +192,7 @@ None of the values was measured under load: there is no load yet. They stay star
 
 | Item | What is missing | Owner |
 |---|---|---|
-| 3 | A browser pass for `SameSite=Strict`, cookie size with real token sizes, token renewal | Ricardo, with EN-02-04 (#80) |
+| 3 | A browser pass for `SameSite=Strict`, cookie size with real token sizes, an automated check of token renewal | Ricardo, with EN-02-04 (#80) |
 | 4 | A test that kills the publisher's process between the confirm and the commit | Ricardo, with #78 |
 | 5 | The Spring consumer as a restricted broker user | Ricardo, with #78 |
 | 7 | The consumer inside the AI image, beside gunicorn | Sandro, US-03-01 |
