@@ -12,7 +12,7 @@ CREATE TABLE issue_projection (
     dispatchable         BOOLEAN NOT NULL,
     category             VARCHAR(32) CHARACTER SET ascii NULL,
     urgency              VARCHAR(32) CHARACTER SET ascii NULL,
-    area_label           VARCHAR(120) NOT NULL,
+    area_label           VARCHAR(200) NOT NULL,
     published_summary_id CHAR(36) CHARACTER SET ascii NULL,
     applied_at           DATETIME(6) NOT NULL,
     PRIMARY KEY (issue_id)

@@ -35,6 +35,17 @@ class ProjectionIT extends IntegrationTestSupport {
     }
 
     @Test
+    void anAreaLabelAsLongAsIssueAllowsIsStored() {
+        String issueId = UUID.randomUUID().toString();
+        String label = "L".repeat(200); // Issue's areas.label is VARCHAR(200)
+
+        assertThat(events.issueStateChanged(issueId, BUILDING_A, "triaged", 3, true, "plumbing", label)).isTrue();
+
+        assertThat(jdbc.sql("SELECT area_label FROM issue_projection WHERE issue_id = ?").param(issueId)
+                .query(String.class).single()).isEqualTo(label);
+    }
+
+    @Test
     void aReplayedGrantCannotUndoALaterRevocation() {
         String issueId = triagedPlumbingIssue();
         assertThat(events.revoked(MEMBERSHIP_ADMIN_A, ADMIN_A, BUILDING_A, "administrator", 2)).isTrue();

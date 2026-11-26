@@ -80,6 +80,22 @@ class InterventionDraftingTest {
     }
 
     @Test
+    void timesTheDatabaseCannotHoldAreOutOfRange() {
+        assertThatThrownBy(() -> InterventionDrafting.validate(PLUMBER.id().toString(), SCOPE,
+                "+12099-11-05T09:00:00Z", "+10000-01-01T00:00:00Z", "ok", NOW))
+                .isInstanceOfSatisfying(ValidationException.class, e -> assertThat(e.violations()).containsExactly(
+                        new FieldViolation("window.start", "out_of_range"),
+                        new FieldViolation("window.end", "out_of_range")));
+        assertThatThrownBy(() -> InterventionDrafting.validate(PLUMBER.id().toString(), SCOPE, START,
+                "9999-12-31T23:59:59-18:00", "ok", NOW))
+                .as("the last day of 9999 at -18:00 is already in year 10000 in UTC")
+                .isInstanceOfSatisfying(ValidationException.class, e -> assertThat(e.violations()).containsExactly(
+                        new FieldViolation("window.end", "out_of_range")));
+        assertThat(InterventionDrafting.validate(PLUMBER.id().toString(), SCOPE, START, "9999-12-31T23:59:59.999Z",
+                "ok", NOW).window().end()).isEqualTo(Instant.parse("9999-12-31T23:59:59.999Z"));
+    }
+
+    @Test
     void aDraftIsAwaitingApprovalVersionOneWithProposalOneAndTheProjectionSnapshot() {
         DraftOutcome outcome = InterventionDrafting.draft(administratorOf(ADMIN_A, BUILDING_A), dispatchablePlumbing(),
                 Optional.empty(), terms(), Optional.of(PLUMBER), NEW_ID, NOW);

@@ -49,6 +49,8 @@ public final class InterventionDrafting {
     static final String FIELD_SCOPE = "scopeExtract";
     static final String FIELD_WINDOW_START = "window.start";
     static final String FIELD_WINDOW_END = "window.end";
+    /** The last instant a MySQL {@code DATETIME(3)} column holds, in UTC. */
+    static final Instant LATEST_STORABLE = Instant.parse("9999-12-31T23:59:59.999Z");
     static final String FIELD_TERMS = "terms";
 
     private static final Pattern CANONICAL_UUID =
@@ -189,11 +191,17 @@ public final class InterventionDrafting {
             violations.add(new FieldViolation(field, "required"));
             return Optional.empty();
         }
+        Instant instant;
         try {
-            return Optional.of(OffsetDateTime.parse(raw).toInstant().truncatedTo(ChronoUnit.MILLIS));
+            instant = OffsetDateTime.parse(raw).toInstant().truncatedTo(ChronoUnit.MILLIS);
         } catch (DateTimeParseException e) {
             violations.add(new FieldViolation(field, "invalid_format"));
             return Optional.empty();
         }
+        if (instant.isAfter(LATEST_STORABLE)) {
+            violations.add(new FieldViolation(field, "out_of_range"));
+            return Optional.empty();
+        }
+        return Optional.of(instant);
     }
 }

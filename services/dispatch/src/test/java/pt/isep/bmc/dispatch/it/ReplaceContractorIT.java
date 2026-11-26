@@ -149,6 +149,32 @@ class ReplaceContractorIT extends IntegrationTestSupport {
     }
 
     @Test
+    void theSameKeyWithAnotherContractorIsRefusedAndChangesNothing() {
+        givenADraft();
+        String key = UUID.randomUUID().toString();
+        assertThat(replace(ADMIN_A, interventionId, "\"1\"", key, AQUA_PLUMBERS).status()).isEqualTo(200);
+
+        var changed = replace(ADMIN_A, interventionId, "\"1\"", key, PLUMBING_CO_TWIN);
+
+        assertThat(changed.status()).isEqualTo(422);
+        assertThat(changed.json()).containsEntry("code", "IDEMPOTENCY_KEY_REUSED");
+        assertThat(jdbc.sql("SELECT contractor_id FROM interventions").query(String.class).single())
+                .isEqualTo(AQUA_PLUMBERS);
+        assertThat(jdbc.sql("SELECT version FROM interventions").query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void aReplayIsAnsweredByTodaysPermissions() {
+        givenADraft();
+        String key = UUID.randomUUID().toString();
+        assertThat(replace(ADMIN_A, interventionId, "\"1\"", key, AQUA_PLUMBERS).status()).isEqualTo(200);
+
+        events.revoked(MEMBERSHIP_ADMIN_A, ADMIN_A, BUILDING_A, "administrator", 2);
+
+        assertThat(replace(ADMIN_A, interventionId, "\"1\"", key, AQUA_PLUMBERS).status()).isEqualTo(404);
+    }
+
+    @Test
     void theIssuesInterventionsAreListedForItsAdministrators() {
         givenADraft();
 

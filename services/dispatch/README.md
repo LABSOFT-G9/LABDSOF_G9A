@@ -10,7 +10,7 @@ Implemented so far:
   - draft interventions (`awaiting_approval`) and replacing a draft's contractor;
   - the issue and membership projections, applied by version from Issue's events.
 
-Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service yet; approval and the contractor's response (US-07); booking (US-08); completion and closure (US-09).
+Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service yet; approval and the contractor's response (US-07); booking (US-08); completion and closure (US-09). An issue that becomes `resolved` or `cancelled` only updates the projection: its non-terminal interventions are not cancelled yet (technical design 4.3 step 8). That needs the `IssueResolved` and `IssueCancelled` consumer of EN-02-02 and the cancellation of US-09.
 
 ## Architecture
 
@@ -49,10 +49,10 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
 - **Who.** Only an active `administrator` membership of the issue's building, in Dispatch's membership projection, counts (technical design 4.3). Anyone else gets `404`: residents, contractors, other buildings' administrators, and callers asking about an issue the projection does not know. A revocation takes effect as soon as `MembershipRevoked` is applied.
 - **Eligible.** A contractor is eligible if it is active, covers the issue's building and has the issue's decided category as a specialisation. All three must be known, so an issue without a decided category has nobody eligible.
 - **Order.** By display name ignoring case, then the exact name, then the contractor ID. Price, distance and availability are listed under `unknown`, never guessed.
-- **Draft fields.** `scopeExtract` is 10–2,000 characters and `terms` 1–1,000. Both are trimmed, counted as Unicode code points, and refused with control characters. `window.start` is in the future and `window.end` is after it: RFC 3339 with an offset, stored in UTC at millisecond precision. There is no maximum length.
+- **Draft fields.** `scopeExtract` is 10–2,000 characters and `terms` 1–1,000. Both are trimmed, counted as Unicode code points, and refused with control characters. `window.start` is in the future and `window.end` is after it: RFC 3339 with an offset, stored in UTC at millisecond precision. A time after `9999-12-31T23:59:59.999Z` in UTC is refused with `out_of_range`, because the database cannot hold it. There is no maximum length.
 - **Check order.** Each check answers before the next one runs:
   1. Issue known and caller administers its building (`404`).
-  2. Fields (`400`, every invalid field at once).
+  2. Fields (`400`, every invalid field at once). `issueId` is the exception: the controller needs it to find the issue, so a missing or malformed `issueId` answers `400` with that field alone, before step 1.
   3. Issue dispatchable (`409 INVALID_TRANSITION` with `currentState`).
   4. No other non-terminal intervention (`409 INVALID_TRANSITION` with `activeInterventionId`).
   5. Contractor eligible now (`400`, `contractorId`: `not_eligible`; an unknown contractor answers the same).
@@ -103,14 +103,17 @@ The variables are the same as Issue's (see [its README](../issue/README.md#confi
 mvn verify   # unit + ArchUnit (surefire, *Test) and MySQL 8.4 integration tests (failsafe, *IT; needs Docker)
 ```
 
+The unit tests cover the domain rules, and the use cases at the application layer with in-memory fakes of the ports (`application/InMemoryPorts`), as in Issue: the check order of a draft and of a replacement, replays, and projections applied by version, with their retries.
+
 The integration tests use Testcontainers and locally signed tokens, as Issue's do. They cover:
 
 - the access matrix, including a revoked administrator;
 - eligibility and its order;
 - every validation error at once;
-- the `409`s;
-- idempotent replays and key reuse;
+- the `409`s, including two replacements sent from the same version;
+- idempotent replays and key reuse, concurrent retries with one key, expired keys and their purge (`IdempotencyIT`);
 - concurrent drafts for one issue;
 - events that race for one projection row;
+- the database down (`StorageFailureIT`) and private text kept out of DEBUG logs (`LogPrivacyIT`);
 - a restart;
 - the synthetic seed.

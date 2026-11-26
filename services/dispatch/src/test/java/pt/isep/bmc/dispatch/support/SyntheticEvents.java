@@ -29,6 +29,13 @@ public final class SyntheticEvents {
     /** {@code IssueStateChanged}; {@code category} {@code null} leaves the optional field out. */
     public boolean issueStateChanged(
             String issueId, String buildingId, String state, long version, boolean dispatchable, String category) {
+        return issueStateChanged(issueId, buildingId, state, version, dispatchable, category, "Garage level -1");
+    }
+
+    /** {@code IssueStateChanged} with the given area label. */
+    public boolean issueStateChanged(
+            String issueId, String buildingId, String state, long version, boolean dispatchable, String category,
+            String areaLabel) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("issueId", issueId);
         data.put("buildingId", buildingId);
@@ -39,7 +46,7 @@ public final class SyntheticEvents {
             data.put("category", category);
             data.put("urgency", "high");
         }
-        data.put("areaLabel", "Garage level -1");
+        data.put("areaLabel", areaLabel);
         return issues.apply(IssueEvents.issueStateChanged(json(data), Instant.now()));
     }
 
