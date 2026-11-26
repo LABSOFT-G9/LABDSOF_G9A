@@ -149,6 +149,22 @@ ETag: "1"
   "state": "awaiting_approval", "version": 1, "proposalVersion": 1 }
 ```
 
+Before approval, the administrator may select another eligible contractor for the draft (added with US-06-01). The terms stay as proposal version 1:
+
+```http
+PATCH /interventions/0199f2a2-0000-7000-8000-000000003001
+If-Match: "1"
+Idempotency-Key: 5c0d…
+
+{ "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+
+200 OK
+ETag: "2"
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "awaiting_approval", "version": 2,
+  "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+```
+
 ```http
 POST /interventions/0199f2a2-0000-7000-8000-000000003001/approval
 If-Match: "1"
