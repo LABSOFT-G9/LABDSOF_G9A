@@ -22,7 +22,8 @@ import pt.isep.bmc.issue.domain.membership.UserId;
  *
  * <p>The issue row is locked for the check and the write, so the same user
  * confirming twice at once still leaves one confirmation, and the returned
- * count includes every confirmation committed before. The issue itself is
+ * count includes every confirmation committed before, of people who are
+ * active residents of the building now. The issue itself is
  * never written: its version, category and urgency stay as they are, and no
  * event or history entry is produced (the count says nothing about who).
  */
@@ -73,7 +74,7 @@ public final class ImpactService implements ChangeImpactUseCase {
             } else if (!confirmed && already) {
                 impacts.remove(issueId, actor);
             }
-            return new ImpactView(impacts.count(issueId), confirmed);
+            return new ImpactView(impacts.count(issueId, now), confirmed);
         });
     }
 }

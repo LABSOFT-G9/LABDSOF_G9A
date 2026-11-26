@@ -361,6 +361,62 @@ class IssueSharingIT extends IntegrationTestSupport {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void aConfirmationCountsOnlyWhileItsAuthorIsAnActiveResidentOfTheBuilding() {
+        String issueId = sharedIssue();
+        impact("PUT", RESIDENT_A1, issueId);
+        assertThat(impact("PUT", RESIDENT_A2, issueId).json()).isEqualTo(Map.of("count", 2, "mine", true));
+
+        setResidentStatus(RESIDENT_A2, "revoked");
+        try {
+            // The confirmation is kept, but it does not count while its author is not a resident.
+            assertThat(count("impact_confirmations")).isEqualTo(2);
+            assertThat(issue(RESIDENT_A1, issueId).get("impact")).isEqualTo(Map.of("count", 1, "mine", true));
+            assertThat(issue(ADMIN_A, issueId).get("impact")).isEqualTo(Map.of("count", 1, "mine", false));
+            List<Map<String, Object>> listed =
+                    (List<Map<String, Object>>) api.get("/issues", tokens.token(RESIDENT_A1)).json().get("items");
+            assertThat(listed.get(0).get("impact")).as("the list counts the same way")
+                    .isEqualTo(Map.of("count", 1, "mine", true));
+            assertThat(impact("PUT", RESIDENT_A1, issueId).json()).as("the answer to a change counts the same way")
+                    .isEqualTo(Map.of("count", 1, "mine", true));
+            assertThat(impact("PUT", RESIDENT_A2, issueId).status()).as("no longer in the building").isEqualTo(404);
+        } finally {
+            setResidentStatus(RESIDENT_A2, "active");
+        }
+
+        // Back in the building, the confirmation counts again without confirming a second time.
+        assertThat(issue(RESIDENT_A1, issueId).get("impact")).isEqualTo(Map.of("count", 2, "mine", true));
+        assertThat(issue(RESIDENT_A2, issueId).get("impact")).isEqualTo(Map.of("count", 2, "mine", true));
+
+        // A membership whose validity has ended counts no more than a revoked one.
+        setResidentValidUntil(RESIDENT_A2, java.time.LocalDateTime.of(2026, 6, 1, 0, 0));
+        try {
+            assertThat(issue(ADMIN_A, issueId).get("impact")).isEqualTo(Map.of("count", 1, "mine", false));
+        } finally {
+            setResidentValidUntil(RESIDENT_A2, null);
+        }
+        assertThat(issue(ADMIN_A, issueId).get("impact")).isEqualTo(Map.of("count", 2, "mine", false));
+    }
+
+    @Test
+    void aReporterWhoLeftTheBuildingStillSeesTheIssueButTheirConfirmationDoesNotCount() {
+        String issueId = sharedIssue();
+        impact("PUT", RESIDENT_A1, issueId);
+        impact("PUT", RESIDENT_A2, issueId);
+
+        setResidentStatus(RESIDENT_A1, "revoked");
+        try {
+            assertThat(issue(RESIDENT_A1, issueId).get("impact")).isEqualTo(Map.of("count", 1, "mine", false));
+            assertThat(impact("DELETE", RESIDENT_A1, issueId).status()).as("only residents change their impact")
+                    .isEqualTo(403);
+            assertThat(count("impact_confirmations")).isEqualTo(2);
+        } finally {
+            setResidentStatus(RESIDENT_A1, "active");
+        }
+        assertThat(issue(RESIDENT_A1, issueId).get("impact")).isEqualTo(Map.of("count", 2, "mine", true));
+    }
+
+    @Test
     void impactNeverChangesTheIssueAndSaysNothingAboutWho() {
         String issueId = submitIssue(RESIDENT_A1, BUILDING_A, AREA_A_GARAGE);
         triage(ADMIN_A, issueId, 1, "plumbing", "low", "Looks minor");
