@@ -43,7 +43,7 @@ public abstract class IntegrationTestSupport {
     protected JdbcClient jdbc;
 
     @Autowired
-    private DataSource dataSource;
+    protected DataSource dataSource;
 
     @Autowired
     private ApplyIssueStateChangedUseCase applyIssue;

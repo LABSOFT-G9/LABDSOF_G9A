@@ -68,10 +68,15 @@ class JpaInterventionRepository implements InterventionRepository {
 
     @Override
     public Optional<Intervention> findForUpdate(InterventionId id) {
-        // SELECT ... FOR UPDATE: the row lock is held until the transaction ends.
-        return Optional.ofNullable(
-                        entityManager.find(InterventionEntity.class, id.toString(), LockModeType.PESSIMISTIC_WRITE))
-                .map(JpaInterventionRepository::toDomain);
+        InterventionEntity entity = entityManager.find(InterventionEntity.class, id.toString());
+        if (entity == null) {
+            return Optional.empty();
+        }
+        // SELECT ... FOR UPDATE, held until the transaction ends. A locking find on an entity this
+        // transaction already loaded only locks the row and keeps the old fields, so the version
+        // check would run on what was read before the lock. Refresh reads the row again under it.
+        entityManager.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
+        return Optional.of(toDomain(entity));
     }
 
     @Override

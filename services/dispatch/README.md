@@ -61,8 +61,10 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
   2. Valid `contractorId` (`400`).
   3. Still `awaiting_approval` (`409 INVALID_TRANSITION`).
   4. Version (`409 VERSION_CONFLICT` with `currentVersion`, so the client reloads).
-  5. Issue still dispatchable (`409`).
+  5. Issue still dispatchable (`409 INVALID_TRANSITION`). Here `currentState` is the issue's state, not the intervention's: both lists have `in_progress` and `cancelled`, and the draft itself is still `awaiting_approval`.
   6. Eligible now (`400 not_eligible`).
+
+  The draft is read again under its row lock before the version check, so two replacements sent with the same `If-Match` answer `200` and `409 VERSION_CONFLICT`.
 
   Every successful save moves the version, even when it saves the same contractor, because the save re-checked eligibility. The terms (proposal version 1) stay as they were.
 - **One active intervention per issue.** Saving a draft locks the issue's projection row, and so does applying an Issue event (technical design 4.3 step 8). A unique key on the active intervention per issue backs this up.

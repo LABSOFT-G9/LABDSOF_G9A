@@ -6,6 +6,7 @@ import static pt.isep.bmc.dispatch.support.Fixtures.*;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import pt.isep.bmc.dispatch.support.Api;
 import pt.isep.bmc.dispatch.support.IntegrationTestSupport;
@@ -50,6 +51,53 @@ class ReplaceContractorIT extends IntegrationTestSupport {
                 .containsEntry("currentState", "awaiting_approval");
         assertThat(jdbc.sql("SELECT contractor_id FROM interventions").query(String.class).single())
                 .isEqualTo(AQUA_PLUMBERS);
+    }
+
+    @Test
+    void twoReplacementsFromTheSameVersionAnswerOneSuccessAndOneConflict() throws Exception {
+        givenADraft();
+        CompletableFuture<Api.Response> first;
+        CompletableFuture<Api.Response> second;
+        // Hold the issue's projection row so both requests read the draft at version 1 and then wait
+        // for that lock; the draft's own lock is taken after it, in the order the service uses.
+        try (var blocker = dataSource.getConnection()) {
+            blocker.setAutoCommit(false);
+            try (var lock = blocker.prepareStatement(
+                    "SELECT issue_id FROM issue_projection WHERE issue_id = ? FOR UPDATE")) {
+                lock.setString(1, issueId);
+                lock.executeQuery();
+            }
+            first = CompletableFuture.supplyAsync(() -> replace(ADMIN_A, interventionId, 1, AQUA_PLUMBERS));
+            second = CompletableFuture.supplyAsync(() -> replace(ADMIN_A, interventionId, 1, PLUMBING_CO_TWIN));
+            Thread.sleep(2_000);
+            blocker.commit();
+        }
+
+        List<Api.Response> responses = List.of(first.get(), second.get());
+
+        assertThat(responses).extracting(Api.Response::status).containsExactlyInAnyOrder(200, 409);
+        Api.Response winner = responses.stream().filter(r -> r.status() == 200).findFirst().orElseThrow();
+        Api.Response loser = responses.stream().filter(r -> r.status() == 409).findFirst().orElseThrow();
+        assertThat(loser.json()).containsEntry("code", "VERSION_CONFLICT").containsEntry("currentVersion", 2);
+        assertThat(jdbc.sql("SELECT version FROM interventions").query(Long.class).single()).isEqualTo(2);
+        assertThat(jdbc.sql("SELECT contractor_id FROM interventions").query(String.class).single())
+                .as("the row keeps the contractor of the request that answered 200")
+                .isEqualTo(winner.json().get("contractorId"));
+    }
+
+    @Test
+    void anIssueNoLongerDispatchableRefusesTheReplacementWithTheIssuesState() {
+        givenADraft();
+        events.issueStateChanged(issueId, BUILDING_A, "cancelled", 4, false, "plumbing");
+
+        var response = replace(ADMIN_A, interventionId, 1, AQUA_PLUMBERS);
+
+        assertThat(response.status()).isEqualTo(409);
+        assertThat(response.json()).containsEntry("code", "INVALID_TRANSITION")
+                .as("the issue's state, not the intervention's").containsEntry("currentState", "cancelled");
+        var reloaded = api.get("/interventions/" + interventionId, tokens.token(ADMIN_A));
+        assertThat(reloaded.json()).containsEntry("state", "awaiting_approval").containsEntry("version", 1);
+        assertThat(Api.map(reloaded.json().get("contractor"))).containsEntry("contractorId", PLUMBING_CO);
     }
 
     @Test
