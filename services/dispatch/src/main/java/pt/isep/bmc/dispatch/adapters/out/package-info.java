@@ -6,6 +6,8 @@
  *       never the domain objects) and mappers (ADR-002); idempotency keys,
  *       projections and read models through plain SQL, which keeps their
  *       locking and queries explicit.</li>
+ *   <li>{@code outbox}: events as CloudEvents JSON rows of the transactional
+ *       outbox, written with the change (ADR-003).</li>
  *   <li>{@code id}: UUIDv7 generation.</li>
  * </ul>
  *

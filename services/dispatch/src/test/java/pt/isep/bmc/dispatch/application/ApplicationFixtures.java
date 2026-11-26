@@ -16,7 +16,8 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
 /**
  * Synthetic values for the application tests: Administrator A administers
  * Building A, Administrator B Building B, Resident A1 lives in Building A.
- * Two plumbers cover Building A; the electrician covers it too.
+ * Two plumbers cover Building A; the electrician covers it too. Only the
+ * first plumber has a login ({@link #CONTRACTOR_LOGIN}).
  */
 final class ApplicationFixtures {
 
@@ -33,7 +34,11 @@ final class ApplicationFixtures {
     static final UserId ADMIN_B = new UserId("0199f2a0-0000-7000-8000-000000000202");
     static final MembershipId MEMBERSHIP_ADMIN_A = membershipId(4);
 
-    static final Contractor PLUMBER = contractor(1, "Synthetic Plumbing Co.", "plumbing", true, BUILDING_A);
+    static final UserId CONTRACTOR_LOGIN = new UserId("0199f2a0-0000-7000-8000-000000000301");
+    /** The only contractor with a login. */
+    static final Contractor PLUMBER = new Contractor(
+            new ContractorId(UUID.fromString("0199f2a0-0000-7000-8000-00000000e001")), Optional.of(CONTRACTOR_LOGIN),
+            "Synthetic Plumbing Co.", Set.of("plumbing"), Set.of(BUILDING_A), true, true);
     static final Contractor OTHER_PLUMBER = contractor(3, "Synthetic Aqua Plumbers", "plumbing", true, BUILDING_A);
     static final Contractor ELECTRICIAN = contractor(6, "Synthetic Electrical Ltd.", "electrical", true, BUILDING_A);
 

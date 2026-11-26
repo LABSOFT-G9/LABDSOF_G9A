@@ -3,6 +3,7 @@ package pt.isep.bmc.dispatch.support;
 import static pt.isep.bmc.dispatch.support.Fixtures.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -30,7 +31,7 @@ public abstract class IntegrationTestSupport {
 
     /** Tables emptied before each test, children first. */
     private static final String[] TABLES = {
-        "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
+        "outbox", "contractor_responses", "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
         "issue_projection", "membership_projection", "idempotency_keys"};
 
     protected static final String SCOPE = "Leak above garage light fitting, level -1. Access via management.";
@@ -121,6 +122,61 @@ public abstract class IntegrationTestSupport {
         Map<String, Object> body = new HashMap<>();
         body.put("contractorId", contractorId);
         return api.send("PATCH", "/interventions/" + interventionId, tokens.token(sub), headers, body);
+    }
+
+    /** {@code POST /interventions/{id}/approval} with {@code If-Match: "<version>"} and a fresh key. */
+    protected Api.Response approve(String sub, String interventionId, long version, Integer proposalVersion) {
+        return approve(sub, interventionId, version, UUID.randomUUID().toString(), proposalVersion);
+    }
+
+    protected Api.Response approve(String sub, String interventionId, long version, String key, Integer proposalVersion) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("proposalVersion", proposalVersion);
+        return command(sub, "/interventions/" + interventionId + "/approval", version, key, body);
+    }
+
+    /** {@code POST /interventions/{id}/response} as the given caller, with a fresh key. */
+    protected Api.Response respond(String sub, String interventionId, long version, Map<String, Object> body) {
+        return command(sub, "/interventions/" + interventionId + "/response", version, UUID.randomUUID().toString(),
+                body);
+    }
+
+    /** {@code POST /interventions/{id}/proposals} with the draft's window and new scope and terms. */
+    protected Api.Response changeTerms(String sub, String interventionId, long version) {
+        Map<String, Object> body = new HashMap<>(draftBody(null, null));
+        body.remove("issueId");
+        body.remove("contractorId");
+        body.put("terms", "Inspect, repair and report the cost before any extra work.");
+        return command(sub, "/interventions/" + interventionId + "/proposals", version, UUID.randomUUID().toString(),
+                body);
+    }
+
+    protected Api.Response command(String sub, String path, long version, String key, Map<String, Object> body) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("If-Match", "\"" + version + "\"");
+        headers.put("Idempotency-Key", key);
+        return api.send("POST", path, tokens.token(sub), headers, body);
+    }
+
+    protected static Map<String, Object> accept(int proposalVersion) {
+        return new HashMap<>(Map.of("proposalVersion", proposalVersion, "decision", "accept"));
+    }
+
+    /** A draft for a new triaged plumbing issue, sent to {@code CONTRACTOR} (Plumbing Co.): version 2. */
+    protected String sentIntervention() {
+        String interventionId = (String) draft(ADMIN_A, triagedPlumbingIssue(), PLUMBING_CO).json().get("interventionId");
+        Api.Response approved = approve(ADMIN_A, interventionId, 1, 1);
+        if (approved.status() != 200) {
+            throw new IllegalStateException("approval failed: " + approved.status());
+        }
+        return interventionId;
+    }
+
+    /** The outbox rows' CloudEvents payloads, oldest first. */
+    protected List<Map<String, Object>> outboxEvents() {
+        return jdbc.sql("SELECT payload FROM outbox ORDER BY created_at, id").query(String.class).list().stream()
+                .map(Api::parse)
+                .toList();
     }
 
     protected long count(String table) {

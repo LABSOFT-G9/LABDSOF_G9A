@@ -1,8 +1,6 @@
 package pt.isep.bmc.dispatch.adapters.in.rest;
 
 import java.net.URI;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +15,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import pt.isep.bmc.dispatch.adapters.in.rest.dto.AssignmentListResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.ContractorReplacedResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.CreateInterventionRequest;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.DraftReceiptResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.InterventionListResponse;
-import pt.isep.bmc.dispatch.adapters.in.rest.dto.InterventionResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.ReplaceContractorRequest;
 import pt.isep.bmc.dispatch.application.command.ContractorReplaced;
 import pt.isep.bmc.dispatch.application.command.CreateInterventionCommand;
@@ -32,14 +30,17 @@ import pt.isep.bmc.dispatch.application.idempotency.IdempotencyKey;
 import pt.isep.bmc.dispatch.application.port.in.CreateInterventionUseCase;
 import pt.isep.bmc.dispatch.application.port.in.GetInterventionQuery;
 import pt.isep.bmc.dispatch.application.port.in.ReplaceContractorUseCase;
+import pt.isep.bmc.dispatch.application.query.AssignmentView;
+import pt.isep.bmc.dispatch.application.query.InterventionRead;
 import pt.isep.bmc.dispatch.application.query.InterventionView;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
 import pt.isep.bmc.dispatch.domain.shared.IssueId;
 import pt.isep.bmc.dispatch.domain.shared.ValidationException;
 
 /**
- * Draft intervention requests (US-06, technical design 3.2 and 4.2). Saving a
- * draft sends nothing. Every response carries the intervention's version as
+ * Draft intervention requests (US-06, technical design 3.2 and 4.2) and the
+ * reads of administrators and the assigned contractor (US-07). Saving a draft
+ * sends nothing. Every response carries the intervention's version as
  * the {@code ETag}; a change sends it back as {@code If-Match}.
  */
 @RestController
@@ -109,52 +110,53 @@ class InterventionController {
                         result.version(), result.contractorId().toString()));
     }
 
+    /**
+     * The administrator's view, or the assigned contractor's once the request
+     * was sent to them; anyone else gets {@code 404}.
+     */
     @GetMapping("/{interventionId}")
-    ResponseEntity<InterventionResponse> get(@AuthenticationPrincipal Jwt jwt, @PathVariable String interventionId) {
-        InterventionView view = get.get(Actors.of(jwt), id(interventionId));
-        return ResponseEntity.ok().eTag(Long.toString(view.version())).body(response(view));
+    ResponseEntity<Object> get(@AuthenticationPrincipal Jwt jwt, @PathVariable String interventionId) {
+        InterventionRead read = get.get(Actors.of(jwt), id(interventionId));
+        Object body = switch (read) {
+            case InterventionView view -> InterventionResponses.administrator(view);
+            case AssignmentView view -> InterventionResponses.contractor(view);
+        };
+        return ResponseEntity.ok().eTag(Long.toString(read.version())).body(body);
     }
 
-    /** The issue's interventions, newest first. {@code issueId} is required until US-07 adds {@code assigned=me}. */
+    /**
+     * {@code ?issueId=}: the issue's interventions, newest first, for its
+     * administrators. {@code ?assigned=me}: the requests sent to the caller as
+     * a contractor. Exactly one of the two.
+     */
     @GetMapping
-    InterventionListResponse list(
-            @AuthenticationPrincipal Jwt jwt, @RequestParam(name = "issueId", required = false) String issueId) {
+    Object list(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(name = "issueId", required = false) String issueId,
+            @RequestParam(name = "assigned", required = false) String assigned) {
+        if (assigned != null) {
+            if (issueId != null) {
+                throw ValidationException.of("assigned", "not_with_issueId");
+            }
+            if (!"me".equals(assigned)) {
+                throw ValidationException.of("assigned", "invalid");
+            }
+            return new AssignmentListResponse(get.listAssigned(Actors.of(jwt)).stream()
+                    .map(InterventionResponses::contractor)
+                    .toList());
+        }
         RequestIds.check(issueId, "issueId").ifPresent(violation -> {
             throw new ValidationException(List.of(violation));
         });
         return new InterventionListResponse(get.listForIssue(Actors.of(jwt),
                         new IssueId(RequestIds.parse(issueId).orElseThrow()))
                 .stream()
-                .map(InterventionController::response)
+                .map(InterventionResponses::administrator)
                 .toList());
     }
 
     /** An ID that is not a UUID cannot name an intervention: not found, like any unknown one. */
     private static InterventionId id(String raw) {
         return new InterventionId(RequestIds.parse(raw).orElseThrow(NotFoundException::new));
-    }
-
-    private static InterventionResponse response(InterventionView view) {
-        InterventionView.Proposal proposal = view.proposal();
-        return new InterventionResponse(
-                view.interventionId().toString(),
-                view.issueId().toString(),
-                view.state().value(),
-                view.version(),
-                new InterventionResponse.Contractor(view.contractor().contractorId().toString(),
-                        view.contractor().displayName(), view.contractor().synthetic()),
-                new InterventionResponse.Proposal(
-                        proposal.proposalVersion(),
-                        proposal.authorRole(),
-                        proposal.scopeExtract(),
-                        new InterventionResponse.Window(time(proposal.window().start()), time(proposal.window().end())),
-                        proposal.terms(),
-                        time(proposal.createdAt())),
-                time(view.createdAt()),
-                time(view.updatedAt()));
-    }
-
-    private static String time(Instant instant) {
-        return DateTimeFormatter.ISO_INSTANT.format(instant);
     }
 }

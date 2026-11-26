@@ -3,11 +3,15 @@ package pt.isep.bmc.dispatch.config;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import pt.isep.bmc.dispatch.application.command.ApproveProposalService;
+import pt.isep.bmc.dispatch.application.command.ChangeTermsService;
 import pt.isep.bmc.dispatch.application.command.CreateInterventionService;
 import pt.isep.bmc.dispatch.application.command.ProjectionService;
 import pt.isep.bmc.dispatch.application.command.PurgeExpiredIdempotencyKeysService;
 import pt.isep.bmc.dispatch.application.command.ReplaceContractorService;
+import pt.isep.bmc.dispatch.application.command.RespondToRequestService;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
+import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyStore;
 import pt.isep.bmc.dispatch.application.port.out.InterventionReadModel;
@@ -74,6 +78,46 @@ class UseCaseConfig {
             Clock clock) {
         return new ReplaceContractorService(
                 transactions, issues, memberships, catalogue, interventions, idempotency, clock);
+    }
+
+    @Bean
+    ApproveProposalService approveProposalService(
+            TransactionRunner transactions,
+            IssueProjectionRepository issues,
+            MembershipProjectionRepository memberships,
+            ContractorCatalogue catalogue,
+            InterventionRepository interventions,
+            EventOutbox outbox,
+            IdempotencyStore idempotency,
+            IdGenerator ids,
+            Clock clock) {
+        return new ApproveProposalService(
+                transactions, issues, memberships, catalogue, interventions, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    RespondToRequestService respondToRequestService(
+            TransactionRunner transactions,
+            IssueProjectionRepository issues,
+            ContractorCatalogue catalogue,
+            InterventionRepository interventions,
+            EventOutbox outbox,
+            IdempotencyStore idempotency,
+            IdGenerator ids,
+            Clock clock) {
+        return new RespondToRequestService(
+                transactions, issues, catalogue, interventions, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    ChangeTermsService changeTermsService(
+            TransactionRunner transactions,
+            IssueProjectionRepository issues,
+            MembershipProjectionRepository memberships,
+            InterventionRepository interventions,
+            IdempotencyStore idempotency,
+            Clock clock) {
+        return new ChangeTermsService(transactions, issues, memberships, interventions, idempotency, clock);
     }
 
     @Bean

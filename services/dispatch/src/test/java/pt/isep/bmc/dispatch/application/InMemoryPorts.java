@@ -17,6 +17,7 @@ import java.util.function.Supplier;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateProjectionRowException;
+import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyRecord;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyScope;
@@ -24,10 +25,12 @@ import pt.isep.bmc.dispatch.application.port.out.IdempotencyStore;
 import pt.isep.bmc.dispatch.application.port.out.InterventionRepository;
 import pt.isep.bmc.dispatch.application.port.out.IssueProjectionRepository;
 import pt.isep.bmc.dispatch.application.port.out.MembershipProjectionRepository;
+import pt.isep.bmc.dispatch.application.port.out.OutboxEvent;
 import pt.isep.bmc.dispatch.application.port.out.TransactionConflictException;
 import pt.isep.bmc.dispatch.application.port.out.TransactionRunner;
 import pt.isep.bmc.dispatch.domain.contractor.Contractor;
 import pt.isep.bmc.dispatch.domain.contractor.ContractorId;
+import pt.isep.bmc.dispatch.domain.intervention.ContractorResponse;
 import pt.isep.bmc.dispatch.domain.intervention.Intervention;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
 import pt.isep.bmc.dispatch.domain.intervention.ProposalVersion;
@@ -45,13 +48,16 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
  * cover them against MySQL.
  */
 public final class InMemoryPorts implements TransactionRunner, IssueProjectionRepository,
-        MembershipProjectionRepository, ContractorCatalogue, InterventionRepository, IdempotencyStore, IdGenerator {
+        MembershipProjectionRepository, ContractorCatalogue, InterventionRepository, EventOutbox, IdempotencyStore,
+        IdGenerator {
 
     public final Map<IssueId, ProjectedIssue> issues = new HashMap<>();
     public final Map<MembershipId, ProjectedMembership> memberships = new HashMap<>();
     public final Map<ContractorId, Contractor> contractors = new HashMap<>();
     public final Map<InterventionId, Intervention> interventions = new HashMap<>();
     public final List<ProposalVersion> proposals = new ArrayList<>();
+    public final List<ContractorResponse> responses = new ArrayList<>();
+    public final List<OutboxEvent> outbox = new ArrayList<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
@@ -183,8 +189,7 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     @Override
     public void add(Intervention intervention, ProposalVersion firstProposal) {
         put(interventions, intervention.id(), intervention);
-        proposals.add(firstProposal);
-        journal(() -> proposals.remove(firstProposal));
+        addProposal(firstProposal);
     }
 
     @Override
@@ -211,6 +216,61 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
             throw new IllegalStateException("intervention to update does not exist");
         }
         put(interventions, intervention.id(), intervention);
+    }
+
+    @Override
+    public Optional<ProposalVersion> findProposal(InterventionId id, int number) {
+        return proposals.stream().filter(p -> p.interventionId().equals(id) && p.number() == number).findFirst();
+    }
+
+    @Override
+    public Optional<ProposalVersion> findProposalForUpdate(InterventionId id, int number) {
+        return findProposal(id, number);
+    }
+
+    @Override
+    public Optional<ProposalVersion> findProposalCreatedAt(InterventionId id, long interventionVersion) {
+        return proposals.stream()
+                .filter(p -> p.interventionId().equals(id) && p.interventionVersion() == interventionVersion)
+                .findFirst();
+    }
+
+    @Override
+    public void addProposal(ProposalVersion proposal) {
+        if (findProposal(proposal.interventionId(), proposal.number()).isPresent()) {
+            throw new IllegalStateException("proposal version already exists");
+        }
+        proposals.add(proposal);
+        journal(() -> proposals.remove(proposal));
+    }
+
+    @Override
+    public void recordApproval(ProposalVersion approved) {
+        ProposalVersion previous = findProposal(approved.interventionId(), approved.number()).orElseThrow();
+        if (previous.approval().isPresent()) {
+            throw new IllegalStateException("proposal version already approved");
+        }
+        int index = proposals.indexOf(previous);
+        proposals.set(index, approved);
+        journal(() -> proposals.set(proposals.indexOf(approved), previous));
+    }
+
+    @Override
+    public void addResponse(ContractorResponse response) {
+        if (responses.stream().anyMatch(r -> r.interventionId().equals(response.interventionId())
+                && r.proposalVersion() == response.proposalVersion())) {
+            throw new IllegalStateException("version already answered");
+        }
+        responses.add(response);
+        journal(() -> responses.remove(response));
+    }
+
+    // Outbox
+
+    @Override
+    public void append(OutboxEvent event) {
+        outbox.add(event);
+        journal(() -> outbox.remove(event));
     }
 
     // Idempotency keys

@@ -5,16 +5,17 @@
 
 -- 1. The synthetic contractor catalogue (US-06). Only Synthetic Plumbing Co.
 --    has a Keycloak account (synthetic.contractor@bmc.example, sub ...0301).
---    The other user IDs are placeholders with no account behind them.
+--    The others have no login (user_id NULL), so approving a request for one
+--    of them is refused with 422 CONTRACTOR_HAS_NO_ACCOUNT (US-07).
 --    Buildings: ...b001 = Synthetic Building A, ...b002 = Synthetic Building B,
 --    as in Issue's seed.
 INSERT INTO contractors (id, user_id, display_name, active, synthetic) VALUES
   ('0199f2a0-0000-7000-8000-00000000e001', '0199f2a0-0000-7000-8000-000000000301', 'Synthetic Plumbing Co.', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e002', '0199f2a0-0000-7000-8000-000000000302', 'Synthetic Electrical Services', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e003', '0199f2a0-0000-7000-8000-000000000303', 'Synthetic Lift Maintenance', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e004', '0199f2a0-0000-7000-8000-000000000304', 'Synthetic Aqua Repairs', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e005', '0199f2a0-0000-7000-8000-000000000305', 'Synthetic Drain Masters', FALSE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e006', '0199f2a0-0000-7000-8000-000000000306', 'Synthetic Aqua Plumbers', TRUE, TRUE)
+  ('0199f2a0-0000-7000-8000-00000000e002', NULL, 'Synthetic Electrical Services', TRUE, TRUE),
+  ('0199f2a0-0000-7000-8000-00000000e003', NULL, 'Synthetic Lift Maintenance', TRUE, TRUE),
+  ('0199f2a0-0000-7000-8000-00000000e004', NULL, 'Synthetic Aqua Repairs', TRUE, TRUE),
+  ('0199f2a0-0000-7000-8000-00000000e005', NULL, 'Synthetic Drain Masters', FALSE, TRUE),
+  ('0199f2a0-0000-7000-8000-00000000e006', NULL, 'Synthetic Aqua Plumbers', TRUE, TRUE)
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), display_name = VALUES(display_name), active = VALUES(active),
                         synthetic = VALUES(synthetic);
 

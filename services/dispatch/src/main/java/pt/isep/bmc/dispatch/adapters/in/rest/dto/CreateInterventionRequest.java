@@ -7,4 +7,10 @@ public record CreateInterventionRequest(
     /** RFC 3339 timestamps with an offset; stored in UTC. */
     public record WindowBody(String start, String end) {
     }
+
+    /** Never prints free text: Spring logs request bodies at DEBUG. */
+    @Override
+    public String toString() {
+        return "CreateInterventionRequest[issueId=" + issueId + ", contractorId=" + contractorId + "]";
+    }
 }
