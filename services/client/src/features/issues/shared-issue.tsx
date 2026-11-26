@@ -171,6 +171,8 @@ export function PublishSummary({ issue }: { issue: Issue }) {
             variant="outline"
             size="sm"
             onClick={() => {
+              // Start from the summary on screen: a refetch may have brought another administrator's since.
+              setText(issue.summary?.text ?? "");
               setSaved(false);
               setEditing(true);
             }}
@@ -272,16 +274,9 @@ export function PublishSummary({ issue }: { issue: Issue }) {
  * status; the messages say so. Each choice is the caller's own; the service answers the new state, which is shown.
  */
 export function SharedIssuePanel({ issue, canConfirm }: { issue: Issue; canConfirm: boolean }) {
-  const { issues, clock } = useServices();
-  const queryClient = useQueryClient();
-  const impact = useMutation(impactMutation(issues, queryClient, issue.issueId));
-  const subscription = useMutation(subscriptionMutation(issues, queryClient, issue.issueId));
+  const { clock } = useServices();
   const id = useId();
   if (!issue.summary) return null;
-
-  const mine = issue.impact?.mine ?? false;
-  // While a change is on its way, show the choice being made; the service's answer replaces it.
-  const subscribed = subscription.isPending ? subscription.variables : (issue.subscribed ?? false);
 
   return (
     <section aria-labelledby={`${id}-title`} className="space-y-4">
@@ -291,7 +286,42 @@ export function SharedIssuePanel({ issue, canConfirm }: { issue: Issue; canConfi
       <blockquote className="border-l-2 pl-3 text-sm break-words whitespace-pre-wrap">{issue.summary.text}</blockquote>
       <PublishedAt at={issue.summary.publishedAt} now={clock.now()} />
       <ImpactCount issue={issue} />
+      <SharedIssueChoices issue={issue} canConfirm={canConfirm} />
+    </section>
+  );
+}
 
+/**
+ * An administrator's own choices on a shared issue, under the publication card: notifications, and "this affects me
+ * too" when the administrator is also a resident of the building. The service allows both (US-04-01).
+ */
+export function OwnChoices({ issue, canConfirm }: { issue: Issue; canConfirm: boolean }) {
+  const id = useId();
+  if (!issue.summary) return null;
+
+  return (
+    <section aria-labelledby={`${id}-title`} className="space-y-4">
+      <h2 id={`${id}-title`} className="text-base font-semibold">
+        {t.issues.shared.ownChoicesTitle}
+      </h2>
+      <SharedIssueChoices issue={issue} canConfirm={canConfirm} />
+    </section>
+  );
+}
+
+function SharedIssueChoices({ issue, canConfirm }: { issue: Issue; canConfirm: boolean }) {
+  const { issues } = useServices();
+  const queryClient = useQueryClient();
+  const impact = useMutation(impactMutation(issues, queryClient, issue.issueId));
+  const subscription = useMutation(subscriptionMutation(issues, queryClient, issue.issueId));
+  const id = useId();
+
+  const mine = issue.impact?.mine ?? false;
+  // While a change is on its way, show the choice being made; the service's answer replaces it.
+  const subscribed = subscription.isPending ? subscription.variables : (issue.subscribed ?? false);
+
+  return (
+    <>
       {canConfirm ? (
         <div className="space-y-2">
           {mine ? (
@@ -366,6 +396,6 @@ export function SharedIssuePanel({ issue, canConfirm }: { issue: Issue; canConfi
         </p>
         {subscription.isError ? <ErrorState error={subscription.error} /> : null}
       </div>
-    </section>
+    </>
   );
 }

@@ -2,6 +2,7 @@ import type { AppContext } from "@/app/context";
 import { readSession, sessionKey, sessionQuery, writeSession } from "@/features/auth/api";
 import type { Session } from "@/ports/auth-session";
 import { isUnavailable } from "@/shared/lib/errors";
+import { forgetUnsentReportOfOthers } from "@/shared/lib/unsent-report";
 
 export type AuthState =
   | { readonly kind: "signed-in"; readonly session: Session }
@@ -26,6 +27,8 @@ export async function loadAuth(context: AppContext): Promise<AuthState> {
     const session = await queryClient.fetchQuery(sessionQuery(services.auth));
     // The re-ask found another account: wipe the previous one's data BEFORE any loader can read it from the cache.
     if (inMemory && session && inMemory.sub !== session.sub) await forgetUserData(context, session);
+    // A report kept across sign-in belongs to its author only: gone as soon as someone else is signed in.
+    if (session) forgetUnsentReportOfOthers(session.sub);
     return toState(session);
   } catch (error) {
     if (isUnavailable(error)) return inMemory === undefined ? { kind: "unreachable", error } : toState(inMemory);

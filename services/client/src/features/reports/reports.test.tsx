@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Report, ReportReceipt, ReportSummary, SubmitReport } from "@/contracts/issue";
 import { ApiError, NetworkError } from "@/shared/lib/errors";
+import { keepUnsentReport } from "@/shared/lib/unsent-report";
 import { stubIssueApi } from "@/test/fakes";
 import { renderApp } from "@/test/render-app";
 
@@ -133,6 +134,77 @@ describe("report form (mock Issue service)", () => {
     expect(second![1]).toBe(first![1]);
     expect(second![0]).toEqual(first![0]);
     expect(first![0]).toEqual({ buildingId: expect.any(String), areaId: areas[0]!.areaId, text: TEXT });
+  });
+
+  describe("when the session ended while the report was being written", () => {
+    /** The service answers `401`, as it does once the edge session is gone; the persona is gone with it. */
+    const sessionEnded = () =>
+      vi
+        .fn<(report: SubmitReport, key: string) => Promise<ReportReceipt>>()
+        .mockImplementationOnce(async () => {
+          localStorage.removeItem("bmc-mock-persona");
+          throw new ApiError(401, "UNAUTHENTICATED", "Sign in to continue.");
+        })
+        .mockResolvedValue(receipt);
+
+    it("gives the text back after sign-in, says nothing was saved, and sends it as a new action", async () => {
+      const user = userEvent.setup();
+      const submitReport = sessionEnded();
+      renderApp("/reports/new", { services: { issues: stubIssueApi({ listAreas: async () => areas, submitReport }) } });
+      await fillForm(user);
+      await user.click(screen.getByRole("button", { name: "Send report" }));
+
+      await screen.findByRole("heading", { name: "Sign in to BMC" });
+      await user.click(screen.getByRole("button", { name: /Resident A1/ }));
+
+      await screen.findByRole("heading", { level: 1, name: "Report a fault" });
+      expect(screen.getByText("Your report was not sent")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "What is wrong?" })).toHaveValue(TEXT);
+      const area = screen.getByRole("combobox", { name: "Where is the fault?" });
+      await waitFor(() => expect(area).toHaveDisplayValue("Garage level -1 (Common area)"));
+      // Taken once: nothing stays in the tab.
+      expect(sessionStorage.getItem("bmc-unsent-report")).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Send report" }));
+      await screen.findByRole("heading", { level: 2, name: "Report received" });
+      const [first, second] = submitReport.mock.calls;
+      expect(second![0]).toEqual(first![0]);
+      // The `401` stored nothing, so this is a new action with a new key.
+      expect(second![1]).not.toBe(first![1]);
+    });
+
+    it("removes a kept report on any page once someone else is signed in, and keeps the author's", async () => {
+      const kept = { buildingId: "b1", areaId: "a1", text: TEXT };
+      keepUnsentReport("someone-else", kept);
+      const first = renderApp("/reports");
+      await screen.findByRole("heading", { level: 1, name: "Reports" });
+      expect(sessionStorage.getItem("bmc-unsent-report")).toBeNull();
+      first.unmount();
+
+      keepUnsentReport("0199f2a0-0000-7000-8000-000000000101", kept);
+      renderApp("/reports");
+      await screen.findByRole("heading", { level: 1, name: "Reports" });
+      expect(sessionStorage.getItem("bmc-unsent-report")).toContain(TEXT);
+    });
+
+    it("never gives the text to someone else who signs in on the same tab", async () => {
+      const user = userEvent.setup();
+      renderApp("/reports/new", {
+        services: { issues: stubIssueApi({ listAreas: async () => areas, submitReport: sessionEnded() }) },
+      });
+      await fillForm(user);
+      await user.click(screen.getByRole("button", { name: "Send report" }));
+
+      await screen.findByRole("heading", { name: "Sign in to BMC" });
+      expect(sessionStorage.getItem("bmc-unsent-report")).toContain(TEXT);
+      await user.click(screen.getByRole("button", { name: /Resident A2/ }));
+
+      await screen.findByRole("heading", { level: 1, name: "Report a fault" });
+      // Removed as soon as the other person is known, before the form is shown.
+      expect(sessionStorage.getItem("bmc-unsent-report")).toBeNull();
+      expect(screen.getByRole("textbox", { name: "What is wrong?" })).toHaveValue("");
+      expect(screen.queryByText("Your report was not sent")).not.toBeInTheDocument();
+    });
   });
 
   it("uses a new key once the report is changed after a failure", async () => {

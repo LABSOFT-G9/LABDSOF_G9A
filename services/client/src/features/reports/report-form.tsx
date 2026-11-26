@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CircleCheck, CloudOff, RotateCw } from "lucide-react";
+import { CircleCheck, CloudOff, Info, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { useServices } from "@/app/context";
 import {
@@ -26,6 +26,7 @@ import { t } from "@/shared/i18n";
 import { isApiError, isUnavailable, NetworkError } from "@/shared/lib/errors";
 import { formatDateTime } from "@/shared/lib/format";
 import { randomId } from "@/shared/lib/id";
+import { keepUnsentReport, takeUnsentReport } from "@/shared/lib/unsent-report";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
@@ -43,15 +44,33 @@ export function ReportForm() {
   const session = useSession();
   const { issues } = useServices();
   const queryClient = useQueryClient();
-  const mutation = useMutation(submitReportMutation(issues, queryClient));
+  const mutation = useMutation({
+    ...submitReportMutation(issues, queryClient),
+    // The session ended while the report was being written: the app goes to sign-in, and the report is kept for after.
+    onError: (error, { report }) => {
+      if (isApiError(error, 401)) keepUnsentReport(session.sub, report);
+    },
+  });
   const id = useId();
 
   const buildings = session.memberships;
-  const [values, setValues] = useState<SubmitReport>(() => ({
-    buildingId: buildings.length === 1 ? buildings[0]!.buildingId : "",
-    areaId: "",
-    text: "",
-  }));
+  // Read once: taking the kept report also removes it.
+  const [restored] = useState(() => {
+    const kept = takeUnsentReport(session.sub);
+    if (!kept) return null;
+    // The building may no longer be one of the person's: the text is still theirs.
+    return buildings.some((m) => m.buildingId === kept.buildingId)
+      ? kept
+      : { buildingId: "", areaId: "", text: kept.text };
+  });
+  const [values, setValues] = useState<SubmitReport>(
+    () =>
+      restored ?? {
+        buildingId: buildings.length === 1 ? buildings[0]!.buildingId : "",
+        areaId: "",
+        text: "",
+      },
+  );
   const [errors, setErrors] = useState<ReportFieldErrors>({});
   const [receipt, setReceipt] = useState<ReportReceipt | null>(null);
   /** The current action's key: kept across retries, dropped as soon as the report changes (a new action). */
@@ -180,6 +199,14 @@ export function ReportForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="max-w-xl space-y-5">
+      {restored ? (
+        <Alert>
+          <Info aria-hidden />
+          <AlertTitle>{t.reports.restored}</AlertTitle>
+          <AlertDescription>{t.reports.restoredBody}</AlertDescription>
+        </Alert>
+      ) : null}
+
       {Object.keys(errors).length > 0 ? (
         <p role="alert" className="text-destructive text-sm font-medium">
           {t.reports.errors.summary}

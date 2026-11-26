@@ -7,7 +7,7 @@ import { hasBuildingRole, useSession } from "@/features/auth";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
-import { PublishSummary, SharedIssuePanel } from "@/features/issues/shared-issue";
+import { OwnChoices, PublishSummary, SharedIssuePanel } from "@/features/issues/shared-issue";
 import { CriticalCheckBanner, SuggestionPanel } from "@/features/issues/suggestion-panel";
 import { TriageForm } from "@/features/issues/triage-form";
 import { TriageBadge } from "@/features/issues/triage-status";
@@ -36,6 +36,7 @@ export function IssuePage({ issueId }: { issueId: string }) {
   const { data: issue, dataUpdatedAt } = useSuspenseQuery(issueQuery(issues, issueId));
   const history = useQuery(historyQuery(issues, issueId));
   const isAdministrator = hasBuildingRole(session, issue.buildingId, "administrator");
+  const isResident = hasBuildingRole(session, issue.buildingId, "resident");
   const now = clock.now();
   void dataUpdatedAt;
 
@@ -93,15 +94,24 @@ export function IssuePage({ issueId }: { issueId: string }) {
           ) : null}
 
           {isAdministrator ? (
-            <Card>
-              <CardContent>
-                <PublishSummary issue={issue} />
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardContent>
+                  <PublishSummary issue={issue} />
+                </CardContent>
+              </Card>
+              {issue.summary ? (
+                <Card>
+                  <CardContent>
+                    <OwnChoices issue={issue} canConfirm={isResident} />
+                  </CardContent>
+                </Card>
+              ) : null}
+            </>
           ) : issue.summary ? (
             <Card>
               <CardContent>
-                <SharedIssuePanel issue={issue} canConfirm={hasBuildingRole(session, issue.buildingId, "resident")} />
+                <SharedIssuePanel issue={issue} canConfirm={isResident} />
               </CardContent>
             </Card>
           ) : null}
