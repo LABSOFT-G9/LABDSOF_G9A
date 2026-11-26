@@ -18,6 +18,7 @@ import pt.isep.bmc.issue.domain.issue.TriageReason;
  * @param origin   who suggested, on a suggestion only
  * @param applied  on a suggestion only: whether it moved the issue to {@code in_triage}; false for a late one
  * @param reason   internal: present only for administrators of the building
+ * @param code     on a critical alert only: the code of the rule that matched
  */
 public record IssueHistoryItem(
         int sequence,
@@ -29,7 +30,8 @@ public record IssueHistoryItem(
         Optional<IssueUrgency> urgency,
         Optional<TriageReason> reason,
         Optional<SuggestionOrigin> origin,
-        Optional<Boolean> applied) {
+        Optional<Boolean> applied,
+        Optional<String> code) {
 
     public IssueHistoryItem {
         Objects.requireNonNull(type, "type");
@@ -41,11 +43,12 @@ public record IssueHistoryItem(
         Objects.requireNonNull(reason, "reason");
         Objects.requireNonNull(origin, "origin");
         Objects.requireNonNull(applied, "applied");
+        Objects.requireNonNull(code, "code");
     }
 
     /** The same entry with the internal reason removed. */
     public IssueHistoryItem withoutReason() {
         return new IssueHistoryItem(sequence, type, visibility, actorRole, occurredAt, category, urgency, Optional.empty(),
-                origin, applied);
+                origin, applied, code);
     }
 }

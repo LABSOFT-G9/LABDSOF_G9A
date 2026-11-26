@@ -21,6 +21,9 @@ import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.AreaKind;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
+import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
+import pt.isep.bmc.issue.domain.issue.CriticalRules;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.MembershipId;
@@ -53,7 +56,11 @@ class SubmitReportServiceTest {
         ports.areas.put(GARAGE_A.id(), GARAGE_A);
         ports.areas.put(GARAGE_B.id(), GARAGE_B);
         clock = new MutableClock(NOW);
-        service = new SubmitReportService(ports, ports, ports, ports, ports, ports, ports, ports, clock);
+        service = service(new CriticalAlertsV1());
+    }
+
+    SubmitReportService service(CriticalRules rules) {
+        return new SubmitReportService(ports, ports, ports, ports, ports, ports, rules, ports, ports, ports, ports, clock);
     }
 
     SubmitReportCommand command(String key, Area area, String text) {
@@ -75,6 +82,83 @@ class SubmitReportServiceTest {
                 .containsExactly("ReportSubmitted", "TriageRequested");
         assertThat(ports.outbox).allSatisfy(e -> assertThat(e.correlationId()).isEqualTo("c-1"));
         assertThat(ports.keys).hasSize(1);
+    }
+
+    static final String DANGER = "There is smoke in the garage and a smell of gas.";
+
+    @Test
+    void storesTheCriticalSignalsAndTheirHistoryWithTheReport() {
+        ReportReceipt receipt = service.submit(command("k1", GARAGE_A, DANGER));
+
+        assertThat(receipt.version()).isEqualTo(1);
+        assertThat(ports.issues).singleElement().satisfies(issue -> {
+            assertThat(issue.criticalCheckStatus()).isEqualTo(CriticalCheckStatus.COMPLETED);
+            assertThat(issue.criticalRulesVersion()).contains("critical-alerts-v1");
+        });
+        assertThat(ports.criticalSignals).extracting(signal -> signal.code())
+                .containsExactly("smoke_or_fire", "gas_smell");
+        assertThat(ports.criticalSignals).allSatisfy(
+                signal -> assertThat(signal.issueId()).isEqualTo(receipt.issueId()));
+        assertThat(ports.history).extracting(entry -> entry.type().value())
+                .containsExactly("report_received", "critical_alert_raised", "critical_alert_raised");
+        assertThat(ports.history).extracting(entry -> entry.sequence()).containsExactly(1, 2, 3);
+        // Triage is still requested: an alert is not a decision and does not replace the suggestion.
+        assertThat(ports.outbox).extracting(e -> e.event().type())
+                .containsExactly("ReportSubmitted", "TriageRequested");
+        assertThat(ports.failedCriticalChecks).isEmpty();
+    }
+
+    @Test
+    void anOrdinaryReportCompletesTheCheckWithNoSignal() {
+        service.submit(command("k1", GARAGE_A, TEXT));
+
+        assertThat(ports.issues).singleElement().satisfies(
+                issue -> assertThat(issue.criticalCheckStatus()).isEqualTo(CriticalCheckStatus.COMPLETED));
+        assertThat(ports.criticalSignals).isEmpty();
+        assertThat(ports.history).hasSize(1);
+    }
+
+    @Test
+    void aRuleSetThatFailsNeitherRefusesNorDelaysTheReceiptAndLeavesTheCheckPending() {
+        ReportReceipt receipt = service(pt.isep.bmc.issue.domain.CriticalCheckTest.failing())
+                .submit(command("k1", GARAGE_A, DANGER));
+
+        assertThat(receipt.state()).isEqualTo(IssueState.RECEIVED);
+        assertThat(receipt.replayed()).isFalse();
+        assertThat(ports.reports).containsKey(receipt.reportId());
+        assertThat(ports.issues).singleElement().satisfies(issue -> {
+            assertThat(issue.criticalCheckStatus()).isEqualTo(CriticalCheckStatus.PENDING);
+            assertThat(issue.criticalRulesVersion()).isEmpty();
+        });
+        assertThat(ports.criticalSignals).isEmpty();
+        assertThat(ports.history).hasSize(1);
+        assertThat(ports.outbox).hasSize(2);
+        // Visible to operators, with the issue and the exception class only.
+        assertThat(ports.failedCriticalChecks)
+                .containsExactly(receipt.issueId() + ": java.lang.IllegalArgumentException");
+        assertThat(ports.failedCriticalChecks.getFirst()).doesNotContain("smoke", "gas");
+    }
+
+    @Test
+    void aReplayRaisesNoSignalTwice() {
+        service.submit(command("k1", GARAGE_A, DANGER));
+        service.submit(command("k1", GARAGE_A, DANGER));
+
+        assertThat(ports.criticalSignals).hasSize(2);
+        assertThat(ports.history).hasSize(3);
+    }
+
+    @Test
+    void aFailureAfterTheSignalsWereStoredLeavesNoSignalBehind() {
+        ports.failAppendNumber = 2;
+
+        assertThatThrownBy(() -> service.submit(command("k1", GARAGE_A, DANGER)))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(ports.reports).isEmpty();
+        assertThat(ports.issues).isEmpty();
+        assertThat(ports.criticalSignals).isEmpty();
+        assertThat(ports.history).isEmpty();
     }
 
     @Test
@@ -106,8 +190,7 @@ class SubmitReportServiceTest {
             InMemoryPorts other = ports;
             Runnable none = null;
             other.beforeNextRecord = none;
-            winner[0] = new SubmitReportService(other, other, other, other, other, other, other, other, clock)
-                    .submit(command("k1", GARAGE_A, TEXT));
+            winner[0] = service(new CriticalAlertsV1()).submit(command("k1", GARAGE_A, TEXT));
         };
         ReportReceipt loser = service.submit(command("k1", GARAGE_A, TEXT));
 

@@ -55,7 +55,8 @@ public abstract class IntegrationTestSupport {
     void resetData() throws Exception {
         for (String table : new String[] {
             "outbox", "idempotency_keys", "impact_confirmations", "issue_subscriptions", "issue_summaries",
-            "triage_suggestions", "triage_decisions", "issue_history", "reports", "issues"}) {
+            "triage_suggestions", "triage_decisions", "issue_critical_signals", "issue_history", "reports",
+            "issues"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
         try (var connection = dataSource.getConnection()) {

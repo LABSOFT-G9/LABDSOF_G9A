@@ -11,6 +11,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
@@ -39,7 +41,7 @@ class IssueTest {
 
     @Test
     void aNewIssueHasNothingDecided() {
-        Issue received = Issue.receive(ID, BUILDING, AREA, CREATED);
+        Issue received = Issue.receive(ID, BUILDING, AREA, CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION));
         assertThat(received.state()).isEqualTo(IssueState.RECEIVED);
         assertThat(received.version()).isEqualTo(1);
         assertThat(received.category()).isEmpty();
@@ -106,7 +108,7 @@ class IssueTest {
     /** Late-result fixture (US-02): the AI answers after the administrator decided. */
     @Test
     void aLateSuggestionNeverOverwritesAHumanDecision() {
-        Issue received = Issue.receive(ID, BUILDING, AREA, CREATED);
+        Issue received = Issue.receive(ID, BUILDING, AREA, CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION));
         Issue decided = received.decideTriage(1, IssueCategory.ELECTRICAL, IssueUrgency.CRITICAL, LATER);
 
         // The suggestion answers the request (version 1), but the issue is now triaged.
@@ -128,7 +130,8 @@ class IssueTest {
     /** The request names version 1 ({@code TriageRequested}); nothing else was ever asked for. */
     @Test
     void aSuggestionThatNamesAVersionTriageWasNotAskedForIsIgnored() {
-        assertThat(Issue.receive(ID, BUILDING, AREA, CREATED).triageRequestVersion()).isEqualTo(1);
+        assertThat(Issue.receive(ID, BUILDING, AREA, CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION))
+                .triageRequestVersion()).isEqualTo(1);
         assertThat(issue(IssueState.RECEIVED, 3).suggestTriage(2, LATER)).isEmpty();
         assertThat(issue(IssueState.RECEIVED, 3).suggestTriage(3, LATER)).isEmpty();
         assertThat(issue(IssueState.RECEIVED, 1).suggestTriage(2, LATER)).isEmpty();
@@ -138,7 +141,8 @@ class IssueTest {
     @Test
     void aSummaryPublishedFirstDoesNotMakeTheSuggestionLate() {
         SummaryId summary = new SummaryId(UUID.randomUUID());
-        Issue shared = Issue.receive(ID, BUILDING, AREA, CREATED).publishSummary(1, summary, LATER);
+        Issue shared = Issue.receive(ID, BUILDING, AREA, CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION))
+                .publishSummary(1, summary, LATER);
         assertThat(shared.version()).isEqualTo(2);
 
         Optional<Issue> next = shared.suggestTriage(1, LATER.plusSeconds(60));

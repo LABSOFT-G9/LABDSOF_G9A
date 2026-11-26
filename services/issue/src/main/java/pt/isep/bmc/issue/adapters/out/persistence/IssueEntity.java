@@ -35,6 +35,9 @@ class IssueEntity {
     @Column(name = "critical_check_status", nullable = false)
     String criticalCheckStatus;
 
+    @Column(name = "critical_rules_version")
+    String criticalRulesVersion;
+
     @Column(name = "published_summary_id", length = 36)
     String publishedSummaryId;
 

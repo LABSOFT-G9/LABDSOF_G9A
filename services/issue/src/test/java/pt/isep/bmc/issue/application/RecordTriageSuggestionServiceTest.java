@@ -18,6 +18,8 @@ import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.AreaKind;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.HistoryEntryType;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
@@ -46,7 +48,7 @@ class RecordTriageSuggestionServiceTest {
     void setUp() {
         ports = new InMemoryPorts();
         ports.areas.put(GARAGE.id(), GARAGE);
-        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(30));
+        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(30), CriticalFindings.none(CriticalAlertsV1.VERSION));
         ports.issues.add(issue);
         ports.history.add(IssueHistoryEntry.reportReceived(issue.id(), ReportSource.RESIDENT, issue.createdAt()));
         service = new RecordTriageSuggestionService(ports, ports, ports, ports, ports, ports,

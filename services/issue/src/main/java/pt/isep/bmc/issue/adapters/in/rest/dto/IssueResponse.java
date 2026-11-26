@@ -1,5 +1,7 @@
 package pt.isep.bmc.issue.adapters.in.rest.dto;
 
+import java.util.List;
+
 /**
  * One issue, in {@code GET /issues} and {@code GET /issues/{id}}, already
  * projected for the caller. No report text and nobody's identity.
@@ -12,6 +14,8 @@ package pt.isep.bmc.issue.adapters.in.rest.dto;
  * @param summary    the published summary, or {@code null} while the issue is not shared with the building
  * @param impact     how many residents confirmed the issue affects them; {@code null} while there is no summary
  * @param subscribed the caller's own notification choice; off by default
+ * @param criticalCheck Issue's own critical check, for administrators of the building only; {@code null}
+ *                      for everyone else
  */
 public record IssueResponse(
         String issueId,
@@ -25,7 +29,24 @@ public record IssueResponse(
         Suggestion suggestion,
         Summary summary,
         Impact impact,
-        boolean subscribed) {
+        boolean subscribed,
+        CriticalCheck criticalCheck) {
+
+    /**
+     * Issue's own check for signs of danger in the report, independent of the
+     * AI: no suggestion, retry or decision removes a signal.
+     *
+     * @param status       {@code pending} until the rule set has run on the report, then {@code completed}.
+     *                     {@code pending} with no signals means "not checked", never "nothing found"
+     * @param rulesVersion the rule set that completed the check; {@code null} while it is pending
+     * @param signals      one per rule that matched, oldest first; empty when nothing matched
+     */
+    public record CriticalCheck(String status, String rulesVersion, List<Signal> signals) {
+
+        /** @param code the rule's stable code, for example {@code gas_smell}; the client words it */
+        public record Signal(String code, String raisedAt) {
+        }
+    }
 
     /**
      * @param reason         internal: {@code null} for residents and in lists

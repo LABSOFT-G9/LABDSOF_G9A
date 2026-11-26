@@ -2,7 +2,9 @@ package pt.isep.bmc.issue.adapters.out.persistence;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.issue.application.port.out.IssueRepository;
 import pt.isep.bmc.issue.domain.issue.Issue;
@@ -50,6 +52,8 @@ class JpaIssueRepository implements IssueRepository {
         entity.version = issue.version();
         entity.category = issue.category().map(IssueCategory::value).orElse(null);
         entity.urgency = issue.urgency().map(IssueUrgency::value).orElse(null);
+        entity.criticalCheckStatus = issue.criticalCheckStatus().value();
+        entity.criticalRulesVersion = issue.criticalRulesVersion().orElse(null);
         entity.publishedSummaryId = issue.publishedSummaryId().map(SummaryId::toString).orElse(null);
         entity.updatedAt = Timestamps.toColumn(issue.updatedAt());
     }
@@ -57,6 +61,23 @@ class JpaIssueRepository implements IssueRepository {
     @Override
     public void appendHistory(IssueHistoryEntry entry) {
         entityManager.persist(PersistenceMapper.toEntity(entry));
+    }
+
+    @Override
+    public List<IssueId> findWithPendingCriticalCheck(Optional<IssueId> after, int limit) {
+        return entityManager
+                .createQuery("""
+                        SELECT i.id FROM IssueEntity i
+                         WHERE i.criticalCheckStatus = 'pending' AND i.id > :after
+                         ORDER BY i.id
+                        """, String.class)
+                // IDs are lower-case UUIDs, so the empty string comes before every one of them.
+                .setParameter("after", after.map(IssueId::toString).orElse(""))
+                .setMaxResults(limit)
+                .getResultList()
+                .stream()
+                .map(id -> new IssueId(UUID.fromString(id)))
+                .toList();
     }
 
     @Override

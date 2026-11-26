@@ -23,6 +23,8 @@ import pt.isep.bmc.issue.domain.building.AreaKind;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
 import pt.isep.bmc.issue.domain.event.IssueTriaged;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.HistoryEntryType;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
@@ -67,7 +69,7 @@ class DecideTriageServiceTest {
         ports.memberships.add(membership(OTHER_ADMIN, MembershipRole.ADMINISTRATOR));
         ports.memberships.add(membership(RESIDENT, MembershipRole.RESIDENT));
         ports.areas.put(GARAGE.id(), GARAGE);
-        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(600));
+        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(600), CriticalFindings.none(CriticalAlertsV1.VERSION));
         ports.issues.add(issue);
         ports.history.add(IssueHistoryEntry.reportReceived(issue.id(), ReportSource.RESIDENT, issue.createdAt()));
         service = new DecideTriageService(ports, ports, ports, ports, ports, ports, ports, ports, ports,
@@ -255,7 +257,8 @@ class DecideTriageServiceTest {
     @Test
     void triageIsRefusedOnceTheIssueIsInCoordination() {
         Issue coordinating = Issue.restore(issue.id(), A, GARAGE.id(), IssueState.IN_COORDINATION, 5,
-                IssueCategory.PLUMBING, IssueUrgency.HIGH, issue.criticalCheckStatus(), issue.createdAt(), issue.createdAt());
+                IssueCategory.PLUMBING, IssueUrgency.HIGH, issue.criticalCheckStatus(),
+                issue.criticalRulesVersion().orElse(null), null, issue.createdAt(), issue.createdAt());
         ports.issues.set(0, coordinating);
         assertThatThrownBy(() -> service.decide(command(ADMIN, "k1", 5, "electrical", "low", REASON)))
                 .isInstanceOfSatisfying(InvalidTransitionException.class,

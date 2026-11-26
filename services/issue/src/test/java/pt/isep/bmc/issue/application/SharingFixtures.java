@@ -11,6 +11,8 @@ import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.AreaKind;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
@@ -54,7 +56,7 @@ final class SharingFixtures {
         ports.memberships.add(membership(NEIGHBOUR, A, MembershipRole.RESIDENT));
         ports.memberships.add(membership(OUTSIDER, B, MembershipRole.RESIDENT));
         ports.areas.put(GARAGE.id(), GARAGE);
-        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(600));
+        issue = Issue.receive(new IssueId(UUID.randomUUID()), A, GARAGE.id(), NOW.minusSeconds(600), CriticalFindings.none(CriticalAlertsV1.VERSION));
         ports.issues.add(issue);
         ports.history.add(IssueHistoryEntry.reportReceived(issue.id(), ReportSource.RESIDENT, issue.createdAt()));
         ReportId reportId = new ReportId(UUID.randomUUID());

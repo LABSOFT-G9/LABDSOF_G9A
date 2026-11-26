@@ -133,6 +133,63 @@ class RestartIT {
                 "corr-restart-it"));
     }
 
+    /**
+     * US-14: alerts are still there after a restart, and a check that was left
+     * pending is completed by the next start, once.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void criticalAlertsSurviveARestartAndAPendingCheckIsCompletedAtTheNextStart() throws Exception {
+        MySQLContainer mysql = TestDatabase.shared();
+        TestTokens tokens = TestTokens.get();
+        String checked;
+        String leftPending;
+        try (ConfigurableApplicationContext first = start(mysql)) {
+            try (var connection = first.getBean(javax.sql.DataSource.class).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us01-fixtures.sql"));
+            }
+            checked = (String) api(first).post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                    Map.of("buildingId", BUILDING_A, "areaId", AREA_A_GARAGE,
+                            "text", "Restart check: there is smoke in the garage.")).json().get("issueId");
+            leftPending = (String) api(first).post("/reports", tokens.token(RESIDENT_A1),
+                    UUID.randomUUID().toString(), Map.of("buildingId", BUILDING_A, "areaId", AREA_A_HALL,
+                            "text", "Restart check: a strong smell of gas in the hall.")).json().get("issueId");
+            // As if the rule set had failed for the second report: stored, pending, no signal.
+            var jdbc = first.getBean(org.springframework.jdbc.core.simple.JdbcClient.class);
+            jdbc.sql("DELETE FROM issue_critical_signals WHERE issue_id = :id").param("id", leftPending).update();
+            jdbc.sql("DELETE FROM issue_history WHERE issue_id = :id AND type = 'critical_alert_raised'")
+                    .param("id", leftPending).update();
+            jdbc.sql("UPDATE issues SET critical_check_status = 'pending', critical_rules_version = NULL"
+                    + " WHERE id = :id").param("id", leftPending).update();
+            var pending = (Map<String, Object>) api(first).get("/issues/" + leftPending, tokens.token(ADMIN_A))
+                    .json().get("criticalCheck");
+            assertThat(pending).containsEntry("status", "pending");
+            assertThat((java.util.List<?>) pending.get("signals")).isEmpty();
+        }
+        for (int start = 0; start < 2; start++) {
+            try (ConfigurableApplicationContext next = start(mysql)) {
+                var kept = (Map<String, Object>) api(next).get("/issues/" + checked, tokens.token(ADMIN_A))
+                        .json().get("criticalCheck");
+                assertThat(kept).containsEntry("status", "completed")
+                        .containsEntry("rulesVersion", "critical-alerts-v1");
+                assertThat((java.util.List<Map<String, Object>>) kept.get("signals"))
+                        .extracting(signal -> signal.get("code")).containsExactly("smoke_or_fire");
+
+                var issue = api(next).get("/issues/" + leftPending, tokens.token(ADMIN_A));
+                // Completed at start, with the alert, on the next version; the second start adds nothing.
+                assertThat(issue.json()).containsEntry("state", "received").containsEntry("version", 2);
+                var completed = (Map<String, Object>) issue.json().get("criticalCheck");
+                assertThat(completed).containsEntry("status", "completed");
+                assertThat((java.util.List<Map<String, Object>>) completed.get("signals"))
+                        .extracting(signal -> signal.get("code")).containsExactly("gas_smell");
+                var history = api(next).get("/issues/" + leftPending + "/history", tokens.token(ADMIN_A));
+                assertThat((java.util.List<Map<String, Object>>) history.json().get("items"))
+                        .extracting(entry -> entry.get("type"))
+                        .containsExactly("report_received", "critical_alert_raised");
+            }
+        }
+    }
+
     /** US-04: the summary, a resident's impact confirmation and their subscription are still there after a restart. */
     @Test
     void summaryImpactAndSubscriptionSurviveARestart() throws Exception {
