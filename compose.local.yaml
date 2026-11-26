@@ -90,6 +90,9 @@ services:
 
   calendar-sim:
     build: services/calendar-sim
+    environment:
+      # Local work and failure demos script outcomes through /control.
+      SIM_CONTROL_ENABLED: "true"
 
   # Same image and pin as the database host (labdsof-infra,
   # ansible/roles/database/files/compose.yaml).

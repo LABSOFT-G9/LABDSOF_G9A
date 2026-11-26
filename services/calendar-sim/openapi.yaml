@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: BMC calendar simulator
+  version: 1.0.0
+  description: >-
+    The calendar contract of technical design 4.5 (ADR-006), as the simulator
+    implements it. The /control paths exist only with SIM_CONTROL_ENABLED=true.
+paths:
+  /bookings:
+    post:
+      summary: Book a window, or answer the booking already made for this request ID
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingRequest' }
+      responses:
+        '201': { description: Booked, content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } } }
+        '200': { description: The same booking again, content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } } }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+    get:
+      summary: Find the booking for a request ID (reconciliation)
+      parameters:
+        - { name: requestId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The booking, or no item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, maxItems: 1, items: { $ref: '#/components/schemas/Booking' } }
+        '503': { $ref: '#/components/responses/Problem' }
+  /bookings/{externalRef}/cancellation:
+    post:
+      summary: Cancel a booking; cancelling it again answers the same
+      parameters:
+        - { name: externalRef, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /control/outcomes:
+    post:
+      summary: Queue the outcomes of the next calls of one operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operation, outcomes]
+              properties:
+                operation: { type: string, enum: [create, query, cancel] }
+                outcomes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [type]
+                    properties:
+                      type: { type: string, enum: [ok, conflict, unavailable, invalid, delay, timeout_after_create] }
+                      delayMs: { type: integer, minimum: 0, maximum: 60000 }
+      responses:
+        '204': { description: Queued }
+        '422': { $ref: '#/components/responses/Problem' }
+    get:
+      summary: The queued outcomes per operation
+      responses:
+        '200': { description: Queues }
+    delete:
+      summary: Empty every queue
+      responses:
+        '204': { description: Emptied }
+  /control/bookings:
+    get:
+      summary: Every booking held
+      responses:
+        '200': { description: Bookings }
+    delete:
+      summary: Lose every booking and empty the queues, as a restart does
+      responses:
+        '204': { description: Lost }
+  /control/bookings/{externalRef}:
+    delete:
+      summary: Lose one booking
+      parameters:
+        - { name: externalRef, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Lost }
+        '404': { $ref: '#/components/responses/Problem' }
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: For a booking, the request ID itself.
+      schema: { type: string }
+  schemas:
+    Window:
+      type: object
+      required: [start, end]
+      properties:
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+    BookingRequest:
+      type: object
+      required: [requestId, contractorRef, window, buildingCode, summary]
+      properties:
+        requestId: { type: string, pattern: '^[A-Za-z0-9-]{1,64}$' }
+        contractorRef: { type: string, maxLength: 64 }
+        window: { $ref: '#/components/schemas/Window' }
+        buildingCode: { type: string, maxLength: 32 }
+        summary: { type: string, maxLength: 200, description: No names, addresses or report text. }
+    Booking:
+      type: object
+      properties:
+        requestId: { type: string }
+        externalRef: { type: [string, 'null'], description: Missing only in a scripted invalid answer. }
+        status: { type: string, enum: [confirmed, cancelled] }
+        window: { oneOf: [ { $ref: '#/components/schemas/Window' }, { type: 'null' } ] }
+  responses:
+    Problem:
+      description: application/problem+json with a code
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              status: { type: integer }
+              code: { type: string, enum: [INVALID_REQUEST, IDEMPOTENCY_KEY_REUSED, SLOT_CONFLICT, UNAVAILABLE, NOT_FOUND] }
+              errors:
+                type: array
+                items: { type: object, properties: { field: { type: string }, reason: { type: string } } }
