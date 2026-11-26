@@ -22,6 +22,7 @@ message NotificationRequested {
   string priority = 6;
   // Invitations only: the invitee has no account yet, so the address and the
   // invite link travel in the event. No other event carries an address.
+  // The link holds the invitation token, a secret: never log either field.
   optional string recipient_address = 7;
   optional string invite_link = 8;
 }
