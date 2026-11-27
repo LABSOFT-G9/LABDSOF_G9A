@@ -168,7 +168,8 @@ page. A page without `<PageHeader>` renders `<DocumentTitle>` and an `<h1 tabInd
 
 ### Switch mock → HTTP
 
-- Everything: `VITE_ADAPTERS=http` in `.env.local` (dev) or `--build-arg VITE_ADAPTERS=http` (Docker image).
+- Everything: `VITE_ADAPTERS=http` in `.env.local` (dev). The Docker image already builds with `http`; pass
+  `--build-arg VITE_ADAPTERS=mock` for an image without a backend.
 - One port: uncomment its line in `PORT_ADAPTERS` (`src/app/container.ts`), e.g. `issues: "http"` while sign-in
   stays mocked.
 
@@ -184,13 +185,13 @@ status while the parameter is there. Remove it to recover. Sign-in is not affect
 
 Copy `.env.example` to `.env.local`. `VITE_*` values are compiled into the bundle, so they must never hold secrets.
 
-| Variable               | Default               | Meaning                                                      |
-| ---------------------- | --------------------- | ------------------------------------------------------------ |
-| `VITE_ADAPTERS`        | `mock`                | `mock` or `http`: the adapters the container wires           |
-| `VITE_MOCK_LATENCY_MS` | `300`                 | simulated latency of mock adapters                           |
-| `VITE_LOGIN_URI`       | `/oidc/login`         | edge OIDC plugin login path (placeholder until spike item 3) |
-| `VITE_LOGOUT_URI`      | `/logout`             | edge OIDC plugin logout path                                 |
-| `API_PROXY_TARGET`     | `http://localhost:80` | dev/preview server only: where the edge paths are proxied    |
+| Variable               | Default               | Meaning                                                            |
+| ---------------------- | --------------------- | ------------------------------------------------------------------ |
+| `VITE_ADAPTERS`        | `mock`                | `mock` or `http`: the adapters the container wires (image: `http`) |
+| `VITE_MOCK_LATENCY_MS` | `300`                 | simulated latency of mock adapters                                 |
+| `VITE_LOGIN_URI`       | `/oidc/login`         | edge OIDC plugin login path (placeholder until spike item 3)       |
+| `VITE_LOGOUT_URI`      | `/logout`             | edge OIDC plugin logout path                                       |
+| `API_PROXY_TARGET`     | `http://localhost:80` | dev/preview server only: where the edge paths are proxied          |
 
 A bad value fails at start-up (`src/app/config.ts`).
 
