@@ -61,7 +61,7 @@ public final class BookingCommands {
         if (reasonCode == null || reasonCode.isBlank()) {
             violations.add(new FieldViolation("reasonCode", "required"));
         } else {
-            reason = CancelReason.fromValue(reasonCode);
+            reason = CancelReason.byAdministrator(reasonCode);
             if (reason.isEmpty()) {
                 violations.add(new FieldViolation("reasonCode", "invalid"));
             }

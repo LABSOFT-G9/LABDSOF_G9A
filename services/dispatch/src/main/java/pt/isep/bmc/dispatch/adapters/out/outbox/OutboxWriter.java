@@ -12,12 +12,15 @@ import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.OutboxEvent;
 import pt.isep.bmc.dispatch.domain.event.BookingConfirmed;
 import pt.isep.bmc.dispatch.domain.event.BookingStateChanged;
+import pt.isep.bmc.dispatch.domain.event.CompletionReported;
 import pt.isep.bmc.dispatch.domain.event.ContractorResponded;
 import pt.isep.bmc.dispatch.domain.event.DomainEvent;
 import pt.isep.bmc.dispatch.domain.event.InterventionApproved;
 import pt.isep.bmc.dispatch.domain.event.InterventionCancellationPending;
 import pt.isep.bmc.dispatch.domain.event.InterventionCancelled;
 import pt.isep.bmc.dispatch.domain.event.InterventionDeclined;
+import pt.isep.bmc.dispatch.domain.event.InterventionStarted;
+import pt.isep.bmc.dispatch.domain.event.ReworkRequested;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -120,6 +123,9 @@ class OutboxWriter implements EventOutbox {
                 data.put("reasonCode", e.reasonCode().value());
                 data.put("interventionState", e.interventionState().value());
             }
+            case InterventionStarted e -> state(data, e.issueId().toString(), e.interventionState().value());
+            case CompletionReported e -> state(data, e.issueId().toString(), e.interventionState().value());
+            case ReworkRequested e -> state(data, e.issueId().toString(), e.interventionState().value());
             case InterventionDeclined e -> {
                 data.put("issueId", e.issueId().toString());
                 data.put("reasonCode", e.reasonCode().value());
@@ -127,6 +133,11 @@ class OutboxWriter implements EventOutbox {
             }
         }
         return data;
+    }
+
+    private static void state(Map<String, Object> data, String issueId, String interventionState) {
+        data.put("issueId", issueId);
+        data.put("interventionState", interventionState);
     }
 
     private static LocalDateTime column(Instant instant) {

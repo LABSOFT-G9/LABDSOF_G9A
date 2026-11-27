@@ -24,6 +24,7 @@ public record InterventionResponse(
         BookingResponse booking,
         List<BookingResponse> bookings,
         Cancellation cancellation,
+        List<CompletionResponse> completions,
         String createdAt,
         String updatedAt) {
 

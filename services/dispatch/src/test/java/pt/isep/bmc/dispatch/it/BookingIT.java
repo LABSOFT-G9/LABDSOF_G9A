@@ -60,8 +60,8 @@ class BookingIT extends IntegrationTestSupport {
         assertThat(Api.map(booked.get("booking"))).containsEntry("state", "confirmed")
                 .containsEntry("source", "calendar").containsEntry("pendingAction", "verify");
         assertThat((String) Api.map(booked.get("booking")).get("externalRef")).startsWith("SIM-BK-");
-        Map<String, Object> event = outboxEvents().getLast();
-        assertThat(event).containsEntry("type", "BookingConfirmed").containsEntry("aggregateversion", 4);
+        Map<String, Object> event = event("BookingConfirmed");
+        assertThat(event).containsEntry("aggregateversion", 4);
         assertThat(Api.map(event.get("data"))).containsEntry("source", "calendar")
                 .containsEntry("interventionState", "booked")
                 .containsEntry("window", Map.of("start", "2099-11-05T09:00:00Z", "end", "2099-11-05T12:00:00Z"));
@@ -94,7 +94,7 @@ class BookingIT extends IntegrationTestSupport {
         runBookingWorker();
         assertThat(bookingOf(interventionId)).containsEntry("state", "rejected")
                 .containsEntry("reasonCode", "slot_conflict");
-        assertThat(Api.map(outboxEvents().getLast().get("data"))).containsEntry("bookingState", "rejected");
+        assertThat(Api.map(event("BookingStateChanged").get("data"))).containsEntry("bookingState", "rejected");
 
         var response = manual(ADMIN_A, interventionId, 3);
 
@@ -105,7 +105,7 @@ class BookingIT extends IntegrationTestSupport {
         assertThat(booking).containsEntry("source", "manual").containsEntry("pendingAction", null)
                 .containsEntry("bookedWindow", Map.of("start", "2099-11-06T14:00:00Z", "end", "2099-11-06T16:00:00Z"));
         assertThat(Api.map(booking.get("manual"))).containsEntry("source", "phone").containsEntry("reason", REASON);
-        assertThat(Api.map(outboxEvents().getLast().get("data"))).containsEntry("source", "manual");
+        assertThat(Api.map(event("BookingConfirmed").get("data"))).containsEntry("source", "manual");
         assertThat(outboxEvents().toString()).doesNotContain(REASON);
     }
 
@@ -138,7 +138,7 @@ class BookingIT extends IntegrationTestSupport {
         var pending = cancel(interventionId, 4, "rescheduling");
 
         assertThat(pending.json()).containsEntry("state", "cancellation_pending");
-        assertThat(outboxEvents().getLast()).containsEntry("type", "InterventionCancellationPending");
+        assertThat(event("InterventionCancellationPending")).isNotNull();
         runBookingWorker();
         assertThat(intervention(interventionId)).containsEntry("state", "cancellation_pending");
         runBookingWorker();
@@ -147,9 +147,7 @@ class BookingIT extends IntegrationTestSupport {
         assertThat(cancelled).containsEntry("state", "cancelled")
                 .containsEntry("cancellation", Map.of("reasonCode", "rescheduling", "note", "Residents fixed it."));
         assertThat(Api.map(cancelled.get("booking"))).containsEntry("state", "cancelled");
-        Map<String, Object> event = outboxEvents().getLast();
-        assertThat(event).containsEntry("type", "InterventionCancelled");
-        assertThat(Api.map(event.get("data"))).containsEntry("reasonCode", "rescheduling");
+        assertThat(Api.map(event("InterventionCancelled").get("data"))).containsEntry("reasonCode", "rescheduling");
         assertThat(outboxEvents().toString()).doesNotContain("Residents fixed it.");
         assertThat(draft(ADMIN_A, (String) cancelled.get("issueId"), AQUA_PLUMBERS).status())
                 .as("the issue can get another intervention").isEqualTo(201);
@@ -169,7 +167,7 @@ class BookingIT extends IntegrationTestSupport {
         assertThat(bookingOf(interventionId)).containsEntry("state", "discrepancy")
                 .containsEntry("reasonCode", "missing_at_provider");
         assertThat(calendar.bookingCount()).as("never silently recreated").isZero();
-        assertThat(Api.map(outboxEvents().getLast().get("data"))).containsEntry("bookingState", "discrepancy");
+        assertThat(Api.map(event("BookingStateChanged").get("data"))).containsEntry("bookingState", "discrepancy");
     }
 
     @Test

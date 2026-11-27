@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import pt.isep.bmc.dispatch.application.port.out.BookingRepository;
+import pt.isep.bmc.dispatch.application.port.out.CompletionReportRepository;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.dispatch.application.port.out.DuplicateProjectionRowException;
@@ -35,6 +36,7 @@ import pt.isep.bmc.dispatch.domain.booking.BookingAction;
 import pt.isep.bmc.dispatch.domain.booking.BookingId;
 import pt.isep.bmc.dispatch.domain.contractor.Contractor;
 import pt.isep.bmc.dispatch.domain.contractor.ContractorId;
+import pt.isep.bmc.dispatch.domain.intervention.CompletionReport;
 import pt.isep.bmc.dispatch.domain.intervention.ContractorResponse;
 import pt.isep.bmc.dispatch.domain.intervention.Intervention;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionId;
@@ -54,7 +56,7 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
  */
 public final class InMemoryPorts implements TransactionRunner, IssueProjectionRepository,
         MembershipProjectionRepository, ContractorCatalogue, InterventionRepository, EventOutbox, IdempotencyStore,
-        IdGenerator, BookingRepository {
+        IdGenerator, BookingRepository, CompletionReportRepository {
 
     public final Map<IssueId, ProjectedIssue> issues = new HashMap<>();
     public final Map<MembershipId, ProjectedMembership> memberships = new HashMap<>();
@@ -66,6 +68,7 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     public final Map<BookingId, Booking> bookings = new LinkedHashMap<>();
     public final List<String> calls = new ArrayList<>();
     public final Map<ContractorId, String> calendarRefs = new HashMap<>();
+    public final List<CompletionReport> completions = new ArrayList<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
@@ -195,6 +198,33 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     @Override
     public Optional<String> findCalendarRef(ContractorId id) {
         return Optional.ofNullable(calendarRefs.get(id));
+    }
+
+    // Completion reports
+
+    @Override
+    public void add(CompletionReport report) {
+        completions.add(report);
+        journal(() -> completions.remove(report));
+    }
+
+    @Override
+    public Optional<CompletionReport> findLatest(InterventionId interventionId) {
+        return completions.stream().filter(r -> r.interventionId().equals(interventionId))
+                .max(Comparator.comparingInt(CompletionReport::number));
+    }
+
+    @Override
+    public void recordRework(CompletionReport report) {
+        CompletionReport previous = completions.stream()
+                .filter(r -> r.interventionId().equals(report.interventionId()) && r.number() == report.number())
+                .findFirst().orElseThrow();
+        if (previous.rework().isPresent()) {
+            throw new IllegalStateException("a report is sent back once");
+        }
+        int index = completions.indexOf(previous);
+        completions.set(index, report);
+        journal(() -> completions.set(completions.indexOf(report), previous));
     }
 
     // Bookings

@@ -32,7 +32,7 @@ public abstract class IntegrationTestSupport {
 
     /** Tables emptied before each test, children first. */
     private static final String[] TABLES = {
-        "outbox", "booking_calls", "bookings", "contractor_responses", "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
+        "outbox", "completion_reports", "booking_calls", "bookings", "contractor_responses", "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
         "issue_projection", "membership_projection", "idempotency_keys"};
 
     protected static final String SCOPE = "Leak above garage light fitting, level -1. Access via management.";
@@ -207,6 +207,19 @@ public abstract class IntegrationTestSupport {
         return jdbc.sql("SELECT payload FROM outbox ORDER BY created_at, id").query(String.class).list().stream()
                 .map(Api::parse)
                 .toList();
+    }
+
+    /**
+     * The newest outbox event of a type. The outbox orders rows by time at
+     * millisecond precision only, so events written close together are found
+     * by type, not by position.
+     */
+    protected Map<String, Object> event(String type) {
+        List<Map<String, Object>> matching = outboxEvents().stream().filter(e -> type.equals(e.get("type"))).toList();
+        if (matching.isEmpty()) {
+            throw new AssertionError("no " + type + " in the outbox");
+        }
+        return matching.getLast();
     }
 
     protected long count(String table) {

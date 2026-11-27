@@ -8,12 +8,15 @@ import pt.isep.bmc.dispatch.application.command.BookingService;
 import pt.isep.bmc.dispatch.application.command.BookingWorker;
 import pt.isep.bmc.dispatch.application.command.ChangeTermsService;
 import pt.isep.bmc.dispatch.application.command.CreateInterventionService;
+import pt.isep.bmc.dispatch.application.command.ExecutionService;
+import pt.isep.bmc.dispatch.application.command.IssueClosureService;
 import pt.isep.bmc.dispatch.application.command.ProjectionService;
 import pt.isep.bmc.dispatch.application.command.PurgeExpiredIdempotencyKeysService;
 import pt.isep.bmc.dispatch.application.command.ReplaceContractorService;
 import pt.isep.bmc.dispatch.application.command.RespondToRequestService;
 import pt.isep.bmc.dispatch.application.port.out.BookingRepository;
 import pt.isep.bmc.dispatch.application.port.out.CalendarPort;
+import pt.isep.bmc.dispatch.application.port.out.CompletionReportRepository;
 import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
 import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
 import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
@@ -152,6 +155,34 @@ class UseCaseConfig {
             IdGenerator ids,
             Clock clock) {
         return new BookingWorker(transactions, bookings, interventions, calendar, outbox, ids, clock);
+    }
+
+    @Bean
+    ExecutionService executionService(
+            TransactionRunner transactions,
+            IssueProjectionRepository issues,
+            MembershipProjectionRepository memberships,
+            ContractorCatalogue catalogue,
+            InterventionRepository interventions,
+            CompletionReportRepository completions,
+            EventOutbox outbox,
+            IdempotencyStore idempotency,
+            IdGenerator ids,
+            Clock clock) {
+        return new ExecutionService(transactions, issues, memberships, catalogue, interventions, completions, outbox,
+                idempotency, ids, clock);
+    }
+
+    @Bean
+    IssueClosureService issueClosureService(
+            TransactionRunner transactions,
+            IssueProjectionRepository issues,
+            InterventionRepository interventions,
+            BookingRepository bookings,
+            EventOutbox outbox,
+            IdGenerator ids,
+            Clock clock) {
+        return new IssueClosureService(transactions, issues, interventions, bookings, outbox, ids, clock);
     }
 
     @Bean

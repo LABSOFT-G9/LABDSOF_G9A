@@ -19,6 +19,7 @@ public record AssignmentResponse(
         Integer agreedProposalVersion,
         List<InterventionResponse.Proposal> proposals,
         Booking booking,
+        List<CompletionResponse> completions,
         String updatedAt) {
 
     /** The current booking: its state, source and window; null before the terms are agreed. */
