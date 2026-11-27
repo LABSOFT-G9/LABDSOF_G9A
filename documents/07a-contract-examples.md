@@ -100,11 +100,17 @@ Errors of the triage call, all `application/problem+json` and none with a partia
 GET /contractors?issueId=0199f2a1-0000-7000-8000-000000002001
 
 200 OK
-{ "items": [
+{ "issueId": "0199f2a1-0000-7000-8000-000000002001",
+  "criteria": { "category": "plumbing", "issueState": "triaged", "dispatchable": true,
+                "eligibility": ["active", "specialisation", "coverage:building"],
+                "order": ["displayName", "contractorId"] },
+  "items": [
     { "contractorId": "0199f2a0-0000-7000-8000-000000000401",
       "displayName": "Synthetic Plumbing Co.",
+      "synthetic": true,
+      "specialisations": ["plumbing"],
       "matched": ["specialisation:plumbing", "coverage:building"],
-      "unknown": ["price", "distance"] } ] }
+      "unknown": ["price", "distance", "availability"] } ] }
 ```
 
 ```http
@@ -146,8 +152,27 @@ Routing key `issue.IssueStateChanged`. No raw report text; a published summary w
 ETag: "1"
 
 { "interventionId": "0199f2a2-0000-7000-8000-000000003001",
-  "state": "awaiting_approval", "version": 1, "proposalVersion": 1 }
+  "state": "awaiting_approval", "version": 1, "proposalVersion": 1,
+  "contractorId": "0199f2a0-0000-7000-8000-000000000401" }
 ```
+
+Before approval, the administrator may select another eligible contractor for the draft (added with US-06-01). The terms stay as proposal version 1:
+
+```http
+PATCH /interventions/0199f2a2-0000-7000-8000-000000003001
+If-Match: "1"
+Idempotency-Key: 5c0d…
+
+{ "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+
+200 OK
+ETag: "2"
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "awaiting_approval", "version": 2,
+  "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+```
+
+The approval below follows the `201` directly, without the replacement. After a replacement, `If-Match` carries the new version (`"2"` here).
 
 ```http
 POST /interventions/0199f2a2-0000-7000-8000-000000003001/approval

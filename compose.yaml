@@ -206,6 +206,14 @@ services:
       DB_NAME: dispatch
       DB_USER: dispatch
       DB_PASSWORD: ${DISPATCH_DB_PASSWORD:-}
+      # Token validation (ADR-005), as for issue: public issuer, keys fetched
+      # on the internal network.
+      OIDC_ISSUER_URI: https://${BMC_PUBLIC_HOST:?}/auth/realms/bmc
+      OIDC_JWK_SET_URI: http://keycloak:8080/auth/realms/bmc/protocol/openid-connect/certs
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-bmc-api}
+      # Synthetic catalogue and, until RabbitMQ is wired, a projection
+      # stand-in; "true" only on local and dev.
+      BMC_SEED_SYNTHETIC: ${BMC_SEED_SYNTHETIC:-false}
     labels:
       traefik.enable: "true"
       traefik.http.routers.dispatch.rule: PathPrefix(`/api/dispatch`)

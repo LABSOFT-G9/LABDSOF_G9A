@@ -1,0 +1,69 @@
+# BMC Dispatch service. Every value that differs per environment comes from the
+# environment (compose.yaml, .env.example); secrets never live here.
+spring:
+  application:
+    name: dispatch
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:dispatch}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=PREFERRED
+    username: ${DB_USER:dispatch}
+    password: ${DB_PASSWORD:}
+    hikari:
+      # Fail fast: a request must not hang when MySQL is down (503).
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+    # The synthetic seed is a repeatable migration in another location: when
+    # BMC_SEED_SYNTHETIC goes back to false, its history row must not stop the start.
+    ignore-migration-patterns: "*:future,repeatable:missing"
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+  error:
+    whitelabel:
+      enabled: false
+
+# Health on a separate port that Traefik never routes (ADR-004, DEVOPS-02):
+# /healthz (liveness, no external checks) and /readyz (readiness, includes MySQL).
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        liveness:
+          include: livenessState
+          additional-path: "management:/healthz"
+        readiness:
+          include: readinessState,db
+          additional-path: "management:/readyz"
+
+bmc:
+  security:
+    issuer-uri: ${OIDC_ISSUER_URI:}
+    jwk-set-uri: ${OIDC_JWK_SET_URI:}
+    audience: ${OIDC_AUDIENCE:bmc-api}
+    # Custom header required on every state-changing request (ADR-005 CSRF).
+    # Provisional name until EN01-U6 settles it; the client must send it.
+    csrf-header: ${CSRF_HEADER:X-BMC-CSRF}
+  seed-synthetic: ${BMC_SEED_SYNTHETIC:false}
+  idempotency:
+    purge-interval: PT1H

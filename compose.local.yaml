@@ -72,6 +72,8 @@ services:
     networks: [database]
     environment:
       DB_HOST: mysql
+      OIDC_ISSUER_URI: ${BMC_LOCAL_URL:-http://localhost}/auth/realms/bmc
+      BMC_SEED_SYNTHETIC: "true"
     depends_on:
       mysql: { condition: service_healthy }
 
