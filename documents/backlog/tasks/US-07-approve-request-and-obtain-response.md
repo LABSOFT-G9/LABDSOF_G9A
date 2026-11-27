@@ -14,21 +14,21 @@ As an **administrator**, I want to **approve an intervention request and see the
 
 ## Scope
 
-Approve a specific proposal version and let the assigned contractor accept, reject or counterpropose. Keep the work description, time window, terms and approval history.
+Approve a specific proposal version and let the assigned contractor accept, decline or counterpropose. Keep the work description, time window, terms and approval history.
 
 Booking belongs to [US-08](US-08-confirm-booking-and-handle-failures.md). Notification delivery belongs to US-10 in EP-01. This story does not cover payments, automatic approval or confirmation of a calendar booking.
 
 Development details:
 
 - Use Dispatch's [approval/response examples](../../07a-contract-examples.md#13-administrator-creates-and-approves-an-intervention-dispatch) with proposal version, `If-Match` and idempotency key. Approval moves `awaiting_approval` to `sent`; acceptance of the approved version moves to `scheduling_pending`.
-- Counterproposals create a new version. Administrator approval of contractor-authored terms records both parties' agreement. Rejection is terminal for that intervention; choose another contractor through a new draft. No automatic response deadline or contractor withdrawal is included. Silence never means acceptance.
+- Counterproposals create a new version. Administrator approval of contractor-authored terms records both parties' agreement. A decline is terminal for that intervention; choose another contractor through a new draft. No automatic response deadline or contractor withdrawal is included. Silence never means acceptance.
 
 ## Acceptance criteria
 
 - [ ] Let only the building administrator approve the current proposal version. Save its contractor, work description, proposed window and terms, with the approver and timestamp.
 - [ ] Send only the approved version to the assigned contractor. Show approval, contractor response and booking status separately; approval must not appear as acceptance or a confirmed booking.
-- [ ] Let only the assigned contractor accept, reject or counterpropose on the current approved version. Reject an invalid response or a response to an outdated version without changing the request.
-- [ ] When the contractor accepts, record the agreed version and make it available to US-08. When they reject, record the response and show that another contractor or manual coordination is needed; do not book.
+- [ ] Let only the assigned contractor accept, decline or counterpropose on the current approved version. Reject an invalid response or a response to an outdated version without changing the request.
+- [ ] When the contractor accepts, record the agreed version and make it available to US-08. When they decline, record the response and show that another contractor or manual coordination is needed; do not book.
 - [ ] Changed terms create a new proposal version and invalidate the earlier approval. A contractor's counterproposal needs administrator approval. Under the current design proposal, that approval records agreement by both parties without requiring the contractor to accept their own terms again.
 - [ ] Check permissions in the backend and limit the contractor's view to their assigned request and necessary context. If administrator authorisation cannot be checked, do not approve or change the request.
 - [ ] Repeated approvals, responses or delivered events must not send duplicate requests or start two bookings. Concurrent approval, changed terms, acceptance and cancellation must use version checks; a losing update cannot overwrite the winning decision.
@@ -36,7 +36,7 @@ Development details:
 
 ## Verification and risks
 
-Test approval followed by acceptance, rejection and counterproposal, including changed terms and a contractor replying to an old version. Test repeated commands, competing updates, denied access and failure after saving but before event delivery.
+Test approval followed by acceptance, decline and counterproposal, including changed terms and a contractor replying to an old version. Test repeated commands, competing updates, denied access and failure after saving but before event delivery.
 
 The main risks are stale approvals, duplicate requests, unnecessary disclosure and confusing approval with acceptance or booking. Review the state/event examples with the owners of US-02, US-08 and US-10.
 
