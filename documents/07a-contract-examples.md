@@ -306,13 +306,16 @@ POST /interventions/0199f2a2-0000-7000-8000-000000003001/completion
 If-Match: "4"
 Idempotency-Key: 8e1b…
 
-{ "notes": "Replaced cracked pipe joint; light fitting dried and tested.",
-  "proposedCost": { "amount": "85.00", "currency": "EUR" } }
+{ "summary": "Replaced cracked pipe joint; light fitting dried and tested.",
+  "performedAt": "2026-11-05T11:40:00Z" }
 
 200 OK
 ETag: "5"
-{ "state": "completion_reported", "version": 5 }
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "completion_reported", "version": 5 }
 ```
+
+As built in US-09-01, an administrator reporting for the contractor adds a `reason`; a cost comes with US-11. `CompletionReported` carries only `issueId` and `interventionState`: the summary stays in Dispatch.
 
 After `CompletionReported` reaches Issue (issue `awaiting_validation`, version 6):
 
