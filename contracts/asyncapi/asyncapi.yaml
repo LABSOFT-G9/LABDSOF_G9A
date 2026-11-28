@@ -81,6 +81,7 @@ channels:
           - InterventionApproved
           - ContractorResponded
           - InterventionDeclined
+          - InterventionTermsChanged
           - InterventionCancellationPending
           - InterventionCancelled
           - BookingConfirmed
@@ -105,6 +106,8 @@ channels:
         $ref: '#/components/messages/ContractorResponded'
       InterventionDeclined:
         $ref: '#/components/messages/InterventionDeclined'
+      InterventionTermsChanged:
+        $ref: '#/components/messages/InterventionTermsChanged'
       InterventionCancellationPending:
         $ref: '#/components/messages/InterventionCancellationPending'
       InterventionCancelled:
@@ -163,6 +166,8 @@ channels:
         $ref: '#/components/messages/ContractorResponded'
       InterventionDeclined:
         $ref: '#/components/messages/InterventionDeclined'
+      InterventionTermsChanged:
+        $ref: '#/components/messages/InterventionTermsChanged'
       InterventionCancellationPending:
         $ref: '#/components/messages/InterventionCancellationPending'
       InterventionCancelled:
@@ -388,6 +393,15 @@ components:
         $ref: '#/components/schemas/CloudEvent'
       x-proto-message: bmc.dispatch.v1.InterventionDeclined
       x-proto-file: ../proto/bmc/dispatch/v1/intervention_declined.proto
+    InterventionTermsChanged:
+      name: InterventionTermsChanged
+      title: InterventionTermsChanged
+      summary: An administrator wrote new terms; a sent request is withdrawn or a counterproposal superseded.
+      contentType: application/cloudevents+json
+      payload:
+        $ref: '#/components/schemas/CloudEvent'
+      x-proto-message: bmc.dispatch.v1.InterventionTermsChanged
+      x-proto-file: ../proto/bmc/dispatch/v1/intervention_terms_changed.proto
     InterventionCancellationPending:
       name: InterventionCancellationPending
       title: InterventionCancellationPending

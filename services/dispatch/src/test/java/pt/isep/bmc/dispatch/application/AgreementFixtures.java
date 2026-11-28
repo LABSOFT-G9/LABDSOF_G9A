@@ -43,7 +43,7 @@ final class AgreementFixtures {
         clock.advance(Duration.ofMinutes(1));
         approval = new ApproveProposalService(ports, ports, ports, ports, ports, ports, ports, ports, ports, clock);
         responses = new RespondToRequestService(ports, ports, ports, ports, ports, ports, ports, ports, clock);
-        terms = new ChangeTermsService(ports, ports, ports, ports, ports, clock);
+        terms = new ChangeTermsService(ports, ports, ports, ports, ports, ports, ports, ports, clock);
     }
 
     AgreementFixtures() {
@@ -82,7 +82,7 @@ final class AgreementFixtures {
     ChangeTermsCommand changeTerms(String key, long expectedVersion) {
         return new ChangeTermsCommand(ADMIN_A, new IdempotencyKey(key), interventionId, expectedVersion,
                 "Leak above garage light fitting, level -1. Bring a ladder.", WINDOW_START, WINDOW_END,
-                "Inspect, repair and report the cost.");
+                "Inspect, repair and report the cost.", "c-terms");
     }
 
     /** Approves version 1: the request is {@code sent} at version 2. */

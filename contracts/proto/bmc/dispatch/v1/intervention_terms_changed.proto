@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package bmc.dispatch.v1;
+
+option java_multiple_files = true;
+option java_package = "pt.isep.bmc.contracts.dispatch.v1";
+
+// An administrator wrote new terms (`POST /interventions/{id}/proposals`):
+// a new proposal version that needs approval again. From `sent`, the request
+// the contractor received is withdrawn; over a contractor's counterproposal,
+// that counterproposal is superseded. No scope, terms or cost text.
+message InterventionTermsChanged {
+  string issue_id = 1;
+  // The new version, written by the administrator.
+  int32 proposal_version = 2;
+  // The version it replaces, and who wrote it: `administrator` or `contractor`.
+  int32 superseded_proposal_version = 3;
+  string superseded_author = 4;
+  // The intervention state before the change: `awaiting_approval` or `sent`.
+  string previous_state = 5;
+  // Set when the contractor must be told: the request had been sent to them,
+  // or they wrote the superseded version. Empty otherwise. It grants no read
+  // access in Issue.
+  string contractor_user_id = 6;
+  // The intervention state after this event: `awaiting_approval`.
+  string intervention_state = 7;
+}

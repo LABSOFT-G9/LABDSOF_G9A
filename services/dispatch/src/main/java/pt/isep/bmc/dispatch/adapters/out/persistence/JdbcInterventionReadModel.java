@@ -5,9 +5,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.dispatch.application.port.out.InterventionReadModel;
@@ -34,7 +37,9 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
 /**
  * Query side for interventions (CQRS as packages, ADR-009): the intervention
  * with its contractor, then its proposal versions with their approval and
- * response, oldest first.
+ * response, oldest first, then its bookings and completion reports. A list
+ * reads each kind of child row for all its interventions in one query, so
+ * the number of queries does not grow with its length.
  */
 @Repository
 class JdbcInterventionReadModel implements InterventionReadModel {
@@ -49,31 +54,33 @@ class JdbcInterventionReadModel implements InterventionReadModel {
             """;
 
     private static final String PROPOSALS = """
-            SELECT p.number, p.author_role, p.scope_extract, p.window_start, p.window_end, p.terms,
+            SELECT p.intervention_id, p.number, p.author_role, p.scope_extract, p.window_start, p.window_end, p.terms,
                    p.cost_amount, p.cost_currency, p.created_at, p.approved_at,
                    r.decision, r.reason_code, r.note, r.counter_proposal_version, r.responded_at
               FROM proposal_versions p
               LEFT JOIN contractor_responses r ON r.intervention_id = p.intervention_id AND r.proposal_version = p.number
-             WHERE p.intervention_id = :id
-             ORDER BY p.number
+             WHERE p.intervention_id IN (:ids)
+             ORDER BY p.intervention_id, p.number
             """;
 
     private static final String BOOKINGS = """
-            SELECT id, state, source, window_start, window_end, external_ref, reason_code, pending_action,
+            SELECT intervention_id, id, state, source, window_start, window_end, external_ref, reason_code, pending_action,
                    last_reconciled_at, manual_window_start, manual_window_end, manual_source, manual_reason, manual_at,
                    created_at, updated_at
               FROM bookings
-             WHERE intervention_id = :id
+             WHERE intervention_id IN (:ids)
              ORDER BY created_at, id
             """;
 
     private static final String CALLS = """
-            SELECT action, outcome, occurred_at FROM booking_calls WHERE booking_id = :id ORDER BY sequence
+            SELECT booking_id, action, outcome, occurred_at FROM booking_calls
+             WHERE booking_id IN (:ids) ORDER BY sequence
             """;
 
     private static final String COMPLETIONS = """
-            SELECT number, summary, performed_at, reporter_role, reason, reported_at, rework_reason, rework_at
-              FROM completion_reports WHERE intervention_id = :id ORDER BY number
+            SELECT intervention_id, number, summary, performed_at, reporter_role, reason, reported_at, rework_reason,
+                   rework_at
+              FROM completion_reports WHERE intervention_id IN (:ids) ORDER BY intervention_id, number
             """;
 
     private final JdbcClient jdbc;
@@ -86,30 +93,24 @@ class JdbcInterventionReadModel implements InterventionReadModel {
     public Optional<InterventionView> find(InterventionId id) {
         return jdbc.sql(SELECT + " WHERE i.id = :id").param("id", id.toString())
                 .query(JdbcInterventionReadModel::row).optional()
-                .map(this::withProposals);
+                .map(row -> withProposals(List.of(row)).getFirst());
     }
 
     @Override
     public List<InterventionView> findByIssue(IssueId issueId) {
-        return jdbc.sql(SELECT + " WHERE i.issue_id = :issue ORDER BY i.created_at DESC, i.id DESC")
+        return withProposals(jdbc.sql(SELECT + " WHERE i.issue_id = :issue ORDER BY i.created_at DESC, i.id DESC")
                 .param("issue", issueId.toString())
                 .query(JdbcInterventionReadModel::row)
-                .list()
-                .stream()
-                .map(this::withProposals)
-                .toList();
+                .list());
     }
 
     @Override
     public List<InterventionView> findSentTo(UserId contractorUserId) {
-        return jdbc.sql(SELECT + " WHERE c.user_id = :user AND i.contractor_contacted"
+        return withProposals(jdbc.sql(SELECT + " WHERE c.user_id = :user AND i.contractor_contacted"
                         + " ORDER BY i.updated_at DESC, i.id DESC")
                 .param("user", contractorUserId.value())
                 .query(JdbcInterventionReadModel::row)
-                .list()
-                .stream()
-                .map(this::withProposals)
-                .toList();
+                .list());
     }
 
     /** An intervention row, still without its proposals. */
@@ -130,24 +131,64 @@ class JdbcInterventionReadModel implements InterventionReadModel {
             Instant updatedAt) {
     }
 
-    private InterventionView withProposals(Row row) {
-        List<InterventionView.Proposal> proposals = jdbc.sql(PROPOSALS)
-                .param("id", row.id().toString())
-                .query(JdbcInterventionReadModel::proposal)
-                .list();
+    /**
+     * The rows, in their order, each with its proposals, bookings (with their
+     * calls) and completion reports: one query for each kind, for all rows.
+     */
+    private List<InterventionView> withProposals(List<Row> rows) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        List<String> ids = rows.stream().map(r -> r.id().toString()).toList();
+        Map<InterventionId, List<InterventionView.Proposal>> proposals = grouped(
+                jdbc.sql(PROPOSALS).param("ids", ids).query(JdbcInterventionReadModel::proposalOf).list());
+        List<Owned<BookingView>> bookingRows = jdbc.sql(BOOKINGS).param("ids", ids)
+                .query(JdbcInterventionReadModel::bookingOf).list();
+        Map<BookingId, List<BookingView.Call>> calls = calls(bookingRows.stream().map(b -> b.item().bookingId()).toList());
+        Map<InterventionId, List<BookingView>> bookings = grouped(bookingRows.stream()
+                .map(b -> new Owned<>(b.interventionId(), withCalls(b.item(), calls.getOrDefault(b.item().bookingId(),
+                        List.of()))))
+                .toList());
+        Map<InterventionId, List<CompletionView>> completions = grouped(
+                jdbc.sql(COMPLETIONS).param("ids", ids).query(JdbcInterventionReadModel::completionOf).list());
+        return rows.stream().map(row -> view(row, proposals.getOrDefault(row.id(), List.of()),
+                bookings.getOrDefault(row.id(), List.of()), completions.getOrDefault(row.id(), List.of()))).toList();
+    }
+
+    /** One child row and the intervention it belongs to. */
+    private record Owned<T>(InterventionId interventionId, T item) {
+    }
+
+    /** Groups child rows by intervention, keeping the query's order within each. */
+    private static <T> Map<InterventionId, List<T>> grouped(List<Owned<T>> owned) {
+        return owned.stream().collect(Collectors.groupingBy(Owned::interventionId, LinkedHashMap::new,
+                Collectors.mapping(Owned::item, Collectors.toList())));
+    }
+
+    private Map<BookingId, List<BookingView.Call>> calls(List<BookingId> bookingIds) {
+        if (bookingIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbc.sql(CALLS).param("ids", bookingIds.stream().map(BookingId::toString).toList())
+                .query((rs, n) -> Map.entry(new BookingId(UUID.fromString(rs.getString("booking_id"))),
+                        new BookingView.Call(BookingAction.fromValue(rs.getString("action")), rs.getString("outcome"),
+                                time(rs, "occurred_at"))))
+                .list()
+                .stream()
+                .collect(Collectors.groupingBy(Map.Entry::getKey, LinkedHashMap::new,
+                        Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+    }
+
+    private static InterventionView view(
+            Row row, List<InterventionView.Proposal> proposals, List<BookingView> bookings,
+            List<CompletionView> completions) {
         InterventionView.Proposal current = proposals.stream()
                 .filter(p -> p.proposalVersion() == row.currentProposalVersion())
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("the current proposal version is missing"));
-        List<BookingView> bookings = jdbc.sql(BOOKINGS).param("id", row.id().toString())
-                .query(JdbcInterventionReadModel::booking)
-                .list()
-                .stream()
-                .map(this::withCalls)
-                .toList();
         return new InterventionView(row.id(), row.issueId(), row.buildingId(), row.contractor(), row.state(),
                 row.version(), current, proposals, row.approvedProposalVersion(), row.agreedProposalVersion(),
-                row.contractorContacted(), row.cancelReason(), row.cancelNote(), bookings, completions(row.id()),
+                row.contractorContacted(), row.cancelReason(), row.cancelNote(), bookings, completions,
                 row.createdAt(), row.updatedAt());
     }
 
@@ -173,25 +214,27 @@ class JdbcInterventionReadModel implements InterventionReadModel {
                 time(rs, "updated_at"));
     }
 
-    private List<CompletionView> completions(InterventionId id) {
-        return jdbc.sql(COMPLETIONS).param("id", id.toString())
-                .query((rs, n) -> new CompletionView(
-                        rs.getInt("number"),
-                        rs.getString("summary"),
-                        time(rs, "performed_at"),
-                        rs.getString("reporter_role"),
-                        Optional.ofNullable(rs.getString("reason")),
-                        time(rs, "reported_at"),
-                        Optional.ofNullable(rs.getString("rework_reason")),
-                        Optional.ofNullable(rs.getObject("rework_at", LocalDateTime.class)).map(Timestamps::fromColumn)))
-                .list();
+    private static Owned<CompletionView> completionOf(ResultSet rs, int n) throws SQLException {
+        return new Owned<>(interventionOf(rs), new CompletionView(
+                rs.getInt("number"),
+                rs.getString("summary"),
+                time(rs, "performed_at"),
+                rs.getString("reporter_role"),
+                Optional.ofNullable(rs.getString("reason")),
+                time(rs, "reported_at"),
+                Optional.ofNullable(rs.getString("rework_reason")),
+                Optional.ofNullable(rs.getObject("rework_at", LocalDateTime.class)).map(Timestamps::fromColumn)));
     }
 
-    private BookingView withCalls(BookingView booking) {
-        List<BookingView.Call> calls = jdbc.sql(CALLS).param("id", booking.bookingId().toString())
-                .query((rs, n) -> new BookingView.Call(BookingAction.fromValue(rs.getString("action")),
-                        rs.getString("outcome"), time(rs, "occurred_at")))
-                .list();
+    private static Owned<BookingView> bookingOf(ResultSet rs, int n) throws SQLException {
+        return new Owned<>(interventionOf(rs), booking(rs, n));
+    }
+
+    private static InterventionId interventionOf(ResultSet rs) throws SQLException {
+        return new InterventionId(UUID.fromString(rs.getString("intervention_id")));
+    }
+
+    private static BookingView withCalls(BookingView booking, List<BookingView.Call> calls) {
         return new BookingView(booking.bookingId(), booking.state(), booking.source(), booking.requestedWindow(),
                 booking.bookedWindow(), booking.externalRef(), booking.reasonCode(), booking.pendingAction(),
                 booking.lastReconciledAt(), booking.manual(), calls, booking.createdAt(), booking.updatedAt());
@@ -222,6 +265,10 @@ class JdbcInterventionReadModel implements InterventionReadModel {
                 List.of(),
                 time(rs, "created_at"),
                 time(rs, "updated_at"));
+    }
+
+    private static Owned<InterventionView.Proposal> proposalOf(ResultSet rs, int n) throws SQLException {
+        return new Owned<>(interventionOf(rs), proposal(rs, n));
     }
 
     private static InterventionView.Proposal proposal(ResultSet rs, int n) throws SQLException {

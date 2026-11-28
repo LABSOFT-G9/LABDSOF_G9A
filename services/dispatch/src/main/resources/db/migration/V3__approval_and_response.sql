@@ -7,7 +7,8 @@ ALTER TABLE interventions
     ADD COLUMN approved_proposal_version INT NULL AFTER current_proposal_version,
     ADD COLUMN agreed_proposal_version   INT NULL AFTER approved_proposal_version,
     ADD COLUMN contractor_contacted      BOOLEAN NOT NULL DEFAULT FALSE AFTER agreed_proposal_version,
-    ADD KEY ix_interventions_contractor (contractor_id, contractor_contacted, created_at);
+    -- The contractor's list (GET /interventions?assigned=me): newest change first.
+    ADD KEY ix_interventions_contractor (contractor_id, contractor_contacted, updated_at);
 
 -- intervention_version: the intervention's version that created the proposal
 -- (1 for every draft written before this migration).

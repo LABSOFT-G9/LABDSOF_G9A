@@ -139,6 +139,13 @@ public final class InMemoryPorts implements TransactionRunner, IssueProjectionRe
     }
 
     @Override
+    public Map<IssueId, ProjectedIssue> findAll(java.util.Collection<IssueId> ids) {
+        Map<IssueId, ProjectedIssue> found = new HashMap<>();
+        ids.forEach(id -> find(id).ifPresent(issue -> found.put(id, issue)));
+        return found;
+    }
+
+    @Override
     public Optional<ProjectedIssue> findForUpdate(IssueId id) {
         return find(id);
     }
