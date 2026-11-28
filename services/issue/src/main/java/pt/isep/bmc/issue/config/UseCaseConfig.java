@@ -1,16 +1,23 @@
 package pt.isep.bmc.issue.config;
 
 import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import pt.isep.bmc.issue.adapters.in.startup.PendingCriticalChecksRunner;
+import pt.isep.bmc.issue.application.command.CompletePendingCriticalChecksService;
 import pt.isep.bmc.issue.application.command.DecideTriageService;
 import pt.isep.bmc.issue.application.command.ImpactService;
 import pt.isep.bmc.issue.application.command.MembershipAnnouncementService;
 import pt.isep.bmc.issue.application.command.PublishSummaryService;
 import pt.isep.bmc.issue.application.command.PurgeExpiredIdempotencyKeysService;
+import pt.isep.bmc.issue.application.command.RecordTriageSuggestionService;
 import pt.isep.bmc.issue.application.command.SubmitReportService;
 import pt.isep.bmc.issue.application.command.SubscriptionService;
+import pt.isep.bmc.issue.application.port.in.CompletePendingCriticalChecksUseCase;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
+import pt.isep.bmc.issue.application.port.out.CriticalCheckLog;
+import pt.isep.bmc.issue.application.port.out.CriticalSignalRepository;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
 import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
@@ -25,10 +32,13 @@ import pt.isep.bmc.issue.application.port.out.SubscriptionRepository;
 import pt.isep.bmc.issue.application.port.out.SummaryRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
+import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
 import pt.isep.bmc.issue.application.query.BuildingAreasQueryService;
 import pt.isep.bmc.issue.application.query.IssueQueryService;
 import pt.isep.bmc.issue.application.query.ProfileQueryService;
 import pt.isep.bmc.issue.application.query.ReportQueryService;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
+import pt.isep.bmc.issue.domain.issue.CriticalRules;
 
 /** Registers the use cases, built from their ports. */
 @Configuration(proxyBeanMethods = false)
@@ -39,6 +49,12 @@ class UseCaseConfig {
         return Clock.systemUTC();
     }
 
+    /** Issue's own critical rule set (technical design 5, step 1). One bean, so a test can replace it. */
+    @Bean
+    CriticalRules criticalRules() {
+        return new CriticalAlertsV1();
+    }
+
     @Bean
     SubmitReportService submitReportService(
             TransactionRunner transactions,
@@ -46,12 +62,37 @@ class UseCaseConfig {
             BuildingRepository buildings,
             IssueRepository issues,
             ReportRepository reports,
+            CriticalSignalRepository criticalSignals,
+            CriticalRules criticalRules,
+            CriticalCheckLog criticalCheckLog,
             EventOutbox outbox,
             IdempotencyStore idempotency,
             IdGenerator ids,
             Clock clock) {
         return new SubmitReportService(
-                transactions, memberships, buildings, issues, reports, outbox, idempotency, ids, clock);
+                transactions, memberships, buildings, issues, reports, criticalSignals, criticalRules,
+                criticalCheckLog, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    CompletePendingCriticalChecksService completePendingCriticalChecksService(
+            TransactionRunner transactions,
+            IssueRepository issues,
+            ReportRepository reports,
+            CriticalSignalRepository criticalSignals,
+            CriticalRules criticalRules,
+            CriticalCheckLog criticalCheckLog,
+            Clock clock) {
+        return new CompletePendingCriticalChecksService(
+                transactions, issues, reports, criticalSignals, criticalRules, criticalCheckLog, clock,
+                CompletePendingCriticalChecksService.DEFAULT_BATCH_SIZE);
+    }
+
+    /** At every start, in the background: complete the critical checks that are still pending. */
+    @Bean
+    @ConditionalOnProperty(name = "bmc.critical-check.pending-at-start", havingValue = "true", matchIfMissing = true)
+    PendingCriticalChecksRunner pendingCriticalChecksRunner(CompletePendingCriticalChecksUseCase checks) {
+        return new PendingCriticalChecksRunner(checks);
     }
 
     @Bean
@@ -75,6 +116,18 @@ class UseCaseConfig {
             Clock clock) {
         return new DecideTriageService(
                 transactions, memberships, buildings, issues, reports, decisions, outbox, idempotency, ids, clock);
+    }
+
+    @Bean
+    RecordTriageSuggestionService recordTriageSuggestionService(
+            TransactionRunner transactions,
+            BuildingRepository buildings,
+            IssueRepository issues,
+            TriageSuggestionRepository suggestions,
+            EventOutbox outbox,
+            IdGenerator ids,
+            Clock clock) {
+        return new RecordTriageSuggestionService(transactions, buildings, issues, suggestions, outbox, ids, clock);
     }
 
     @Bean

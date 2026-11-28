@@ -1,5 +1,7 @@
 package pt.isep.bmc.issue.adapters.in.rest.dto;
 
+import java.util.List;
+
 /**
  * One issue, in {@code GET /issues} and {@code GET /issues/{id}}, already
  * projected for the caller. No report text and nobody's identity.
@@ -7,11 +9,13 @@ package pt.isep.bmc.issue.adapters.in.rest.dto;
  * @param areaLabel  the area the issue is about
  * @param version    sent back as {@code If-Match} on every change
  * @param triage     the administrator's current decision, or {@code null} while undecided
- * @param suggestion the latest unconfirmed suggestion, administrators only. Always
- *                   {@code null} until suggestions are recorded (US-03-03)
+ * @param suggestion the unconfirmed suggestion, for administrators of the building only; {@code null}
+ *                   for everyone else, while none was applied, and once a person decided
  * @param summary    the published summary, or {@code null} while the issue is not shared with the building
  * @param impact     how many residents confirmed the issue affects them; {@code null} while there is no summary
  * @param subscribed the caller's own notification choice; off by default
+ * @param criticalCheck Issue's own critical check, for administrators of the building only; {@code null}
+ *                      for everyone else
  */
 public record IssueResponse(
         String issueId,
@@ -25,7 +29,24 @@ public record IssueResponse(
         Suggestion suggestion,
         Summary summary,
         Impact impact,
-        boolean subscribed) {
+        boolean subscribed,
+        CriticalCheck criticalCheck) {
+
+    /**
+     * Issue's own check for signs of danger in the report, independent of the
+     * AI: no suggestion, retry or decision removes a signal.
+     *
+     * @param status       {@code pending} until the rule set has run on the report, then {@code completed}.
+     *                     {@code pending} with no signals means "not checked", never "nothing found"
+     * @param rulesVersion the rule set that completed the check; {@code null} while it is pending
+     * @param signals      one per rule that matched, oldest first; empty when nothing matched
+     */
+    public record CriticalCheck(String status, String rulesVersion, List<Signal> signals) {
+
+        /** @param code the rule's stable code, for example {@code gas_smell}; the client words it */
+        public record Signal(String code, String raisedAt) {
+        }
+    }
 
     /**
      * @param reason         internal: {@code null} for residents and in lists
@@ -51,7 +72,31 @@ public record IssueResponse(
     public record Impact(long count, boolean mine) {
     }
 
-    /** An unconfirmed suggestion: {@code origin} is {@code ai}, {@code rules} or {@code fallback}. */
-    public record Suggestion(String category, String urgency, String origin) {
+    /**
+     * An unconfirmed suggestion: not the issue's category or urgency.
+     *
+     * @param origin       {@code ai}, {@code rules} or {@code fallback}
+     * @param rationale    internal: {@code null} in lists
+     * @param failureCode  why the AI result was not used; {@code null} unless the suggester sent one
+     * @param suggestedAt  when the suggestion was recorded
+     * @param rulesVersion {@code null} when the rules did not run
+     * @param modelVersion {@code null} when no AI provider was called
+     */
+    public record Suggestion(
+            String category,
+            String urgency,
+            String origin,
+            String rationale,
+            boolean needsReview,
+            String failureCode,
+            String suggestedAt,
+            String rulesVersion,
+            String modelVersion) {
+
+        @Override
+        public String toString() {
+            return "Suggestion[category=" + category + ", urgency=" + urgency + ", origin=" + origin
+                    + ", rationale=redacted]";
+        }
     }
 }

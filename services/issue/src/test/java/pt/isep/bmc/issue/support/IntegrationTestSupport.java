@@ -48,6 +48,8 @@ public abstract class IntegrationTestSupport {
         registry.add("bmc.security.issuer-uri", () -> TestTokens.ISSUER);
         registry.add("bmc.security.jwk-set-uri", () -> TestTokens.get().jwksUri());
         registry.add("bmc.scheduling.enabled", () -> "false");
+        // The start-up pass runs in the background; here it would race the data reset. RestartIT runs it.
+        registry.add("bmc.critical-check.pending-at-start", () -> "false");
         registry.add("management.server.port", () -> "0");
     }
 
@@ -55,7 +57,8 @@ public abstract class IntegrationTestSupport {
     void resetData() throws Exception {
         for (String table : new String[] {
             "outbox", "idempotency_keys", "impact_confirmations", "issue_subscriptions", "issue_summaries",
-            "triage_decisions", "issue_history", "reports", "issues"}) {
+            "triage_suggestions", "triage_decisions", "issue_critical_signals", "issue_history", "reports",
+            "issues"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
         try (var connection = dataSource.getConnection()) {

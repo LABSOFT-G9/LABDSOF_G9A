@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
 import pt.isep.bmc.issue.domain.event.IssueTriaged;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.HistoryEntryType;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.Issue;
@@ -36,7 +38,7 @@ class IssueTriageTest {
     static final BuildingId B = BuildingAccessTest.B;
     static final String REASON = "Water near an electrical fitting";
 
-    final Issue received = Issue.receive(IssueTest.ID, A, IssueTest.AREA, IssueTest.CREATED);
+    final Issue received = Issue.receive(IssueTest.ID, A, IssueTest.AREA, IssueTest.CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION));
 
     static BuildingAccess access(BuildingId building, MembershipRole role) {
         return BuildingAccess.of(ME, List.of(BuildingAccessTest.active(ME, building, role)), NOW);

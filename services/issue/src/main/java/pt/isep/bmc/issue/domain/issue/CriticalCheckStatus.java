@@ -2,8 +2,9 @@ package pt.isep.bmc.issue.domain.issue;
 
 /**
  * Status of Issue's own {@code critical-alerts-v1} check (technical design 5,
- * step 1). The detector belongs to US-14-02 (#96); until it runs, a new issue
- * stays {@link #PENDING}, which is never shown as "checked, nothing found".
+ * step 1). {@link #PENDING} means the rule set did not run on the issue's
+ * report: it failed, or the issue is older than the check. It is never shown
+ * as "checked, nothing found".
  */
 public enum CriticalCheckStatus {
     PENDING("pending"),

@@ -9,9 +9,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.function.Supplier;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
+import pt.isep.bmc.issue.application.port.out.CriticalCheckLog;
+import pt.isep.bmc.issue.application.port.out.CriticalSignalRepository;
 import pt.isep.bmc.issue.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
@@ -27,14 +31,18 @@ import pt.isep.bmc.issue.application.port.out.SubscriptionRepository;
 import pt.isep.bmc.issue.application.port.out.SummaryRepository;
 import pt.isep.bmc.issue.application.port.out.TransactionRunner;
 import pt.isep.bmc.issue.application.port.out.TriageDecisionRepository;
+import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
 import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
+import pt.isep.bmc.issue.domain.issue.CriticalSignal;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueSummary;
 import pt.isep.bmc.issue.domain.issue.TriageDecision;
+import pt.isep.bmc.issue.domain.issue.TriageSuggestion;
 import pt.isep.bmc.issue.domain.membership.BuildingAccess;
 import pt.isep.bmc.issue.domain.membership.Membership;
 import pt.isep.bmc.issue.domain.membership.UserId;
@@ -46,7 +54,8 @@ import pt.isep.bmc.issue.domain.report.ReportId;
  * writes of a transaction whose work throws, like a real rollback.
  */
 public final class InMemoryPorts implements TransactionRunner, MembershipRepository, BuildingRepository,
-        IssueRepository, ReportRepository, TriageDecisionRepository, EventOutbox, IdempotencyStore, IdGenerator {
+        IssueRepository, ReportRepository, TriageDecisionRepository, TriageSuggestionRepository, EventOutbox,
+        IdempotencyStore, IdGenerator, CriticalSignalRepository, CriticalCheckLog {
 
     public final List<Membership> memberships = new ArrayList<>();
     public final Map<AreaId, Area> areas = new HashMap<>();
@@ -56,14 +65,20 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public final List<OutboxEvent> outbox = new ArrayList<>();
     public final Map<IdempotencyScope, IdempotencyRecord> keys = new HashMap<>();
     public final List<TriageDecision> decisions = new ArrayList<>();
+    public final List<TriageSuggestion> suggestions = new ArrayList<>();
     public final List<IssueSummary> summaries = new ArrayList<>();
     public final List<Mark> confirmations = new ArrayList<>();
     public final List<Mark> subscriptions = new ArrayList<>();
+    public final List<CriticalSignal> criticalSignals = new ArrayList<>();
+    /** Failed critical checks as they would be logged: "issue: exception class". Not undone by a rollback. */
+    public final List<String> failedCriticalChecks = new ArrayList<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
     public Runnable beforeNextRecord;
     public RuntimeException failNextTransaction;
     /** When n > 0, the n-th append from now fails. */
     public int failAppendNumber;
+    /** When n > 0, the n-th history entry from now cannot be stored. */
+    public int failHistoryNumber;
 
     /** One undo journal per open transaction; a nested transaction that commits is not undone by its parent. */
     private final Deque<List<Runnable>> journals = new ArrayDeque<>();
@@ -145,6 +160,48 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
+    public List<IssueId> findWithPendingCriticalCheck(Optional<IssueId> after, int limit) {
+        return issues.stream()
+                .filter(issue -> issue.criticalCheckStatus() == CriticalCheckStatus.PENDING)
+                .map(Issue::id)
+                .sorted(Comparator.comparing(IssueId::toString))
+                .filter(id -> after.isEmpty() || id.toString().compareTo(after.get().toString()) > 0)
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public void add(CriticalSignal signal) {
+        if (criticalSignals.stream()
+                .anyMatch(s -> s.issueId().equals(signal.issueId()) && s.code().equals(signal.code()))) {
+            throw new IllegalStateException("one signal per issue and rule");
+        }
+        criticalSignals.add(signal);
+        journal(() -> criticalSignals.remove(signal));
+    }
+
+    @Override
+    public Set<String> findCodes(IssueId issueId) {
+        return criticalSignals.stream()
+                .filter(signal -> signal.issueId().equals(issueId))
+                .map(CriticalSignal::code)
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public void checkFailed(IssueId issueId, String failure) {
+        failedCriticalChecks.add(issueId + ": " + failure);
+    }
+
+    @Override
+    public List<Report> findByIssue(IssueId issueId) {
+        return reports.values().stream()
+                .filter(report -> report.issueId().equals(issueId))
+                .sorted(Comparator.comparing(Report::submittedAt))
+                .toList();
+    }
+
+    @Override
     public int nextHistorySequence(IssueId id) {
         return (int) history.stream().filter(entry -> entry.issueId().equals(id)).count() + 1;
     }
@@ -163,6 +220,17 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     }
 
     @Override
+    public boolean existsByEventId(UUID eventId) {
+        return suggestions.stream().anyMatch(suggestion -> suggestion.eventId().equals(eventId));
+    }
+
+    @Override
+    public void add(TriageSuggestion suggestion) {
+        suggestions.add(suggestion);
+        journal(() -> suggestions.remove(suggestion));
+    }
+
+    @Override
     public boolean existsByIssueAndAuthor(IssueId issueId, UserId author) {
         return reports.values().stream()
                 .anyMatch(report -> report.issueId().equals(issueId) && report.authorUserId().equals(author));
@@ -170,6 +238,9 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
 
     @Override
     public void appendHistory(IssueHistoryEntry entry) {
+        if (failHistoryNumber > 0 && --failHistoryNumber == 0) {
+            throw new IllegalStateException("simulated storage failure");
+        }
         history.add(entry);
         journal(() -> history.remove(entry));
     }
