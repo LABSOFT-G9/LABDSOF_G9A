@@ -40,7 +40,8 @@ import pt.isep.bmc.dispatch.domain.intervention.Intervention;
  * </ol>
  * Everything is in the database, so a restart resumes where it stopped: a
  * lease that expires makes the booking due again, and it is reconciled or
- * re-sent with the same key.
+ * re-sent with the same key. Nothing is sent once the window has started:
+ * a booking not yet at the calendar then fails with {@code window_passed}.
  */
 public final class BookingWorker implements RunBookingWorkUseCase {
 
@@ -96,42 +97,68 @@ public final class BookingWorker implements RunBookingWorkUseCase {
 
     private void handle(Booking claimed) {
         BookingAction action = claimed.action().orElseThrow();
-        Call call = call(claimed, action);
+        Call call = call(claimed, action, now());
         transactions.inTransaction(() -> {
             apply(claimed, action, call);
             return null;
         });
     }
 
-    /** The reply to apply, and the booking it applies to (with a reference a lookup just found). */
-    private record Call(Booking booking, BookingAction appliedAs, CalendarReply reply) {
+    /**
+     * The reply to apply, and the action it answers. No reply: the window has
+     * started and nothing was sent.
+     */
+    private record Call(BookingAction appliedAs, Optional<CalendarReply> reply) {
+
+        static Call of(BookingAction appliedAs, CalendarReply reply) {
+            return new Call(appliedAs, Optional.of(reply));
+        }
+
+        static Call windowPassed() {
+            return new Call(BookingAction.CREATE, Optional.empty());
+        }
     }
 
-    private Call call(Booking claimed, BookingAction action) {
+    private Call call(Booking claimed, BookingAction action, Instant now) {
         return switch (action) {
-            case CREATE -> new Call(claimed, action, logged(claimed, action, calendar.create(bookingCall(claimed))));
+            case CREATE -> claimed.windowStarted(now)
+                    ? Call.windowPassed()
+                    : Call.of(action, logged(claimed, action, calendar.create(bookingCall(claimed))));
             case RECONCILE -> {
-                CalendarReply found = logged(claimed, action, calendar.find(claimed.id()));
+                CalendarReply found = logged(claimed, action, find(claimed));
                 if (found instanceof CalendarReply.Absent) {
+                    if (claimed.windowStarted(now)) {
+                        yield Call.windowPassed();
+                    }
                     // Not booked: re-send with the same key (technical design 4.5).
-                    yield new Call(claimed, BookingAction.CREATE,
+                    yield Call.of(BookingAction.CREATE,
                             logged(claimed, BookingAction.CREATE, calendar.create(bookingCall(claimed))));
                 }
-                yield new Call(claimed, action, found);
+                yield Call.of(action, found);
             }
-            case VERIFY, ORPHAN_CHECK -> new Call(claimed, action, logged(claimed, action, calendar.find(claimed.id())));
+            case VERIFY, ORPHAN_CHECK -> Call.of(action, logged(claimed, action, find(claimed)));
             case CANCEL -> {
                 Optional<String> ref = claimed.externalRef();
                 if (ref.isEmpty()) {
-                    CalendarReply found = logged(claimed, BookingAction.RECONCILE, calendar.find(claimed.id()));
-                    if (!(found instanceof CalendarReply.Booked booked)) {
-                        yield new Call(claimed, action, found);
+                    CalendarReply found = logged(claimed, BookingAction.RECONCILE, find(claimed));
+                    // Whatever its window, a booking found under this request ID is cancelled.
+                    Optional<String> foundRef = switch (found) {
+                        case CalendarReply.Booked booked -> Optional.of(booked.externalRef());
+                        case CalendarReply.Mismatched mismatched -> Optional.of(mismatched.externalRef());
+                        default -> Optional.empty();
+                    };
+                    if (foundRef.isEmpty()) {
+                        yield Call.of(action, found);
                     }
-                    ref = Optional.of(booked.externalRef());
+                    ref = foundRef;
                 }
-                yield new Call(claimed, action, logged(claimed, action, calendar.cancel(ref.get(), claimed.id())));
+                yield Call.of(action, logged(claimed, action, calendar.cancel(ref.get(), claimed.id())));
             }
         };
+    }
+
+    private CalendarReply find(Booking booking) {
+        return calendar.find(booking.id(), booking.window());
     }
 
     private void apply(Booking claimed, BookingAction action, Call call) {
@@ -141,7 +168,10 @@ public final class BookingWorker implements RunBookingWorkUseCase {
         if (intervention.isEmpty() || current.isEmpty() || current.get().version() != claimed.version()) {
             return;
         }
-        BookingStep step = current.get().afterReply(call.appliedAs(), call.reply(), now);
+        Booking latest = current.get();
+        BookingStep step = call.reply()
+                .map(reply -> latest.afterReply(call.appliedAs(), reply, now))
+                .orElseGet(() -> latest.windowPassed(now));
         bookings.update(step.booking());
         Intervention before = intervention.get();
         switch (step.effect()) {
@@ -185,6 +215,7 @@ public final class BookingWorker implements RunBookingWorkUseCase {
     static String outcome(CalendarReply reply) {
         return switch (reply) {
             case CalendarReply.Booked b -> "booked";
+            case CalendarReply.Mismatched m -> "window_mismatch";
             case CalendarReply.Conflict c -> "conflict";
             case CalendarReply.Defect d -> "defect";
             case CalendarReply.Unavailable u -> "unavailable";

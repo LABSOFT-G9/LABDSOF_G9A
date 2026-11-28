@@ -50,7 +50,13 @@ public record Booking(
         Instant createdAt,
         Instant updatedAt) {
 
-    /** Technical design 4.6: five attempts, waiting 5, 10, 20 and 40 seconds; then {@code failed}. */
+    /**
+     * Technical design 4.6: five attempts, waiting 5, 10, 20 and 40 seconds;
+     * then {@code failed}, but only for a booking known not to be at the
+     * calendar. A booking that may exist there ({@code uncertain}) and the
+     * check after a manual confirmation keep looking, at most 2 minutes
+     * apart, until the calendar answers.
+     */
     public static final int MAX_ATTEMPTS = 5;
     static final Duration FIRST_WAIT = Duration.ofSeconds(5);
     static final Duration MAX_WAIT = Duration.ofMinutes(2);
@@ -65,6 +71,8 @@ public record Booking(
     public static final String CANCELLED_AT_PROVIDER = "cancelled_at_provider";
     public static final String MISSING_AT_PROVIDER = "missing_at_provider";
     public static final String FOUND_AFTER_MANUAL = "found_after_manual";
+    public static final String WINDOW_MISMATCH = "window_mismatch";
+    public static final String CANCEL_REFUSED = "cancel_refused";
 
     private static final Set<BookingState> ENDED =
             EnumSet.of(BookingState.REJECTED, BookingState.FAILED, BookingState.CANCELLED);
@@ -146,6 +154,8 @@ public record Booking(
         return switch (reply) {
             case CalendarReply.Booked booked -> new BookingStep(confirmedByCalendar(booked.externalRef(), now),
                     BookingStep.Effect.CONFIRMED);
+            case CalendarReply.Mismatched m ->
+                    changed(discrepancy(WINDOW_MISMATCH, Optional.of(m.externalRef()), now));
             case CalendarReply.Conflict c -> changed(end(BookingState.REJECTED, SLOT_CONFLICT, now));
             case CalendarReply.Defect d -> changed(end(BookingState.FAILED, CONTRACT_DEFECT, now));
             case CalendarReply.Cancelled c -> changed(end(BookingState.FAILED, CANCELLED_AT_PROVIDER, now));
@@ -161,6 +171,7 @@ public record Booking(
         return switch (reply) {
             case CalendarReply.Booked booked -> unchanged(next(state, source, externalRef, reasonCode,
                     Optional.empty(), 0, Optional.empty(), Optional.of(now), manual, now));
+            case CalendarReply.Mismatched m -> changed(discrepancy(WINDOW_MISMATCH, externalRef, now));
             case CalendarReply.Absent a -> changed(discrepancy(MISSING_AT_PROVIDER, externalRef, now));
             case CalendarReply.Cancelled c -> changed(discrepancy(MISSING_AT_PROVIDER, externalRef, now));
             default -> giveUpAfterMax(BookingAction.VERIFY, now);
@@ -171,9 +182,13 @@ public record Booking(
         return switch (reply) {
             case CalendarReply.Booked booked ->
                     changed(discrepancy(FOUND_AFTER_MANUAL, Optional.of(booked.externalRef()), now));
+            case CalendarReply.Mismatched m ->
+                    changed(discrepancy(FOUND_AFTER_MANUAL, Optional.of(m.externalRef()), now));
             case CalendarReply.Absent a -> unchanged(reconciled(now));
             case CalendarReply.Cancelled c -> unchanged(reconciled(now));
-            default -> giveUpAfterMax(BookingAction.ORPHAN_CHECK, now);
+            // The earlier request may have been booked: never stop looking without an answer.
+            default -> unchanged(next(state, source, externalRef, reasonCode, Optional.of(BookingAction.ORPHAN_CHECK),
+                    attempts, Optional.of(now.plus(wait(attempts))), lastReconciledAt, manual, now));
         };
     }
 
@@ -184,10 +199,39 @@ public record Booking(
             case CalendarReply.Cancelled c -> cancelled(now);
             case CalendarReply.UnknownReference r -> cancelled(now);
             case CalendarReply.Absent a -> cancelled(now);
+            // 422: the calendar will never accept it. The intervention is cancelled; the booking is left
+            // as a discrepancy, still holding its reference, for someone to cancel at the calendar by hand.
+            case CalendarReply.Defect d -> new BookingStep(discrepancy(CANCEL_REFUSED, externalRef, now),
+                    BookingStep.Effect.CANCELLED);
             // Cancellation stays pending until the outcome is checked: no attempt limit.
-            default -> unchanged(next(state, source, externalRef, reasonCode, Optional.of(BookingAction.CANCEL),
-                    attempts, Optional.of(now.plus(wait(attempts))), lastReconciledAt, manual, now));
+            case CalendarReply.Unavailable u -> retryCancel(now);
+            case CalendarReply.Unknown u -> retryCancel(now);
+            case CalendarReply.Mismatched m -> retryCancel(now);
+            case CalendarReply.Conflict c -> retryCancel(now);
         };
+    }
+
+    private BookingStep retryCancel(Instant now) {
+        return unchanged(next(state, source, externalRef, reasonCode, Optional.of(BookingAction.CANCEL), attempts,
+                Optional.of(now.plus(wait(attempts))), lastReconciledAt, manual, now));
+    }
+
+    /**
+     * The worker found the window started before the request reached the
+     * calendar ({@code CREATE} due, or a lookup found nothing): the booking is
+     * never sent late. It fails, so the administrator confirms by hand or
+     * cancels.
+     */
+    public BookingStep windowPassed(Instant now) {
+        if (state != BookingState.REQUESTED && state != BookingState.UNCERTAIN) {
+            throw new IllegalStateException("only a booking not yet at the calendar can miss its window");
+        }
+        return changed(end(BookingState.FAILED, WINDOW_PASSED, now));
+    }
+
+    /** Whether the window has started, so nothing more may be sent to the calendar for it. */
+    public boolean windowStarted(Instant now) {
+        return !window.start().isAfter(now);
     }
 
     /**
@@ -204,7 +248,7 @@ public record Booking(
         boolean outstanding = state == BookingState.REQUESTED || state == BookingState.UNCERTAIN;
         Optional<BookingAction> check = outstanding ? Optional.of(BookingAction.ORPHAN_CHECK) : Optional.empty();
         return next(BookingState.CONFIRMED, Optional.of(BookingSource.MANUAL), Optional.empty(), Optional.empty(),
-                check, 0, check.map(a -> now), lastReconciledAt, Optional.of(confirmation), now);
+                check, 0, check.map(a -> afterAnyCallInFlight(now)), lastReconciledAt, Optional.of(confirmation), now);
     }
 
     /** The window that is booked: the manual one if confirmed by hand, otherwise the requested one. */
@@ -232,7 +276,7 @@ public record Booking(
             case REQUESTED, UNCERTAIN -> true;
             case CONFIRMED -> source.orElse(null) == BookingSource.CALENDAR
                     || action.orElse(null) == BookingAction.ORPHAN_CHECK;
-            case DISCREPANCY -> reasonCode.orElse("").equals(FOUND_AFTER_MANUAL);
+            case DISCREPANCY -> Set.of(FOUND_AFTER_MANUAL, WINDOW_MISMATCH).contains(reasonCode.orElse(""));
             default -> false;
         };
         if (!mayExist) {
@@ -240,7 +284,19 @@ public record Booking(
             return new CancellationStart(ended, false);
         }
         return new CancellationStart(next(state, source, externalRef, reasonCode, Optional.of(BookingAction.CANCEL),
-                0, Optional.of(now), lastReconciledAt, manual, now), true);
+                0, Optional.of(afterAnyCallInFlight(now)), lastReconciledAt, manual, now), true);
+    }
+
+    /**
+     * When a new lookup may run: not before a create or reconciliation that a
+     * worker may still be making has ended (its lease), or the lookup could
+     * miss a booking the calendar is about to make. The lease is the claimed
+     * booking's due time; a {@code CREATE} or {@code RECONCILE} waiting to be
+     * retried is also kept, at most 2 minutes.
+     */
+    private Instant afterAnyCallInFlight(Instant now) {
+        boolean mayBeCreating = action.filter(a -> a == BookingAction.CREATE || a == BookingAction.RECONCILE).isPresent();
+        return mayBeCreating ? nextAttemptAt.filter(due -> due.isAfter(now)).orElse(now) : now;
     }
 
     /** @param needsCalendar whether the calendar must be called before the intervention is cancelled */
@@ -256,7 +312,8 @@ public record Booking(
     }
 
     private BookingStep retry(BookingAction nextAction, BookingState nextState, Instant now) {
-        if (attempts >= MAX_ATTEMPTS) {
+        // Only a booking known not to be at the calendar may fail: an uncertain one is looked up until answered.
+        if (attempts >= MAX_ATTEMPTS && nextState != BookingState.UNCERTAIN) {
             return changed(end(BookingState.FAILED, RETRIES_EXHAUSTED, now));
         }
         Booking waiting = next(nextState, source, externalRef, reasonCode, Optional.of(nextAction), attempts,

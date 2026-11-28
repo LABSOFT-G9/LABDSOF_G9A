@@ -77,7 +77,7 @@ class SimulatorCalendarAdapter implements CalendarPort {
     }
 
     @Override
-    public CalendarReply find(BookingId id) {
+    public CalendarReply find(BookingId id, TimeWindow requested) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(properties.baseUrl() + "/bookings?requestId="
                         + URLEncoder.encode(id.toString(), StandardCharsets.UTF_8)))
                 .timeout(properties.timeout())
@@ -90,9 +90,18 @@ class SimulatorCalendarAdapter implements CalendarPort {
                 }
                 Optional<Answer> found = items.size() == 1 ? answer(items.getFirst()) : Optional.empty();
                 return found.filter(b -> b.matches(id, Optional.empty()))
-                        .<CalendarReply>map(b -> b.confirmed()
-                                ? new CalendarReply.Booked(b.externalRef())
-                                : "cancelled".equals(b.status()) ? new CalendarReply.Cancelled() : new CalendarReply.Unknown())
+                        .<CalendarReply>map(b -> {
+                            if ("cancelled".equals(b.status())) {
+                                return new CalendarReply.Cancelled();
+                            }
+                            if (!b.confirmed()) {
+                                return new CalendarReply.Unknown();
+                            }
+                            // The same check as a create's answer: only the requested window is the booking.
+                            return b.matches(id, Optional.of(requested))
+                                    ? new CalendarReply.Booked(b.externalRef())
+                                    : new CalendarReply.Mismatched(b.externalRef());
+                        })
                         .orElse(new CalendarReply.Unknown());
             }).orElse(new CalendarReply.Unknown());
             case 503 -> new CalendarReply.Unavailable();

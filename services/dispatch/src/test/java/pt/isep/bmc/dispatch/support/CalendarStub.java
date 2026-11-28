@@ -66,7 +66,12 @@ public final class CalendarStub {
         requests.clear();
     }
 
-    /** Queues outcomes: {@code ok}, {@code conflict}, {@code unavailable}, {@code invalid}, {@code timeout}, {@code timeout_after_create}. */
+    /**
+     * Queues outcomes: {@code ok}, {@code conflict}, {@code unavailable},
+     * {@code invalid} (a create's 2xx without a reference; a cancellation's
+     * 422), {@code timeout}, {@code timeout_after_create}, and for a lookup
+     * {@code wrong_window} (the booking, an hour later than booked).
+     */
     public synchronized void script(String operation, String... outcomes) {
         scripts.get(operation).addAll(List.of(outcomes));
     }
@@ -149,6 +154,7 @@ public final class CalendarStub {
         switch (outcome) {
             case "unavailable" -> answer(exchange, 503, Map.of("code", "UNAVAILABLE"));
             case "timeout" -> hang(exchange);
+            case "wrong_window" -> answer(exchange, 200, Map.of("items", booking == null ? List.of() : List.of(moved(booking))));
             default -> answer(exchange, 200, Map.of("items", booking == null ? List.of() : List.of(booking)));
         }
     }
@@ -167,6 +173,7 @@ public final class CalendarStub {
         switch (outcome) {
             case "unavailable" -> answer(exchange, 503, Map.of("code", "UNAVAILABLE"));
             case "timeout" -> hang(exchange);
+            case "invalid" -> answer(exchange, 422, Map.of("code", "INVALID_REQUEST"));
             default -> {
                 if (found == null) {
                     answer(exchange, 404, Map.of("code", "NOT_FOUND"));
@@ -175,6 +182,16 @@ public final class CalendarStub {
                 }
             }
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> moved(Map<String, Object> booking) {
+        Map<String, Object> copy = new LinkedHashMap<>(booking);
+        Map<String, Object> window = (Map<String, Object>) booking.get("window");
+        copy.put("window", Map.of(
+                "start", java.time.Instant.parse((String) window.get("start")).plusSeconds(3600).toString(),
+                "end", java.time.Instant.parse((String) window.get("end")).plusSeconds(3600).toString()));
+        return copy;
     }
 
     private String next(String operation) {

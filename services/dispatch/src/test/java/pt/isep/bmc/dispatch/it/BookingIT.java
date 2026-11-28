@@ -154,6 +154,93 @@ class BookingIT extends IntegrationTestSupport {
     }
 
     @Test
+    void anUncertainBookingKeepsBeingLookedUpAndIsNeverFailed() {
+        String interventionId = agreedIntervention();
+        calendar.script("create", "timeout");
+        calendar.script("query", "unavailable", "unavailable", "unavailable", "unavailable", "unavailable",
+                "unavailable");
+        for (int i = 0; i < 7; i++) {
+            runBookingWorker();
+        }
+        assertThat(bookingOf(interventionId)).containsEntry("state", "uncertain")
+                .containsEntry("pendingAction", "reconcile");
+
+        runBookingWorker();
+
+        assertThat(bookingOf(interventionId)).containsEntry("state", "confirmed");
+        assertThat(calendar.bookingCount()).isEqualTo(1);
+    }
+
+    @Test
+    void aBookingFoundForAnotherWindowIsADiscrepancyAndCancellingCancelsItAtTheCalendar() {
+        String interventionId = agreedIntervention();
+        calendar.script("create", "timeout_after_create");
+        calendar.script("query", "wrong_window");
+        runBookingWorker();
+
+        runBookingWorker();
+
+        Map<String, Object> booking = bookingOf(interventionId);
+        assertThat(booking).containsEntry("state", "discrepancy").containsEntry("reasonCode", "window_mismatch");
+        assertThat((String) booking.get("externalRef")).startsWith("SIM-BK-");
+        assertThat(intervention(interventionId)).containsEntry("state", "scheduling_pending");
+        assertThat(Api.map(event("BookingStateChanged").get("data"))).containsEntry("bookingState", "discrepancy");
+
+        assertThat(cancel(interventionId, 3, "rescheduling").json()).containsEntry("state", "cancellation_pending");
+        runBookingWorker();
+
+        assertThat(intervention(interventionId)).containsEntry("state", "cancelled");
+        assertThat(calendar.requests()).last().asString().endsWith("/cancellation");
+    }
+
+    @Test
+    void aCancellationTheCalendarRefusesStillCancelsTheInterventionAndShowsTheBooking() {
+        String interventionId = agreedIntervention();
+        runBookingWorker();
+        calendar.script("cancel", "invalid");
+        cancel(interventionId, 4, "no_longer_needed");
+
+        runBookingWorker();
+
+        Map<String, Object> cancelled = intervention(interventionId);
+        assertThat(cancelled).containsEntry("state", "cancelled");
+        assertThat(Api.map(cancelled.get("booking"))).containsEntry("state", "discrepancy")
+                .containsEntry("reasonCode", "cancel_refused").containsEntry("pendingAction", null);
+        assertThat(Api.map(event("InterventionCancelled").get("data"))).containsEntry("reasonCode", "no_longer_needed");
+        assertThat(runBookingWorker()).as("never retried").isZero();
+    }
+
+    @Test
+    void nothingIsSentOnceTheWindowHasStarted() {
+        String interventionId = agreedIntervention();
+        jdbc.sql("UPDATE bookings SET window_start = UTC_TIMESTAMP(6) - INTERVAL 1 HOUR").update();
+
+        runBookingWorker();
+
+        assertThat(bookingOf(interventionId)).containsEntry("state", "failed").containsEntry("reasonCode", "window_passed");
+        assertThat(calendar.requests()).isEmpty();
+    }
+
+    @Test
+    void theIssuesListShowsEachInterventionsOwnBookingsAndCalls() {
+        String first = agreedIntervention();
+        runBookingWorker();
+        String issueId = (String) intervention(first).get("issueId");
+        cancel(first, 4, "rescheduling");
+        runBookingWorker();
+        String second = (String) draft(ADMIN_A, issueId, AQUA_PLUMBERS).json().get("interventionId");
+
+        List<Object> items = Api.list(api.get("/interventions?issueId=" + issueId, tokens.token(ADMIN_A)).json()
+                .get("items"));
+
+        assertThat(items).extracting(i -> Api.map(i).get("interventionId")).containsExactly(second, first);
+        assertThat(Api.list(Api.map(items.get(0)).get("bookings"))).isEmpty();
+        assertThat(Api.list(Api.map(items.get(1)).get("bookings"))).singleElement()
+                .satisfies(b -> assertThat(Api.list(Api.map(b).get("calls"))).extracting(c -> Api.map(c).get("outcome"))
+                        .containsExactly("booked", "cancelled"));
+    }
+
+    @Test
     void aBookingLostByTheCalendarIsADiscrepancyFoundOnDemand() {
         String interventionId = agreedIntervention();
         runBookingWorker();

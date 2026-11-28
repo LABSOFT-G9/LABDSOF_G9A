@@ -15,8 +15,12 @@ public interface CalendarPort {
     /** {@code POST /bookings} with the booking ID as idempotency key. */
     CalendarReply create(BookingCall call);
 
-    /** {@code GET /bookings?requestId=}: {@code Booked}, {@code Cancelled}, {@code Absent}, or a failure. */
-    CalendarReply find(BookingId id);
+    /**
+     * {@code GET /bookings?requestId=}: {@code Booked} only for the requested
+     * window, {@code Mismatched} for a confirmed booking with another window,
+     * {@code Cancelled}, {@code Absent}, or a failure.
+     */
+    CalendarReply find(BookingId id, TimeWindow requested);
 
     /** Cancels a booking the calendar confirmed: {@code Cancelled}, {@code UnknownReference}, or a failure. */
     CalendarReply cancel(String externalRef, BookingId id);

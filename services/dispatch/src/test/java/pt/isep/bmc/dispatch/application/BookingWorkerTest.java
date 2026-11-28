@@ -137,6 +137,71 @@ class BookingWorkerTest {
     }
 
     @Test
+    void anUncertainBookingIsLookedUpPastFiveAttemptsAndNeverFails() {
+        calendar.creates.add(new CalendarReply.Unknown());
+        for (int i = 0; i < 8; i++) {
+            calendar.finds.add(new CalendarReply.Unavailable());
+        }
+        worker.runDue();
+        for (int i = 0; i < 8; i++) {
+            later(120);
+            worker.runDue();
+        }
+
+        assertThat(calendar.count("find")).isEqualTo(8);
+        assertThat(booking().state()).isEqualTo(BookingState.UNCERTAIN);
+        later(120);
+        worker.runDue();
+        assertThat(booking().state()).as("the next lookup finds nothing, so it is sent again")
+                .isEqualTo(BookingState.CONFIRMED);
+        assertThat(calendar.count("create")).isEqualTo(2);
+    }
+
+    @Test
+    void aRequestDueAfterItsWindowStartedFailsWithoutACall() {
+        f.clock.advance(Duration.between(f.clock.instant(), booking().window().start()).plusSeconds(1));
+
+        worker.runDue();
+
+        assertThat(calendar.calls).isEmpty();
+        assertThat(booking().state()).isEqualTo(BookingState.FAILED);
+        assertThat(booking().reasonCode()).contains(Booking.WINDOW_PASSED);
+        assertThat(lastEvent()).isInstanceOfSatisfying(BookingStateChanged.class,
+                e -> assertThat(e.bookingState()).isEqualTo(BookingState.FAILED));
+    }
+
+    @Test
+    void anUncertainBookingFoundAbsentAfterItsWindowStartedIsNotSentAgain() {
+        calendar.creates.add(new CalendarReply.Unknown());
+        calendar.finds.add(new CalendarReply.Absent());
+        worker.runDue();
+        f.clock.advance(Duration.between(f.clock.instant(), booking().window().start()));
+
+        worker.runDue();
+
+        assertThat(calendar.count("create")).isEqualTo(1);
+        assertThat(calendar.count("find")).isEqualTo(1);
+        assertThat(booking().reasonCode()).contains(Booking.WINDOW_PASSED);
+    }
+
+    @Test
+    void aCancellationCancelsWhatTheLookupFindsWhateverItsWindow() {
+        calendar.creates.add(new CalendarReply.Unknown());
+        worker.runDue();
+        Booking cancelling = booking().startCancellation(f.clock.instant()).booking();
+        f.ports.bookings.put(cancelling.id(), cancelling);
+        calendar.finds.add(new CalendarReply.Mismatched("SIM-BK-77"));
+
+        later(4);
+        assertThat(worker.runDue()).as("the reconciliation's wait is kept").isZero();
+        later(1);
+        worker.runDue();
+
+        assertThat(calendar.calls).contains("cancel SIM-BK-77");
+        assertThat(booking().state()).isEqualTo(BookingState.CANCELLED);
+    }
+
+    @Test
     void aClaimedBookingIsNotDueAgainUntilItsLeaseEnds() {
         Booking claimed = booking().claim(f.clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
                 Duration.ofSeconds(60));

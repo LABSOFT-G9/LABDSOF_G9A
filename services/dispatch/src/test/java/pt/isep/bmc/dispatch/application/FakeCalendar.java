@@ -7,6 +7,7 @@ import java.util.List;
 import pt.isep.bmc.dispatch.application.port.out.CalendarPort;
 import pt.isep.bmc.dispatch.domain.booking.BookingId;
 import pt.isep.bmc.dispatch.domain.booking.CalendarReply;
+import pt.isep.bmc.dispatch.domain.intervention.TimeWindow;
 
 /**
  * An in-process calendar for the application tests (ADR-006): each call
@@ -28,7 +29,7 @@ public class FakeCalendar implements CalendarPort {
     }
 
     @Override
-    public CalendarReply find(BookingId id) {
+    public CalendarReply find(BookingId id, TimeWindow requested) {
         calls.add("find " + id);
         CalendarReply reply = finds.poll();
         return reply == null ? new CalendarReply.Absent() : reply;

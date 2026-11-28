@@ -211,6 +211,97 @@ class BookingTest {
     }
 
     @Test
+    void anUncertainBookingIsNeverFailedAndIsLookedUpUntilTheCalendarAnswers() {
+        Booking uncertain = reply(requested(WINDOW), new CalendarReply.Unknown()).booking();
+        for (int i = 0; i < Booking.MAX_ATTEMPTS * 3; i++) {
+            BookingStep down = reply(uncertain, i % 2 == 0 ? new CalendarReply.Unavailable() : new CalendarReply.Unknown());
+            assertThat(down.booking().state()).isEqualTo(BookingState.UNCERTAIN);
+            assertThat(down.booking().action()).contains(BookingAction.RECONCILE);
+            uncertain = down.booking();
+        }
+        Booking waiting = uncertain;
+        assertThat(waiting.nextAttemptAt()).as("at most 2 minutes apart").contains(NOW.plus(Duration.ofMinutes(2)));
+
+        assertThat(reply(waiting, new CalendarReply.Booked("SIM-BK-9")).booking().state())
+                .isEqualTo(BookingState.CONFIRMED);
+        assertThat(waiting.startCancellation(NOW).needsCalendar()).as("still may exist").isTrue();
+    }
+
+    @Test
+    void aLookupThatFindsAnotherWindowIsADiscrepancyThatCancellationStillCancels() {
+        Booking uncertain = reply(requested(WINDOW), new CalendarReply.Unknown()).booking();
+
+        BookingStep moved = reply(uncertain, new CalendarReply.Mismatched("SIM-BK-4"));
+
+        assertThat(moved.booking().state()).isEqualTo(BookingState.DISCREPANCY);
+        assertThat(moved.booking().reasonCode()).contains(Booking.WINDOW_MISMATCH);
+        assertThat(moved.booking().externalRef()).contains("SIM-BK-4");
+        assertThat(moved.effect()).as("never confirmed").isEqualTo(BookingStep.Effect.STATE_CHANGED);
+        assertThat(moved.booking().startCancellation(NOW).needsCalendar()).isTrue();
+        assertThat(reply(confirmed(), new CalendarReply.Mismatched("SIM-BK-1")).booking().reasonCode())
+                .as("a verification too").contains(Booking.WINDOW_MISMATCH);
+    }
+
+    @Test
+    void theCheckAfterAManualConfirmationNeverStopsWithoutAnAnswer() {
+        Booking manual = reply(requested(WINDOW), new CalendarReply.Unknown()).booking().confirmManually(manual(), NOW);
+        for (int i = 0; i < Booking.MAX_ATTEMPTS * 2; i++) {
+            BookingStep down = reply(manual, new CalendarReply.Unavailable());
+            assertThat(down.booking().action()).contains(BookingAction.ORPHAN_CHECK);
+            assertThat(down.effect()).isEqualTo(BookingStep.Effect.NONE);
+            manual = down.booking();
+        }
+
+        assertThat(manual.startCancellation(NOW).needsCalendar()).as("still looked up when cancelled").isTrue();
+        assertThat(reply(manual, new CalendarReply.Mismatched("SIM-BK-5")).booking().reasonCode())
+                .contains(Booking.FOUND_AFTER_MANUAL);
+    }
+
+    @Test
+    void aCancellationTheCalendarRefusesEndsTheInterventionAndLeavesADiscrepancy() {
+        Booking cancelling = confirmed().startCancellation(NOW).booking();
+
+        BookingStep refused = reply(cancelling, new CalendarReply.Defect());
+
+        assertThat(refused.effect()).isEqualTo(BookingStep.Effect.CANCELLED);
+        assertThat(refused.booking().state()).isEqualTo(BookingState.DISCREPANCY);
+        assertThat(refused.booking().reasonCode()).contains(Booking.CANCEL_REFUSED);
+        assertThat(refused.booking().externalRef()).as("kept, to cancel by hand").contains("SIM-BK-1");
+        assertThat(refused.booking().action()).as("never retried").isEmpty();
+    }
+
+    @Test
+    void aLookupStartedByCancellingOrConfirmingWaitsForACallStillInFlight() {
+        Booking inFlight = requested(WINDOW).claim(NOW, Duration.ofSeconds(60));
+
+        Booking cancelling = inFlight.startCancellation(NOW.plusSeconds(1)).booking();
+        Booking manual = inFlight.confirmManually(manual(), NOW.plusSeconds(1));
+
+        assertThat(cancelling.nextAttemptAt()).contains(NOW.plusSeconds(60));
+        assertThat(manual.nextAttemptAt()).contains(NOW.plusSeconds(60));
+        assertThat(requested(WINDOW).startCancellation(NOW.plusSeconds(1)).booking().nextAttemptAt())
+                .as("nothing in flight").contains(NOW.plusSeconds(1));
+        Booking verifyLater = confirmed();
+        assertThat(verifyLater.nextAttemptAt()).hasValueSatisfying(at -> assertThat(at).isAfter(NOW.plus(Duration.ofDays(1))));
+        assertThat(verifyLater.startCancellation(NOW).booking().nextAttemptAt())
+                .as("a later verification does not delay the cancellation").contains(NOW);
+    }
+
+    @Test
+    void aBookingNotAtTheCalendarFailsOnceItsWindowHasStarted() {
+        Booking uncertain = reply(requested(SOON), new CalendarReply.Unknown()).booking();
+        Instant started = SOON.start();
+
+        assertThat(requested(SOON).windowStarted(started)).isTrue();
+        assertThat(requested(SOON).windowStarted(started.minusSeconds(1))).isFalse();
+        BookingStep passed = uncertain.windowPassed(started);
+        assertThat(passed.booking().state()).isEqualTo(BookingState.FAILED);
+        assertThat(passed.booking().reasonCode()).contains(Booking.WINDOW_PASSED);
+        assertThat(passed.effect()).isEqualTo(BookingStep.Effect.STATE_CHANGED);
+        assertThatThrownBy(() -> confirmed().windowPassed(NOW)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void onlyAConfirmedCalendarBookingCanBeCheckedOnDemand() {
         assertThat(confirmed().requestVerification(NOW).action()).contains(BookingAction.VERIFY);
         assertThatThrownBy(() -> requested(WINDOW).requestVerification(NOW))

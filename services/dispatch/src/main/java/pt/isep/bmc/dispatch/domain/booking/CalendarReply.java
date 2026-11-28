@@ -20,6 +20,21 @@ public sealed interface CalendarReply {
         }
     }
 
+    /**
+     * The calendar holds this request ID, confirmed, but not for the
+     * requested window (or with no window that can be read): it exists, so
+     * it is never treated as absent, and never as the agreed booking.
+     */
+    record Mismatched(String externalRef) implements CalendarReply {
+
+        public Mismatched {
+            Objects.requireNonNull(externalRef, "externalRef");
+            if (externalRef.isBlank()) {
+                throw new IllegalArgumentException("an external reference is not blank");
+            }
+        }
+    }
+
     /** {@code 409}: the slot is taken. */
     record Conflict() implements CalendarReply {
     }

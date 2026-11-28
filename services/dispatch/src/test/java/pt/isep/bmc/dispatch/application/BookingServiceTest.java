@@ -89,6 +89,8 @@ class BookingServiceTest {
 
         calendar.finds.add(new CalendarReply.Booked("SIM-BK-3"));
         f.clock.advance(Duration.ofSeconds(1));
+        assertThat(worker.runDue()).as("not before the reconciliation that was due").isZero();
+        f.clock.advance(Duration.ofSeconds(4));
         worker.runDue();
         assertThat(booking().state()).as("never two confirmed bookings").isEqualTo(BookingState.DISCREPANCY);
         assertThat(booking().reasonCode()).contains(Booking.FOUND_AFTER_MANUAL);
@@ -186,6 +188,8 @@ class BookingServiceTest {
         calendar.finds.add(new CalendarReply.Booked("SIM-BK-8"));
 
         f.clock.advance(Duration.ofSeconds(1));
+        assertThat(worker.runDue()).as("not before the reconciliation that was due").isZero();
+        f.clock.advance(Duration.ofSeconds(4));
         worker.runDue();
 
         assertThat(calendar.calls).contains("cancel SIM-BK-8");

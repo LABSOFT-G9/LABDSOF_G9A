@@ -74,10 +74,13 @@ class SimulatorCalendarAdapterIT {
         assertThat(created).isInstanceOf(CalendarReply.Booked.class);
         String ref = ((CalendarReply.Booked) created).externalRef();
         assertThat(calendar.create(call(id, "SIM-CTR-001"))).as("a re-send").isEqualTo(created);
-        assertThat(calendar.find(id)).isEqualTo(created);
-        assertThat(calendar.find(new BookingId(UUID.randomUUID()))).isInstanceOf(CalendarReply.Absent.class);
+        assertThat(calendar.find(id, WINDOW)).isEqualTo(created);
+        assertThat(calendar.find(id, new TimeWindow(WINDOW.start(), WINDOW.end().plusSeconds(3600))))
+                .as("held under this request ID, but not for the window asked")
+                .isEqualTo(new CalendarReply.Mismatched(ref));
+        assertThat(calendar.find(new BookingId(UUID.randomUUID()), WINDOW)).isInstanceOf(CalendarReply.Absent.class);
         assertThat(calendar.cancel(ref, id)).isInstanceOf(CalendarReply.Cancelled.class);
-        assertThat(calendar.find(id)).isInstanceOf(CalendarReply.Cancelled.class);
+        assertThat(calendar.find(id, WINDOW)).isInstanceOf(CalendarReply.Cancelled.class);
         assertThat(calendar.cancel("SIM-BK-0", id)).isInstanceOf(CalendarReply.UnknownReference.class);
     }
 
@@ -95,7 +98,7 @@ class SimulatorCalendarAdapterIT {
         assertThat(calendar.create(call(new BookingId(UUID.randomUUID()), " ")))
                 .as("a contract defect").isInstanceOf(CalendarReply.Defect.class);
         script("query", "unavailable");
-        assertThat(calendar.find(new BookingId(UUID.randomUUID()))).isInstanceOf(CalendarReply.Unavailable.class);
+        assertThat(calendar.find(new BookingId(UUID.randomUUID()), WINDOW)).isInstanceOf(CalendarReply.Unavailable.class);
     }
 
     @Test
@@ -105,7 +108,7 @@ class SimulatorCalendarAdapterIT {
 
         assertThat(calendar.create(call(id, "SIM-CTR-001"))).isInstanceOf(CalendarReply.Unknown.class);
 
-        assertThat(calendar.find(id)).isInstanceOf(CalendarReply.Booked.class);
+        assertThat(calendar.find(id, WINDOW)).isInstanceOf(CalendarReply.Booked.class);
     }
 
     @Test
@@ -114,7 +117,7 @@ class SimulatorCalendarAdapterIT {
         calendar.create(call(id, "SIM-CTR-001"));
         control("DELETE", "/control/bookings", null);
 
-        assertThat(calendar.find(id)).isInstanceOf(CalendarReply.Absent.class);
+        assertThat(calendar.find(id, WINDOW)).isInstanceOf(CalendarReply.Absent.class);
         SimulatorCalendarAdapter closed = new SimulatorCalendarAdapter(
                 new CalendarProperties("http://localhost:1", Duration.ofSeconds(1)), JsonMapper.builder().build());
         assertThat(closed.create(call(id, "SIM-CTR-001"))).isInstanceOf(CalendarReply.Unavailable.class);
