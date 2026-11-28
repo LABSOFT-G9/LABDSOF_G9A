@@ -42,6 +42,7 @@ final class PersistenceMapper {
         entity.category = issue.category().map(IssueCategory::value).orElse(null);
         entity.urgency = issue.urgency().map(IssueUrgency::value).orElse(null);
         entity.criticalCheckStatus = issue.criticalCheckStatus().value();
+        entity.criticalRulesVersion = issue.criticalRulesVersion().orElse(null);
         entity.publishedSummaryId = issue.publishedSummaryId().map(SummaryId::toString).orElse(null);
         entity.createdAt = Timestamps.toColumn(issue.createdAt());
         entity.updatedAt = Timestamps.toColumn(issue.updatedAt());
@@ -58,6 +59,7 @@ final class PersistenceMapper {
                 entity.category == null ? null : category(entity.category),
                 entity.urgency == null ? null : urgency(entity.urgency),
                 CriticalCheckStatus.fromValue(entity.criticalCheckStatus),
+                entity.criticalRulesVersion,
                 entity.publishedSummaryId == null ? null : new SummaryId(UUID.fromString(entity.publishedSummaryId)),
                 Timestamps.fromColumn(entity.createdAt),
                 Timestamps.fromColumn(entity.updatedAt));

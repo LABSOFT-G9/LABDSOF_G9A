@@ -34,9 +34,13 @@ class ReportSubmissionIT extends IntegrationTestSupport {
         assertThat(jdbc.sql("SELECT text, source, author_user_id FROM reports WHERE id = ?").param(reportId)
                 .query((rs, n) -> List.of(rs.getString(1), rs.getString(2), rs.getString(3))).single())
                 .containsExactly(TEXT, "resident", RESIDENT_A1);
-        assertThat(jdbc.sql("SELECT state, version, critical_check_status FROM issues WHERE id = ?").param(issueId)
-                .query((rs, n) -> List.of(rs.getString(1), rs.getString(2), rs.getString(3))).single())
-                .containsExactly("received", "1", "pending");
+        // The critical check ran with the report and found nothing in this text.
+        assertThat(jdbc.sql("SELECT state, version, critical_check_status, critical_rules_version FROM issues"
+                        + " WHERE id = ?").param(issueId)
+                .query((rs, n) -> List.of(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)))
+                .single())
+                .containsExactly("received", "1", "completed", "critical-alerts-v1");
+        assertThat(count("issue_critical_signals")).isZero();
         assertThat(jdbc.sql("SELECT type, visibility, actor_role FROM issue_history WHERE issue_id = ?").param(issueId)
                 .query((rs, n) -> List.of(rs.getString(1), rs.getString(2), rs.getString(3))).single())
                 .containsExactly("report_received", "public", "resident");

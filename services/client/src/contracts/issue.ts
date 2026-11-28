@@ -129,10 +129,19 @@ export const TriageSuggestionSchema = z.object({
 export type TriageSuggestion = z.infer<typeof TriageSuggestionSchema>;
 
 /**
- * Rule codes of the critical check that the client words. ASSUMPTION: the codes come with the `critical-alerts-v1`
- * rule set, which is not agreed yet (#96). Any other code is still shown, in general words.
+ * Rule codes of the critical check that the client words: the rule set `critical-alerts-v1` of the Issue service
+ * (US-14-02, #96; `services/issue/README.md`). Any other code is still shown, in general words, so a later rule set
+ * never breaks the page.
  */
-export const KNOWN_SIGNAL_CODES = ["smoke_or_fire", "gas_smell", "exposed_wiring", "water_near_electrics"] as const;
+export const KNOWN_SIGNAL_CODES = [
+  "smoke_or_fire",
+  "gas_smell",
+  "exposed_wiring",
+  "water_near_electrics",
+  "electric_shock",
+  "person_trapped",
+  "collapse_risk",
+] as const;
 export type KnownSignalCode = (typeof KNOWN_SIGNAL_CODES)[number];
 
 /** One rule of the critical check that matched a report. A fact about the report: it never clears. */
@@ -252,8 +261,8 @@ export const HistoryActorSchema = z.enum(["resident", "administrator", "contract
 export type HistoryActor = z.infer<typeof HistoryActorSchema>;
 
 /**
- * Entry types the client explains. The first three exist in the service (#140); `critical_alert_raised` is an
- * ASSUMPTION for US-14-02 (#96), `summary_published` one for US-04-01 (#89), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
+ * Entry types the client explains. The first three exist in the service (#140), and `critical_alert_raised` comes
+ * with US-14-02 (#96); `summary_published` is an ASSUMPTION for US-04-01 (#89), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
  * (technical design §3.3). Any other type is
  * still shown, as a generic update, so a new type never breaks the page.
  */

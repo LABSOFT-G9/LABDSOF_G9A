@@ -6,11 +6,14 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.issue.application.port.out.IssueReadModel;
+import pt.isep.bmc.issue.application.query.CriticalCheckView;
 import pt.isep.bmc.issue.application.query.IssueHistoryItem;
 import pt.isep.bmc.issue.application.query.IssueListCriteria;
 import pt.isep.bmc.issue.application.query.IssuePage;
@@ -20,6 +23,7 @@ import pt.isep.bmc.issue.application.query.SuggestionView;
 import pt.isep.bmc.issue.application.query.SummaryView;
 import pt.isep.bmc.issue.application.query.TriageView;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
@@ -34,6 +38,9 @@ import pt.isep.bmc.issue.domain.membership.UserId;
  * resulting version is the newest one for that issue. Its suggestion is the
  * one that was applied, and only while nobody has decided: a late suggestion
  * is in the history, never here.
+ *
+ * <p>The critical check is read for every caller; the query service removes
+ * it for anyone who does not administer the building.
  */
 @Repository
 class JdbcIssueReadModel implements IssueReadModel {
@@ -48,6 +55,7 @@ class JdbcIssueReadModel implements IssueReadModel {
     private static final String SELECT = """
             SELECT i.id, i.building_id, b.name AS building_name, a.label AS area_label, i.state, i.version,
                    i.category, i.urgency, i.created_at, d.decided_at%s,
+                   i.critical_check_status, i.critical_rules_version,
                    g.category AS suggested_category, g.urgency AS suggested_urgency,
                    g.origin AS suggestion_origin, g.needs_review, g.failure_code,
                    g.rules_version, g.model_version, g.recorded_at AS suggested_at,
@@ -89,7 +97,8 @@ class JdbcIssueReadModel implements IssueReadModel {
                 .param("caller", caller.value())
                 .param("now", Timestamps.toColumn(now))
                 .query((rs, n) -> view(rs, true))
-                .optional();
+                .optional()
+                .map(view -> withCriticalSignals(List.of(view)).getFirst());
     }
 
     @Override
@@ -131,7 +140,7 @@ class JdbcIssueReadModel implements IssueReadModel {
         if (hasMore) {
             rows.removeLast();
         }
-        return new IssuePage(rows, criteria.page(), criteria.size(), hasMore);
+        return new IssuePage(withCriticalSignals(rows), criteria.page(), criteria.size(), hasMore);
     }
 
     @Override
@@ -140,7 +149,7 @@ class JdbcIssueReadModel implements IssueReadModel {
                         SELECT h.sequence, h.type, h.visibility, h.actor_role, h.occurred_at,
                                COALESCE(d.category, g.category) AS category,
                                COALESCE(d.urgency, g.urgency) AS urgency,
-                               d.reason, g.origin, g.applied
+                               d.reason, g.origin, g.applied, c.code
                           FROM issue_history h
                           LEFT JOIN triage_decisions d
                                  ON h.type = 'triage_decided'
@@ -150,6 +159,10 @@ class JdbcIssueReadModel implements IssueReadModel {
                                  ON h.type = 'triage_suggested'
                                 AND g.issue_id = h.issue_id
                                 AND g.history_sequence = h.sequence
+                          LEFT JOIN issue_critical_signals c
+                                 ON h.type = 'critical_alert_raised'
+                                AND c.issue_id = h.issue_id
+                                AND c.history_sequence = h.sequence
                          WHERE h.issue_id = :id
                          ORDER BY h.sequence
                         """)
@@ -165,8 +178,35 @@ class JdbcIssueReadModel implements IssueReadModel {
                         Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore),
                         Optional.ofNullable(rs.getString("origin")).map(PersistenceMapper::origin),
                         // Read as an object: NULL on every entry that is not a suggestion.
-                        Optional.ofNullable(rs.getObject("applied", Boolean.class))))
+                        Optional.ofNullable(rs.getObject("applied", Boolean.class)),
+                        Optional.ofNullable(rs.getString("code"))))
                 .list();
+    }
+
+    /** One more query for the whole page: the signals of its issues, oldest first. */
+    private List<IssueView> withCriticalSignals(List<IssueView> views) {
+        if (views.isEmpty()) {
+            return views;
+        }
+        Map<String, List<CriticalCheckView.Signal>> byIssue = jdbc.sql("""
+                        SELECT issue_id, code, raised_at
+                          FROM issue_critical_signals
+                         WHERE issue_id IN (:ids)
+                         ORDER BY issue_id, history_sequence
+                        """)
+                .param("ids", views.stream().map(view -> view.issueId().toString()).toList())
+                .query((rs, n) -> Map.entry(
+                        rs.getString("issue_id"),
+                        new CriticalCheckView.Signal(
+                                rs.getString("code"),
+                                Timestamps.fromColumn(rs.getObject("raised_at", LocalDateTime.class)))))
+                .list()
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+        return views.stream()
+                .map(view -> view.withCriticalSignals(byIssue.getOrDefault(view.issueId().toString(), List.of())))
+                .toList();
     }
 
     /** @param withInternalTexts whether the query selected {@link #INTERNAL_TEXTS} */
@@ -218,6 +258,10 @@ class JdbcIssueReadModel implements IssueReadModel {
                 suggestion,
                 summary,
                 impact,
-                rs.getBoolean("subscribed"));
+                rs.getBoolean("subscribed"),
+                Optional.of(new CriticalCheckView(
+                        CriticalCheckStatus.fromValue(rs.getString("critical_check_status")),
+                        Optional.ofNullable(rs.getString("critical_rules_version")),
+                        List.of())));
     }
 }

@@ -150,12 +150,15 @@ export const en = {
       raisedAt: (when: string) => `Raised ${when}`,
       pendingTitle: "Critical check not finished",
       pendingBody: "Review the report yourself for danger. This is not the same as “nothing found”.",
-      // ASSUMPTION codes until the critical-alerts-v1 rule set is agreed (#96); `other` words any unknown code.
+      // The codes of the Issue service's rule set critical-alerts-v1 (US-14-02, #96); `other` words any unknown code.
       signals: {
         smoke_or_fire: "The report mentions smoke or fire.",
-        gas_smell: "The report mentions a smell of gas.",
+        gas_smell: "The report mentions gas: a smell, a leak or carbon monoxide.",
         exposed_wiring: "The report mentions exposed wiring.",
         water_near_electrics: "The report mentions water near electrics.",
+        electric_shock: "The report mentions an electric shock.",
+        person_trapped: "The report mentions a person stuck in a lift.",
+        collapse_risk: "The report mentions something that collapsed or fell.",
         other: "A critical-alert rule matched this report.",
       },
     },

@@ -40,6 +40,7 @@ import pt.isep.bmc.issue.application.port.in.GetIssueHistoryQuery;
 import pt.isep.bmc.issue.application.port.in.GetIssueQuery;
 import pt.isep.bmc.issue.application.port.in.ListIssuesQuery;
 import pt.isep.bmc.issue.application.port.in.PublishSummaryUseCase;
+import pt.isep.bmc.issue.application.query.CriticalCheckView;
 import pt.isep.bmc.issue.application.query.ImpactView;
 import pt.isep.bmc.issue.application.query.IssueHistoryItem;
 import pt.isep.bmc.issue.application.query.IssuePage;
@@ -267,7 +268,8 @@ class IssueController {
                                 s.text().value(), DateTimeFormatter.ISO_INSTANT.format(s.publishedAt())))
                         .orElse(null),
                 issue.impact().map(IssueController::impact).orElse(null),
-                issue.subscribed());
+                issue.subscribed(),
+                issue.criticalCheck().map(IssueController::criticalCheck).orElse(null));
     }
 
     private static IssueResponse.Suggestion suggestion(SuggestionView suggestion) {
@@ -298,6 +300,17 @@ class IssueController {
                 item.urgency().map(IssueUrgency::value).orElse(null),
                 item.reason().map(TriageReason::value).orElse(null),
                 item.origin().map(SuggestionOrigin::value).orElse(null),
-                item.applied().orElse(null));
+                item.applied().orElse(null),
+                item.code().orElse(null));
+    }
+
+    private static IssueResponse.CriticalCheck criticalCheck(CriticalCheckView check) {
+        return new IssueResponse.CriticalCheck(
+                check.status().value(),
+                check.rulesVersion().orElse(null),
+                check.signals().stream()
+                        .map(signal -> new IssueResponse.CriticalCheck.Signal(
+                                signal.code(), DateTimeFormatter.ISO_INSTANT.format(signal.raisedAt())))
+                        .toList());
     }
 }

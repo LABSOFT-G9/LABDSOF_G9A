@@ -1,6 +1,7 @@
 package pt.isep.bmc.issue.adapters.out.persistence;
 
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.issue.application.port.out.ReportRepository;
@@ -29,6 +30,13 @@ class JpaReportRepository implements ReportRepository {
     @Override
     public boolean existsByIssueAndAuthor(IssueId issueId, UserId author) {
         return reports.existsByIssueIdAndAuthorUserId(issueId.toString(), author.value());
+    }
+
+    @Override
+    public List<Report> findByIssue(IssueId issueId) {
+        return reports.findByIssueIdOrderBySubmittedAtAscIdAsc(issueId.toString()).stream()
+                .map(PersistenceMapper::toDomain)
+                .toList();
     }
 
     @Override

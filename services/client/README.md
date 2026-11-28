@@ -229,8 +229,8 @@ keyboard pass each UI story records in its PR.
   `ASSUMPTION` in `src/contracts/issue.ts`. The US-03-02 additions are agreed with the Issue service owner but not
   built yet: the suggestion's `rationale` (`null` in lists), `needsReview`, `failureCode` and `suggestedAt` (US-03-03,
   #108), and the issue's `criticalCheck` (`status`, `rulesVersion`, `signals`; US-14-02, #96). They are optional, so
-  the service as it is today still parses. Still `ASSUMPTION`: the `failureCode` values (#93, #95) and the signal
-  codes (the `critical-alerts-v1` rule set). "Triage pending — classify manually" is worked out in the client from
+  the service as it is today still parses. Still `ASSUMPTION`: the `failureCode` values (#93, #95). The signal codes
+  are those of the service's rule set `critical-alerts-v1` (US-14-02, #96). "Triage pending — classify manually" is worked out in the client from
   `createdAt` (2 minutes, technical design §5); an issue still waiting on a suggestion or on the critical check is
   asked again every 10 seconds. US-14-03 adds `rulesVersion` and `modelVersion` on the suggestion (agreed on #108),
   `origin` and `applied` on `triage_suggested` history entries (#108), and one `critical_alert_raised` entry per

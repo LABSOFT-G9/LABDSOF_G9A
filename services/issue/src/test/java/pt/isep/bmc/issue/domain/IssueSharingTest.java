@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import pt.isep.bmc.issue.domain.building.BuildingId;
 import pt.isep.bmc.issue.domain.event.IssueStateChanged;
 import pt.isep.bmc.issue.domain.event.IssueSummaryPublished;
+import pt.isep.bmc.issue.domain.issue.CriticalFindings;
+import pt.isep.bmc.issue.domain.issue.CriticalAlertsV1;
 import pt.isep.bmc.issue.domain.issue.HistoryEntryType;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.Issue;
@@ -41,7 +43,7 @@ class IssueSharingTest {
     static final String SUMMARY = "The garage door on level -1 does not close fully.";
     static final SummaryId SUMMARY_ID = new SummaryId(UUID.fromString("0199f2a1-0000-7000-8000-000000007001"));
 
-    final Issue received = Issue.receive(IssueTest.ID, A, IssueTest.AREA, IssueTest.CREATED);
+    final Issue received = Issue.receive(IssueTest.ID, A, IssueTest.AREA, IssueTest.CREATED, CriticalFindings.none(CriticalAlertsV1.VERSION));
     final Issue published = received.publishSummary(1, SUMMARY_ID, NOW);
 
     static BuildingAccess access(BuildingId building, MembershipRole role) {

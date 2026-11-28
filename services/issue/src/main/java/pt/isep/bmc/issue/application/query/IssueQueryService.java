@@ -25,11 +25,13 @@ import pt.isep.bmc.issue.domain.membership.UserId;
  *
  * <ul>
  *   <li>Administrators of the building: everything, including internal
- *       history, triage reasons and the unconfirmed suggestion.</li>
+ *       history, triage reasons, the unconfirmed suggestion and the critical
+ *       check.</li>
  *   <li>Whoever reported the issue and, once a summary is published, every
  *       member of the building: its status, the decided category and urgency,
  *       the summary, the impact count and public history. Never a reason, a
- *       suggestion, an internal entry or anyone's report text.</li>
+ *       suggestion, a critical alert, an internal entry or anyone's report
+ *       text.</li>
  *   <li>Everyone else, including contractors and other buildings'
  *       administrators: not found.</li>
  * </ul>
@@ -59,7 +61,9 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
     public IssueView get(UserId actor, IssueId issueId) {
         return transactions.readOnly(() -> {
             IssueView issue = visible(actor, issueId);
-            return administers(actor, issue.buildingId()) ? issue : issue.withoutTriageReason().withoutSuggestion();
+            return administers(actor, issue.buildingId())
+                    ? issue
+                    : issue.withoutTriageReason().withoutAdministratorOnly();
         });
     }
 
@@ -72,7 +76,7 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
                     actor, access.administeredBuildings(), access.memberBuildings(), building, page, size, now));
             // One page mixes the buildings the caller administers with issues the caller only follows.
             List<IssueView> items = found.items().stream()
-                    .map(issue -> access.administers(issue.buildingId()) ? issue : issue.withoutSuggestion())
+                    .map(issue -> access.administers(issue.buildingId()) ? issue : issue.withoutAdministratorOnly())
                     .toList();
             return new IssuePage(items, found.page(), found.size(), found.hasMore());
         });
