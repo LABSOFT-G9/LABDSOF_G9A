@@ -18,6 +18,10 @@ Summary of what is needed for review; relevant scope and decisions.
 - Result and evidence:
 - Limitations / checks not performed and reason:
 
+## Preview (frontend only)
+
+For frontend work: a table with one row per screen or flow, and Before/After images (or one Preview column for new UI), dragged into this body, not committed. Videos go below the table, each URL alone on its own line. Demo data and a demo account only. An agent writes `TODO: media` in the cells, for a person to fill in before review. Delete this section otherwise.
+
 ## Checklist
 
 - [ ] Acceptance criteria verified.
