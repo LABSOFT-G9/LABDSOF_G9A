@@ -8,6 +8,7 @@ import pt.isep.bmc.issue.adapters.in.startup.PendingCriticalChecksRunner;
 import pt.isep.bmc.issue.application.command.CompletePendingCriticalChecksService;
 import pt.isep.bmc.issue.application.command.DecideTriageService;
 import pt.isep.bmc.issue.application.command.ImpactService;
+import pt.isep.bmc.issue.application.command.ApplyDispatchEventService;
 import pt.isep.bmc.issue.application.command.MembershipAnnouncementService;
 import pt.isep.bmc.issue.application.command.PublishSummaryService;
 import pt.isep.bmc.issue.application.command.PurgeExpiredIdempotencyKeysService;
@@ -18,8 +19,10 @@ import pt.isep.bmc.issue.application.port.in.CompletePendingCriticalChecksUseCas
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
 import pt.isep.bmc.issue.application.port.out.CriticalCheckLog;
 import pt.isep.bmc.issue.application.port.out.CriticalSignalRepository;
+import pt.isep.bmc.issue.application.port.out.DispatchEventLog;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
+import pt.isep.bmc.issue.application.port.out.InterventionRepository;
 import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
 import pt.isep.bmc.issue.application.port.out.ImpactRepository;
 import pt.isep.bmc.issue.application.port.out.IssueReadModel;
@@ -116,6 +119,21 @@ class UseCaseConfig {
             Clock clock) {
         return new DecideTriageService(
                 transactions, memberships, buildings, issues, reports, decisions, outbox, idempotency, ids, clock);
+    }
+
+    /** US-07-03: Dispatch's events from {@code issue.inbox}; the listener of EN-02-02 (#78) calls it. */
+    @Bean
+    ApplyDispatchEventService applyDispatchEventService(
+            TransactionRunner transactions,
+            BuildingRepository buildings,
+            IssueRepository issues,
+            InterventionRepository interventions,
+            DispatchEventLog dispatchEvents,
+            EventOutbox outbox,
+            IdGenerator ids,
+            Clock clock) {
+        return new ApplyDispatchEventService(transactions, buildings, issues, interventions, dispatchEvents, outbox,
+                ids, clock);
     }
 
     @Bean

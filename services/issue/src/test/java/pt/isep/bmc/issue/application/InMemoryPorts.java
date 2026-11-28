@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
 import pt.isep.bmc.issue.application.port.out.CriticalCheckLog;
 import pt.isep.bmc.issue.application.port.out.CriticalSignalRepository;
+import pt.isep.bmc.issue.application.port.out.DispatchEventLog;
 import pt.isep.bmc.issue.application.port.out.DuplicateIdempotencyKeyException;
 import pt.isep.bmc.issue.application.port.out.EventOutbox;
 import pt.isep.bmc.issue.application.port.out.IdGenerator;
@@ -23,6 +24,7 @@ import pt.isep.bmc.issue.application.port.out.IdempotencyRecord;
 import pt.isep.bmc.issue.application.port.out.IdempotencyScope;
 import pt.isep.bmc.issue.application.port.out.IdempotencyStore;
 import pt.isep.bmc.issue.application.port.out.ImpactRepository;
+import pt.isep.bmc.issue.application.port.out.InterventionRepository;
 import pt.isep.bmc.issue.application.port.out.IssueRepository;
 import pt.isep.bmc.issue.application.port.out.MembershipRepository;
 import pt.isep.bmc.issue.application.port.out.OutboxEvent;
@@ -35,6 +37,8 @@ import pt.isep.bmc.issue.application.port.out.TriageSuggestionRepository;
 import pt.isep.bmc.issue.domain.building.Area;
 import pt.isep.bmc.issue.domain.building.AreaId;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.dispatch.DispatchEventRecord;
+import pt.isep.bmc.issue.domain.dispatch.InterventionProjection;
 import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
 import pt.isep.bmc.issue.domain.issue.CriticalSignal;
 import pt.isep.bmc.issue.domain.issue.Issue;
@@ -55,7 +59,8 @@ import pt.isep.bmc.issue.domain.report.ReportId;
  */
 public final class InMemoryPorts implements TransactionRunner, MembershipRepository, BuildingRepository,
         IssueRepository, ReportRepository, TriageDecisionRepository, TriageSuggestionRepository, EventOutbox,
-        IdempotencyStore, IdGenerator, CriticalSignalRepository, CriticalCheckLog {
+        IdempotencyStore, IdGenerator, CriticalSignalRepository, CriticalCheckLog, InterventionRepository,
+        DispatchEventLog {
 
     public final List<Membership> memberships = new ArrayList<>();
     public final Map<AreaId, Area> areas = new HashMap<>();
@@ -70,6 +75,8 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
     public final List<Mark> confirmations = new ArrayList<>();
     public final List<Mark> subscriptions = new ArrayList<>();
     public final List<CriticalSignal> criticalSignals = new ArrayList<>();
+    public final Map<UUID, InterventionProjection> interventions = new java.util.LinkedHashMap<>();
+    public final Map<String, DispatchEventRecord> dispatchEvents = new java.util.LinkedHashMap<>();
     /** Failed critical checks as they would be logged: "issue: exception class". Not undone by a rollback. */
     public final List<String> failedCriticalChecks = new ArrayList<>();
     /** When set, the next record() acts as if a concurrent transaction committed this record first. */
@@ -199,6 +206,35 @@ public final class InMemoryPorts implements TransactionRunner, MembershipReposit
                 .filter(report -> report.issueId().equals(issueId))
                 .sorted(Comparator.comparing(Report::submittedAt))
                 .toList();
+    }
+
+    @Override
+    public List<InterventionProjection> forIssue(IssueId issueId) {
+        return interventions.values().stream().filter(p -> p.issueId().equals(issueId)).toList();
+    }
+
+    @Override
+    public void save(InterventionProjection intervention) {
+        InterventionProjection previous = interventions.put(intervention.interventionId(), intervention);
+        journal(() -> {
+            if (previous == null) {
+                interventions.remove(intervention.interventionId());
+            } else {
+                interventions.put(previous.interventionId(), previous);
+            }
+        });
+    }
+
+    @Override
+    public boolean exists(String eventId) {
+        return dispatchEvents.containsKey(eventId);
+    }
+
+    @Override
+    public void add(DispatchEventRecord record) {
+        if (dispatchEvents.putIfAbsent(record.event().eventId(), record) == null) {
+            journal(() -> dispatchEvents.remove(record.event().eventId()));
+        }
     }
 
     @Override

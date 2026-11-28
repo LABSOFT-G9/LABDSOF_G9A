@@ -23,6 +23,7 @@ public record IssueHistoryEntry(
 
     public static final String ROLE_RESIDENT = "resident";
     public static final String ROLE_ADMINISTRATOR = "administrator";
+    public static final String ROLE_CONTRACTOR = "contractor";
     public static final String ROLE_SYSTEM = "system";
 
     public IssueHistoryEntry {
@@ -86,5 +87,18 @@ public record IssueHistoryEntry(
     public static IssueHistoryEntry triageSuggested(Issue issue, int sequence, Instant at) {
         return new IssueHistoryEntry(issue.id(), sequence, HistoryEntryType.TRIAGE_SUGGESTED,
                 HistoryVisibility.INTERNAL, ROLE_SYSTEM, issue.version(), at);
+    }
+
+    /**
+     * A Dispatch event, applied or recorded late. Its codes and window are in
+     * the {@code DispatchEventRecord} with the same sequence.
+     *
+     * @param issue the issue once the event was recorded: a late event keeps the version it already had
+     * @param at    when the change happened in Dispatch
+     */
+    public static IssueHistoryEntry dispatch(
+            Issue issue, int sequence, HistoryEntryType type, HistoryVisibility visibility, String actorRole,
+            Instant at) {
+        return new IssueHistoryEntry(issue.id(), sequence, type, visibility, actorRole, issue.version(), at);
     }
 }

@@ -261,10 +261,10 @@ export const HistoryActorSchema = z.enum(["resident", "administrator", "contract
 export type HistoryActor = z.infer<typeof HistoryActorSchema>;
 
 /**
- * Entry types the client explains. The first three exist in the service (#140), and `critical_alert_raised` comes
- * with US-14-02 (#96); `summary_published` is an ASSUMPTION for US-04-01 (#89), and the others are ASSUMPTION names for the Dispatch events Issue projects into history
- * (technical design §3.3). Any other type is
- * still shown, as a generic update, so a new type never breaks the page.
+ * Entry types the client explains. The first three exist in the service (#140), `critical_alert_raised` comes with
+ * US-14-02 (#96), `summary_published` with US-04-01 (#147), and the Dispatch ones with US-07-03 (#109): one entry per
+ * Dispatch event, with `applied: false` when it came late. `resolved` and `cancelled` are ASSUMPTION names for
+ * US-09-02 (#106). Any other type is still shown, as a generic update, so a new type never breaks the page.
  */
 export const KNOWN_HISTORY_TYPES = [
   "report_received",
@@ -274,11 +274,17 @@ export const KNOWN_HISTORY_TYPES = [
   "summary_published",
   "intervention_approved",
   "contractor_accepted",
+  "contractor_counterproposed",
   "contractor_declined",
+  "intervention_terms_changed",
   "booking_confirmed",
   "booking_confirmed_manually",
+  "booking_state_changed",
   "intervention_started",
   "completion_reported",
+  "rework_requested",
+  "intervention_cancellation_pending",
+  "intervention_cancelled",
   "resolved",
   "cancelled",
 ] as const;

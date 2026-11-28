@@ -23,6 +23,7 @@ import pt.isep.bmc.issue.application.query.SuggestionView;
 import pt.isep.bmc.issue.application.query.SummaryView;
 import pt.isep.bmc.issue.application.query.TriageView;
 import pt.isep.bmc.issue.domain.building.BuildingId;
+import pt.isep.bmc.issue.domain.dispatch.VisitWindow;
 import pt.isep.bmc.issue.domain.issue.CriticalCheckStatus;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.IssueId;
@@ -149,7 +150,10 @@ class JdbcIssueReadModel implements IssueReadModel {
                         SELECT h.sequence, h.type, h.visibility, h.actor_role, h.occurred_at,
                                COALESCE(d.category, g.category) AS category,
                                COALESCE(d.urgency, g.urgency) AS urgency,
-                               d.reason, g.origin, g.applied, c.code
+                               d.reason, g.origin,
+                               COALESCE(g.applied,
+                                        CASE WHEN e.event_id IS NULL THEN NULL ELSE e.outcome = 'applied' END) AS applied,
+                               COALESCE(c.code, e.code) AS code, e.window_start, e.window_end
                           FROM issue_history h
                           LEFT JOIN triage_decisions d
                                  ON h.type = 'triage_decided'
@@ -163,6 +167,9 @@ class JdbcIssueReadModel implements IssueReadModel {
                                  ON h.type = 'critical_alert_raised'
                                 AND c.issue_id = h.issue_id
                                 AND c.history_sequence = h.sequence
+                          LEFT JOIN dispatch_events e
+                                 ON e.issue_id = h.issue_id
+                                AND e.history_sequence = h.sequence
                          WHERE h.issue_id = :id
                          ORDER BY h.sequence
                         """)
@@ -177,10 +184,18 @@ class JdbcIssueReadModel implements IssueReadModel {
                         Optional.ofNullable(rs.getString("urgency")).map(PersistenceMapper::urgency),
                         Optional.ofNullable(rs.getString("reason")).map(TriageReason::restore),
                         Optional.ofNullable(rs.getString("origin")).map(PersistenceMapper::origin),
-                        // Read as an object: NULL on every entry that is not a suggestion.
+                        // Read as an object: NULL on every entry that is not a suggestion or a Dispatch event.
                         Optional.ofNullable(rs.getObject("applied", Boolean.class)),
-                        Optional.ofNullable(rs.getString("code"))))
+                        Optional.ofNullable(rs.getString("code")),
+                        window(rs.getObject("window_start", LocalDateTime.class),
+                                rs.getObject("window_end", LocalDateTime.class))))
                 .list();
+    }
+
+    private static Optional<VisitWindow> window(LocalDateTime start, LocalDateTime end) {
+        return start == null || end == null
+                ? Optional.empty()
+                : Optional.of(new VisitWindow(Timestamps.fromColumn(start), Timestamps.fromColumn(end)));
     }
 
     /** One more query for the whole page: the signals of its issues, oldest first. */
