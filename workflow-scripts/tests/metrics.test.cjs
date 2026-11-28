@@ -5,7 +5,18 @@ const path = require('node:path');
 const vm = require('node:vm');
 const directory = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(directory, 'burndown.html'), 'utf8');
-const model = html.match(/<script id="burndown-model">([\s\S]*?)<\/script>/)[1];
+// The inline classic scripts of a page, the ones a browser runs as code: no `src`, and no `type` other than a
+// JavaScript one (a JSON block, a template or a module is skipped). Tags and attributes are matched in any case.
+const JAVASCRIPT_TYPES = /^(|text\/javascript|application\/javascript|text\/ecmascript|application\/ecmascript)$/i;
+const attribute = (attributes, name) => {
+  const found = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attributes);
+  return found ? (found[1] ?? found[2] ?? found[3]) : undefined;
+};
+const inlineScripts = page => [...page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)]
+  .map(match => ({ attributes: match[1], body: match[2] }))
+  .filter(script => attribute(script.attributes, 'src') === undefined)
+  .filter(script => JAVASCRIPT_TYPES.test((attribute(script.attributes, 'type') ?? '').trim()));
+const model = inlineScripts(html).find(script => attribute(script.attributes, 'id') === 'burndown-model').body;
 const context = vm.createContext({});
 vm.runInContext(model, context);
 const build = (history, sprint = 'A', done = 'Done', issueSprint = sprint, type = 'all') => context.buildBurndown(history, sprint, done, issueSprint, type);
@@ -114,7 +125,7 @@ test('page loads local JSON, filters automatically and keeps tables/CSV without 
   const get=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
   get('sprint').value='all';get('done-status').value='Done';get('history-url').value='./data/history.json';
   const ctx=vm.createContext({document:{getElementById:get,createElement:element,body:element()},location:{protocol:'file:'},console});
-  for(const script of html.matchAll(/<script(?: id="burndown-model")?>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],ctx);
+  for(const script of inlineScripts(html))vm.runInContext(script.body,ctx);
   assert.match(get('message').textContent,/Choose your/);
   get('history-file').files=[{text:async()=>JSON.stringify([snapshot('2026-10-10',[issue(1),issue(2,'Done','B'),issue(3,'Custom done',null)])])}];
   await get('history-file').listeners.change();
@@ -127,7 +138,7 @@ test('page loads local JSON, filters automatically and keeps tables/CSV without 
 });
 test('CFD filters issue sprint assignments independently of dates and preserves unknown-data gaps', () => {
   const cfd=fs.readFileSync(path.join(directory,'chart.html'),'utf8');
-  const script=cfd.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const script=inlineScripts(cfd)[0].body;
   const elements=new Map();
   const get=id=>{if(!elements.has(id))elements.set(id,{value:id==='sprint'?'all':'',textContent:'',className:'',addEventListener(){}});return elements.get(id);};
   const charts=[];
@@ -208,7 +219,7 @@ test('burndown filters by Epic, Story & Task, Sub-Task; unrecorded labels are ga
 });
 test('CFD filters issue types and leaves gaps for snapshots without labels',()=>{
  const cfd=fs.readFileSync(path.join(directory,'chart.html'),'utf8');
- const script=cfd.match(/<script>([\s\S]*?)<\/script>/)[1];
+ const script=inlineScripts(cfd)[0].body;
  const elements=new Map();
  const get=id=>{if(!elements.has(id))elements.set(id,{value:id==='sprint'||id==='issue-type'?'all':'',textContent:'',className:'',addEventListener(){}});return elements.get(id);};
  const charts=[];
@@ -241,7 +252,7 @@ test('stored history is fully labelled with exactly one type; Sprint A types fol
 
 test('CFD date window keeps snapshots by UTC day, syncs presets and rejects reversed ranges',()=>{
  const cfd=fs.readFileSync(path.join(directory,'chart.html'),'utf8');
- const script=cfd.match(/<script>([\s\S]*?)<\/script>/)[1];
+ const script=inlineScripts(cfd)[0].body;
  const elements=new Map();
  const get=id=>{if(!elements.has(id))elements.set(id,{value:['sprint','issue-type'].includes(id)?'all':id==='window'?'full':'',textContent:'',className:'',addEventListener(){}});return elements.get(id);};
  const charts=[];
@@ -273,7 +284,7 @@ test('burndown custom date range sets the period, validates dates and syncs pres
  const get=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
  get('sprint').value='all';get('done-status').value='Done';get('calendar').value='full';
  const ctx=vm.createContext({document:{getElementById:get,createElement:element,body:element()},location:{protocol:'file:'},console});
- for(const script of html.matchAll(/<script(?: id="burndown-model")?>([\s\S]*?)<\/script>/g))vm.runInContext(script[1],ctx);
+ for(const script of inlineScripts(html))vm.runInContext(script.body,ctx);
  get('history-file').files=[{text:async()=>JSON.stringify([snapshot('2026-10-20',[issue(1)])])}];await get('history-file').listeners.change();
  get('calendar').value='B';get('calendar').listeners.change();
  assert.equal(get('date-from').value,'2026-11-01');assert.equal(get('date-to').value,'2026-12-05');
