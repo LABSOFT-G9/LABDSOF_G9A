@@ -114,10 +114,14 @@ class UseCaseConfig {
             TransactionRunner transactions,
             IssueProjectionRepository issues,
             MembershipProjectionRepository memberships,
+            ContractorCatalogue catalogue,
             InterventionRepository interventions,
+            EventOutbox outbox,
             IdempotencyStore idempotency,
+            IdGenerator ids,
             Clock clock) {
-        return new ChangeTermsService(transactions, issues, memberships, interventions, idempotency, clock);
+        return new ChangeTermsService(transactions, issues, memberships, catalogue, interventions, outbox, idempotency,
+                ids, clock);
     }
 
     @Bean

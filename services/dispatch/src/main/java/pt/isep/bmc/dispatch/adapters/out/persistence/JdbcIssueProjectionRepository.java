@@ -3,8 +3,11 @@ package pt.isep.bmc.dispatch.adapters.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -20,12 +23,12 @@ import pt.isep.bmc.dispatch.domain.shared.IssueId;
 @Repository
 class JdbcIssueProjectionRepository implements IssueProjectionRepository {
 
-    private static final String SELECT = """
+    private static final String COLUMNS = """
             SELECT issue_id, building_id, state, version, dispatchable, category, urgency, area_label,
                    published_summary_id, applied_at
               FROM issue_projection
-             WHERE issue_id = :id
             """;
+    private static final String SELECT = COLUMNS + " WHERE issue_id = :id";
 
     private final JdbcClient jdbc;
 
@@ -36,6 +39,19 @@ class JdbcIssueProjectionRepository implements IssueProjectionRepository {
     @Override
     public Optional<ProjectedIssue> find(IssueId id) {
         return jdbc.sql(SELECT).param("id", id.toString()).query(JdbcIssueProjectionRepository::row).optional();
+    }
+
+    @Override
+    public Map<IssueId, ProjectedIssue> findAll(Collection<IssueId> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return jdbc.sql(COLUMNS + " WHERE issue_id IN (:ids)")
+                .param("ids", ids.stream().map(IssueId::toString).distinct().toList())
+                .query(JdbcIssueProjectionRepository::row)
+                .list()
+                .stream()
+                .collect(Collectors.toMap(ProjectedIssue::issueId, Function.identity()));
     }
 
     @Override

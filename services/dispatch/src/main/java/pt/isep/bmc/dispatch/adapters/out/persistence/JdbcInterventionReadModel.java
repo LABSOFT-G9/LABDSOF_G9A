@@ -6,8 +6,10 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.dispatch.application.port.out.InterventionReadModel;
@@ -26,7 +28,8 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
 /**
  * Query side for interventions (CQRS as packages, ADR-009): the intervention
  * with its contractor, then its proposal versions with their approval and
- * response, oldest first.
+ * response, oldest first. A list reads the proposals of all its
+ * interventions in one query, so its cost does not grow with its length.
  */
 @Repository
 class JdbcInterventionReadModel implements InterventionReadModel {
@@ -40,13 +43,13 @@ class JdbcInterventionReadModel implements InterventionReadModel {
             """;
 
     private static final String PROPOSALS = """
-            SELECT p.number, p.author_role, p.scope_extract, p.window_start, p.window_end, p.terms,
+            SELECT p.intervention_id, p.number, p.author_role, p.scope_extract, p.window_start, p.window_end, p.terms,
                    p.cost_amount, p.cost_currency, p.created_at, p.approved_at,
                    r.decision, r.reason_code, r.note, r.counter_proposal_version, r.responded_at
               FROM proposal_versions p
               LEFT JOIN contractor_responses r ON r.intervention_id = p.intervention_id AND r.proposal_version = p.number
-             WHERE p.intervention_id = :id
-             ORDER BY p.number
+             WHERE p.intervention_id IN (:ids)
+             ORDER BY p.intervention_id, p.number
             """;
 
     private final JdbcClient jdbc;
@@ -59,30 +62,24 @@ class JdbcInterventionReadModel implements InterventionReadModel {
     public Optional<InterventionView> find(InterventionId id) {
         return jdbc.sql(SELECT + " WHERE i.id = :id").param("id", id.toString())
                 .query(JdbcInterventionReadModel::row).optional()
-                .map(this::withProposals);
+                .map(row -> withProposals(List.of(row)).getFirst());
     }
 
     @Override
     public List<InterventionView> findByIssue(IssueId issueId) {
-        return jdbc.sql(SELECT + " WHERE i.issue_id = :issue ORDER BY i.created_at DESC, i.id DESC")
+        return withProposals(jdbc.sql(SELECT + " WHERE i.issue_id = :issue ORDER BY i.created_at DESC, i.id DESC")
                 .param("issue", issueId.toString())
                 .query(JdbcInterventionReadModel::row)
-                .list()
-                .stream()
-                .map(this::withProposals)
-                .toList();
+                .list());
     }
 
     @Override
     public List<InterventionView> findSentTo(UserId contractorUserId) {
-        return jdbc.sql(SELECT + " WHERE c.user_id = :user AND i.contractor_contacted"
+        return withProposals(jdbc.sql(SELECT + " WHERE c.user_id = :user AND i.contractor_contacted"
                         + " ORDER BY i.updated_at DESC, i.id DESC")
                 .param("user", contractorUserId.value())
                 .query(JdbcInterventionReadModel::row)
-                .list()
-                .stream()
-                .map(this::withProposals)
-                .toList();
+                .list());
     }
 
     /** An intervention row, still without its proposals. */
@@ -101,11 +98,25 @@ class JdbcInterventionReadModel implements InterventionReadModel {
             Instant updatedAt) {
     }
 
-    private InterventionView withProposals(Row row) {
-        List<InterventionView.Proposal> proposals = jdbc.sql(PROPOSALS)
-                .param("id", row.id().toString())
-                .query(JdbcInterventionReadModel::proposal)
-                .list();
+    /** The rows, in their order, each with its proposals: one query for all of them. */
+    private List<InterventionView> withProposals(List<Row> rows) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<InterventionId, List<InterventionView.Proposal>> proposals = jdbc.sql(PROPOSALS)
+                .param("ids", rows.stream().map(r -> r.id().toString()).toList())
+                .query(JdbcInterventionReadModel::proposalOf)
+                .list()
+                .stream()
+                .collect(Collectors.groupingBy(Owned::interventionId,
+                        Collectors.mapping(Owned::proposal, Collectors.toList())));
+        return rows.stream().map(row -> view(row, proposals.getOrDefault(row.id(), List.of()))).toList();
+    }
+
+    private record Owned(InterventionId interventionId, InterventionView.Proposal proposal) {
+    }
+
+    private static InterventionView view(Row row, List<InterventionView.Proposal> proposals) {
         InterventionView.Proposal current = proposals.stream()
                 .filter(p -> p.proposalVersion() == row.currentProposalVersion())
                 .findFirst()
@@ -133,6 +144,10 @@ class JdbcInterventionReadModel implements InterventionReadModel {
                 rs.getBoolean("contractor_contacted"),
                 time(rs, "created_at"),
                 time(rs, "updated_at"));
+    }
+
+    private static Owned proposalOf(ResultSet rs, int n) throws SQLException {
+        return new Owned(new InterventionId(UUID.fromString(rs.getString("intervention_id"))), proposal(rs, n));
     }
 
     private static InterventionView.Proposal proposal(ResultSet rs, int n) throws SQLException {

@@ -14,6 +14,7 @@ import pt.isep.bmc.dispatch.domain.event.ContractorResponded;
 import pt.isep.bmc.dispatch.domain.event.DomainEvent;
 import pt.isep.bmc.dispatch.domain.event.InterventionApproved;
 import pt.isep.bmc.dispatch.domain.event.InterventionDeclined;
+import pt.isep.bmc.dispatch.domain.event.InterventionTermsChanged;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -97,6 +98,15 @@ class OutboxWriter implements EventOutbox {
             case InterventionDeclined e -> {
                 data.put("issueId", e.issueId().toString());
                 data.put("reasonCode", e.reasonCode().value());
+                data.put("interventionState", e.interventionState().value());
+            }
+            case InterventionTermsChanged e -> {
+                data.put("issueId", e.issueId().toString());
+                data.put("proposalVersion", e.proposalVersion());
+                data.put("supersededProposalVersion", e.supersededProposalVersion());
+                data.put("supersededAuthor", e.supersededAuthor());
+                data.put("previousState", e.previousState().value());
+                e.contractorUserId().ifPresent(user -> data.put("contractorUserId", user.value()));
                 data.put("interventionState", e.interventionState().value());
             }
         }

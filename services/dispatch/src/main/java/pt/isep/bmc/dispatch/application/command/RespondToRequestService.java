@@ -127,7 +127,8 @@ public final class RespondToRequestService implements RespondToRequestUseCase {
     /**
      * The original result, for the contractor who is still assigned. The same
      * key and request hash mean the same decision, so the result is rebuilt
-     * from the request.
+     * from the request; a counterproposal's version is the one created at
+     * the recorded intervention version.
      */
     private ResponseRecorded replay(RespondCommand command, IdempotencyRecord record) {
         Intervention intervention = interventions.find(command.interventionId())
@@ -141,8 +142,12 @@ public final class RespondToRequestService implements RespondToRequestUseCase {
                     record.resourceVersion(), answered, true);
             case DECLINE -> new ResponseRecorded(intervention.id(), InterventionState.DECLINED,
                     record.resourceVersion(), answered, true);
+            // The version the counterproposal created, looked up, never derived from the one answered.
             case COUNTERPROPOSE -> new ResponseRecorded(intervention.id(), InterventionState.AWAITING_APPROVAL,
-                    record.resourceVersion(), answered + 1, true);
+                    record.resourceVersion(), interventions.findProposalCreatedAt(intervention.id(),
+                                    record.resourceVersion())
+                            .orElseThrow(() -> new IllegalStateException("idempotency record points at a missing proposal"))
+                            .number(), true);
         };
     }
 }

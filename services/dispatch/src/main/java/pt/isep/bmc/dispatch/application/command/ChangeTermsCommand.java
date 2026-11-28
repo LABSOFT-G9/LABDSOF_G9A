@@ -14,10 +14,12 @@ public record ChangeTermsCommand(
         String scopeExtract,
         String windowStart,
         String windowEnd,
-        String terms) {
+        String terms,
+        String correlationId) {
 
     public ChangeTermsCommand {
         Objects.requireNonNull(actor, "actor");
+        Objects.requireNonNull(correlationId, "correlationId");
         Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         Objects.requireNonNull(interventionId, "interventionId");
     }

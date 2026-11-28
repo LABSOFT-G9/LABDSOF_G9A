@@ -4,15 +4,22 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import pt.isep.bmc.dispatch.application.idempotency.IdempotentExecutor;
 import pt.isep.bmc.dispatch.application.port.in.ChangeTermsUseCase;
+import pt.isep.bmc.dispatch.application.port.out.ContractorCatalogue;
+import pt.isep.bmc.dispatch.application.port.out.EventOutbox;
+import pt.isep.bmc.dispatch.application.port.out.IdGenerator;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyRecord;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyScope;
 import pt.isep.bmc.dispatch.application.port.out.IdempotencyStore;
 import pt.isep.bmc.dispatch.application.port.out.InterventionRepository;
 import pt.isep.bmc.dispatch.application.port.out.IssueProjectionRepository;
 import pt.isep.bmc.dispatch.application.port.out.MembershipProjectionRepository;
+import pt.isep.bmc.dispatch.application.port.out.OutboxEvent;
 import pt.isep.bmc.dispatch.application.port.out.TransactionRunner;
+import pt.isep.bmc.dispatch.domain.contractor.Contractor;
+import pt.isep.bmc.dispatch.domain.event.InterventionTermsChanged;
 import pt.isep.bmc.dispatch.domain.intervention.Intervention;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionAgreement;
 import pt.isep.bmc.dispatch.domain.intervention.InterventionAgreement.ProposalTerms;
@@ -22,13 +29,15 @@ import pt.isep.bmc.dispatch.domain.intervention.ProposalVersion;
 import pt.isep.bmc.dispatch.domain.projection.AdministratorAccess;
 import pt.isep.bmc.dispatch.domain.projection.ProjectedIssue;
 import pt.isep.bmc.dispatch.domain.shared.AccessDeniedException;
+import pt.isep.bmc.dispatch.domain.shared.UserId;
 
 /**
  * The administrator writes new terms before the contractor's answer (US-07):
  * a new proposal version, {@code awaiting_approval}, and an earlier approval
- * no longer counts. No event is written: the issue stays {@code
- * in_coordination} either way (technical design 3.3), and the contracts have
- * no event for changed terms yet.
+ * no longer counts. Every change writes {@code InterventionTermsChanged} in
+ * the same transaction, so Issue sees the new state and can tell the
+ * contractor when the request sent to them is withdrawn or their
+ * counterproposal is superseded.
  */
 public final class ChangeTermsService implements ChangeTermsUseCase {
 
@@ -38,23 +47,32 @@ public final class ChangeTermsService implements ChangeTermsUseCase {
 
     private final IssueProjectionRepository issues;
     private final MembershipProjectionRepository memberships;
+    private final ContractorCatalogue catalogue;
     private final InterventionRepository interventions;
+    private final EventOutbox outbox;
     private final IdempotencyStore idempotency;
     private final IdempotentExecutor idempotent;
+    private final IdGenerator ids;
     private final Clock clock;
 
     public ChangeTermsService(
             TransactionRunner transactions,
             IssueProjectionRepository issues,
             MembershipProjectionRepository memberships,
+            ContractorCatalogue catalogue,
             InterventionRepository interventions,
+            EventOutbox outbox,
             IdempotencyStore idempotency,
+            IdGenerator ids,
             Clock clock) {
         this.issues = issues;
         this.memberships = memberships;
+        this.catalogue = catalogue;
         this.interventions = interventions;
+        this.outbox = outbox;
         this.idempotency = idempotency;
         this.idempotent = new IdempotentExecutor(transactions, idempotency);
+        this.ids = ids;
         this.clock = clock;
     }
 
@@ -84,11 +102,30 @@ public final class ChangeTermsService implements ChangeTermsUseCase {
                 .orElseThrow(AccessDeniedException::new);
         TermsOutcome outcome = InterventionAgreement.changeTerms(access, current, issue, terms,
                 command.expectedVersion(), now);
+        ProposalVersion superseded = interventions.findProposalForUpdate(current.id(), current.currentProposalVersion())
+                .orElseThrow(() -> new IllegalStateException("the current proposal version is missing"));
 
         Intervention next = outcome.intervention();
         interventions.update(next);
         interventions.addProposal(outcome.proposal());
+        outbox.append(new OutboxEvent(ids.newId(), event(current, superseded, next, outcome.proposal(), now),
+                command.correlationId()));
         return new TermsChanged(next.id(), next.state(), next.version(), outcome.proposal().number(), false);
+    }
+
+    /**
+     * The contractor is named only when the change concerns them: the request
+     * had been sent to them, or the version replaced is their counterproposal.
+     */
+    private InterventionTermsChanged event(
+            Intervention before, ProposalVersion superseded, Intervention next, ProposalVersion created, Instant now) {
+        boolean concernsContractor = before.state() == InterventionState.SENT || superseded.byContractor();
+        Optional<UserId> contractor = concernsContractor
+                ? catalogue.find(before.contractorId()).flatMap(Contractor::userId)
+                : Optional.empty();
+        return new InterventionTermsChanged(next.id().value(), next.version(), next.buildingId(), now, next.issueId(),
+                created.number(), superseded.number(), superseded.authorRole(), before.state(), contractor,
+                next.state());
     }
 
     /** The original result, for a caller who still administers the building. */

@@ -1,6 +1,7 @@
 package pt.isep.bmc.dispatch.application.query;
 
 import java.util.List;
+import java.util.Map;
 import pt.isep.bmc.dispatch.application.port.in.GetInterventionQuery;
 import pt.isep.bmc.dispatch.application.port.out.InterventionReadModel;
 import pt.isep.bmc.dispatch.application.port.out.IssueProjectionRepository;
@@ -47,7 +48,7 @@ public final class InterventionQueryService implements GetInterventionQuery {
                 return view;
             }
             if (sentTo(view, actor)) {
-                return assignment(view);
+                return assignment(view, issues.findAll(List.of(view.issueId())));
             }
             throw new AccessDeniedException();
         });
@@ -64,19 +65,23 @@ public final class InterventionQueryService implements GetInterventionQuery {
 
     @Override
     public List<AssignmentView> listAssigned(UserId actor) {
-        return transactions.readOnly(() -> readModel.findSentTo(actor).stream()
-                .filter(view -> sentTo(view, actor))
-                .map(this::assignment)
-                .toList());
+        return transactions.readOnly(() -> {
+            List<InterventionView> sent = readModel.findSentTo(actor).stream().filter(view -> sentTo(view, actor)).toList();
+            Map<IssueId, ProjectedIssue> projected = issues.findAll(sent.stream().map(InterventionView::issueId).toList());
+            return sent.stream().map(view -> assignment(view, projected)).toList();
+        });
     }
 
     private static boolean sentTo(InterventionView view, UserId actor) {
         return view.contractorContacted() && view.contractor().userId().filter(actor::equals).isPresent();
     }
 
-    private AssignmentView assignment(InterventionView view) {
-        ProjectedIssue issue = issues.find(view.issueId())
-                .orElseThrow(() -> new IllegalStateException("intervention points at an issue missing from the projection"));
+    /** @param projected the issues of the interventions listed, read in one go */
+    private static AssignmentView assignment(InterventionView view, Map<IssueId, ProjectedIssue> projected) {
+        ProjectedIssue issue = projected.get(view.issueId());
+        if (issue == null) {
+            throw new IllegalStateException("intervention points at an issue missing from the projection");
+        }
         return AssignmentView.of(view, new AssignmentView.Work(issue.category(), issue.urgency(), issue.areaLabel()));
     }
 

@@ -117,7 +117,8 @@ class InterventionAgreementController {
             @PathVariable String interventionId,
             @RequestHeader(name = EntityVersions.FIELD, required = false) String ifMatch,
             @RequestHeader(name = IdempotencyKey.FIELD, required = false) String idempotencyKey,
-            @RequestBody(required = false) ChangeTermsRequest body) {
+            @RequestBody(required = false) ChangeTermsRequest body,
+            HttpServletRequest request) {
         ChangeTermsRequest terms = body == null ? new ChangeTermsRequest(null, null, null) : body;
         CreateInterventionRequest.WindowBody window = terms.window() == null ? NO_WINDOW : terms.window();
         TermsChanged result = changeTerms.changeTerms(new ChangeTermsCommand(
@@ -128,7 +129,8 @@ class InterventionAgreementController {
                 terms.scopeExtract(),
                 window.start(),
                 window.end(),
-                terms.terms()));
+                terms.terms(),
+                CorrelationIdFilter.of(request)));
         return ResponseEntity.ok()
                 .eTag(Long.toString(result.version()))
                 .body(new TermsChangedResponse(result.interventionId().toString(), result.state().value(),

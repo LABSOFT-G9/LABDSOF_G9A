@@ -68,6 +68,23 @@ class ContractorResponseIT extends IntegrationTestSupport {
     }
 
     @Test
+    void theContractorsListGivesEachRequestItsOwnProposalsAndWork() {
+        String first = sentIntervention();
+        String second = sentIntervention();
+        changeTerms(ADMIN_A, second, 2);
+        approve(ADMIN_A, second, 3, 2);
+
+        List<Object> items = Api.list(api.get("/interventions?assigned=me", tokens.token(CONTRACTOR)).json().get("items"));
+
+        assertThat(items).extracting(item -> Api.map(item).get("interventionId"))
+                .as("the latest change first").containsExactly(second, first);
+        assertThat(Api.list(Api.map(items.get(0)).get("proposals"))).hasSize(2);
+        assertThat(Api.list(Api.map(items.get(1)).get("proposals"))).hasSize(1);
+        assertThat(items).allSatisfy(item -> assertThat(Api.map(Api.map(item).get("work")))
+                .containsEntry("category", "plumbing"));
+    }
+
+    @Test
     void acceptanceAgreesTheVersionAndWritesContractorResponded() {
         String interventionId = sentIntervention();
 
@@ -145,6 +162,13 @@ class ContractorResponseIT extends IntegrationTestSupport {
         assertThat(changed.status()).isEqualTo(200);
         assertThat(changed.json()).isEqualTo(Map.of("interventionId", interventionId, "state", "awaiting_approval",
                 "version", 3, "proposalVersion", 2));
+        Map<String, Object> event = outboxEvents().stream()
+                .filter(e -> "InterventionTermsChanged".equals(e.get("type"))).findFirst().orElseThrow();
+        assertThat(event).containsEntry("subject", interventionId);
+        assertThat(Api.map(event.get("data"))).isEqualTo(Map.of("issueId", view(ADMIN_A, interventionId).get("issueId"),
+                "proposalVersion", 2, "supersededProposalVersion", 1, "supersededAuthor", "administrator",
+                "previousState", "sent", "contractorUserId", CONTRACTOR, "interventionState", "awaiting_approval"));
+        assertThat(event.toString()).doesNotContain("report the cost");
         assertThat(respond(CONTRACTOR, interventionId, 3, accept(1)).json())
                 .containsEntry("code", "INVALID_TRANSITION").containsEntry("currentState", "awaiting_approval");
         Map<String, Object> mine = view(CONTRACTOR, interventionId);
