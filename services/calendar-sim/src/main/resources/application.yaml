@@ -1,0 +1,42 @@
+# Calendar simulator (ADR-006, technical design 4.5). Internal network only:
+# Dispatch calls it, nothing routes to it from the edge, and it has no
+# authentication. Bookings live in memory, so a restart loses them.
+spring:
+  application:
+    name: calendar-sim
+
+server:
+  port: 8080
+  error:
+    whitelabel:
+      enabled: false
+
+# Health on a separate port, as in the services: /healthz and /readyz.
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        liveness:
+          include: livenessState
+          additional-path: "management:/healthz"
+        readiness:
+          include: readinessState
+          additional-path: "management:/readyz"
+
+sim:
+  # The /control API that scripts failures. Off unless asked for: tests,
+  # local work and failure demos turn it on.
+  control-enabled: ${SIM_CONTROL_ENABLED:false}
+  # How long a `timeout_after_create` outcome waits before answering: longer
+  # than Dispatch's 5-second timeout (technical design 4.6).
+  hang: ${SIM_HANG:PT15S}

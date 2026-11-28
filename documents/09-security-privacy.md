@@ -15,7 +15,7 @@ The MVP uses synthetic demonstration data. Real interviews still require a purpo
 | Operation/data | Resident | Administrator | Contractor | Enforced in |
 |---|---|---|---|---|
 | Create report | Buildings they belong to | Managed buildings, with source recorded | Outside baseline | Issue |
-| Raw report text | Own | Managed buildings | Only necessary extract in the assigned request | Issue; Dispatch stores only the administrator-written extract |
+| Raw report text | Own, also after their membership in the building ends | Managed buildings | Only necessary extract in the assigned request | Issue; Dispatch stores only the administrator-written extract |
 | Published shared summary | Same building | Managed buildings | Context needed for the request | Issue |
 | Confirmed category/urgency | Authorised viewing | Confirms/corrects | Views assigned request | Issue; Dispatch for the contractor's view |
 | Confirm impact | Same building; own contribution | Views counter | No | Issue |
