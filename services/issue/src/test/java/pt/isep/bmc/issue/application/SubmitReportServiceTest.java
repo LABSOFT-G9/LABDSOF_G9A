@@ -140,6 +140,18 @@ class SubmitReportServiceTest {
     }
 
     @Test
+    void aFailedCheckOfASubmissionThatIsRolledBackIsNotLogged() {
+        ports.failAppendNumber = 1;
+        SubmitReportService failing = service(pt.isep.bmc.issue.domain.CriticalCheckTest.failing());
+
+        assertThatThrownBy(() -> failing.submit(command("k1", GARAGE_A, DANGER)))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(ports.issues).isEmpty();
+        assertThat(ports.failedCriticalChecks).isEmpty();
+    }
+
+    @Test
     void aReplayRaisesNoSignalTwice() {
         service.submit(command("k1", GARAGE_A, DANGER));
         service.submit(command("k1", GARAGE_A, DANGER));

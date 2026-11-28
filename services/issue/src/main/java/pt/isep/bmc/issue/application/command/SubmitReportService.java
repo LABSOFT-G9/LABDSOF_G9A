@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import pt.isep.bmc.issue.application.idempotency.IdempotentExecutor;
 import pt.isep.bmc.issue.application.port.in.SubmitReportUseCase;
 import pt.isep.bmc.issue.application.port.out.BuildingRepository;
@@ -101,10 +103,21 @@ public final class SubmitReportService implements SubmitReportUseCase {
         String requestHash = fingerprint(command);
         // Millisecond precision, so a replay returns exactly the stored time.
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
-        return idempotent.execute(scope, requestHash, now, () -> create(command, scope, requestHash, now), this::replay);
+        // A failed check is logged only once the report is stored: a rolled-back submission names no issue.
+        List<Runnable> afterCommit = new ArrayList<>(1);
+        ReportReceipt receipt = idempotent.execute(scope, requestHash, now, () -> {
+            afterCommit.clear();
+            return create(command, scope, requestHash, now, afterCommit);
+        }, this::replay);
+        if (!receipt.replayed()) {
+            afterCommit.forEach(Runnable::run);
+        }
+        return receipt;
     }
 
-    private ReportReceipt create(SubmitReportCommand command, IdempotencyScope scope, String requestHash, Instant now) {
+    private ReportReceipt create(
+            SubmitReportCommand command, IdempotencyScope scope, String requestHash, Instant now,
+            List<Runnable> afterCommit) {
         BuildingAccess access = BuildingAccess.of(command.actor(), memberships.findByUser(command.actor()), now);
         ReportSubmission submission = ReportIntake.submit(
                 access,
@@ -133,7 +146,8 @@ public final class SubmitReportService implements SubmitReportUseCase {
         for (CriticalSignal signal : submission.critical().signals()) {
             criticalSignals.add(signal);
         }
-        submission.critical().failure().ifPresent(failure -> criticalCheckLog.checkFailed(issue.id(), failure));
+        submission.critical().failure()
+                .ifPresent(failure -> afterCommit.add(() -> criticalCheckLog.checkFailed(issue.id(), failure)));
         for (DomainEvent event : submission.events()) {
             outbox.append(new OutboxEvent(ids.newId(), event, command.correlationId()));
         }

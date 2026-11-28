@@ -48,6 +48,8 @@ public abstract class IntegrationTestSupport {
         registry.add("bmc.security.issuer-uri", () -> TestTokens.ISSUER);
         registry.add("bmc.security.jwk-set-uri", () -> TestTokens.get().jwksUri());
         registry.add("bmc.scheduling.enabled", () -> "false");
+        // The start-up pass runs in the background; here it would race the data reset. RestartIT runs it.
+        registry.add("bmc.critical-check.pending-at-start", () -> "false");
         registry.add("management.server.port", () -> "0");
     }
 

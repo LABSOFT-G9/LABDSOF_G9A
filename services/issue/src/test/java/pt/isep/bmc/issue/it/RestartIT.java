@@ -6,6 +6,7 @@ import static pt.isep.bmc.issue.support.Fixtures.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -13,6 +14,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.mysql.MySQLContainer;
 import pt.isep.bmc.issue.IssueApplication;
+import pt.isep.bmc.issue.adapters.in.startup.PendingCriticalChecksRunner;
 import pt.isep.bmc.issue.application.command.RecordTriageSuggestionCommand;
 import pt.isep.bmc.issue.application.command.SuggestionResult;
 import pt.isep.bmc.issue.application.port.in.RecordTriageSuggestionUseCase;
@@ -168,6 +170,9 @@ class RestartIT {
         }
         for (int start = 0; start < 2; start++) {
             try (ConfigurableApplicationContext next = start(mysql)) {
+                // The pass runs in the background once the service is ready.
+                assertThat(next.getBean(PendingCriticalChecksRunner.class).finished().get(60, TimeUnit.SECONDS))
+                        .isPresent();
                 var kept = (Map<String, Object>) api(next).get("/issues/" + checked, tokens.token(ADMIN_A))
                         .json().get("criticalCheck");
                 assertThat(kept).containsEntry("status", "completed")

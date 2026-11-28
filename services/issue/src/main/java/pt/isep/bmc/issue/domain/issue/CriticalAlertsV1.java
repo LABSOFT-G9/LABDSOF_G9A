@@ -3,7 +3,6 @@ package pt.isep.bmc.issue.domain.issue;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -28,12 +27,14 @@ import pt.isep.bmc.issue.domain.report.ReportText;
  *       or two or three words in any order within a few words of each other
  *       ({@code smell} and {@code gas}). {@code *} ends a word that may go
  *       on ({@code smell*} is also {@code smells} and {@code smelly}).</li>
- *   <li><b>Negation.</b> A match is ignored only when a negation stands right
+ *   <li><b>Negation.</b> A match is ignored only when a negation stands
  *       before its first word in the same clause, with at most two small words
- *       between ({@code no smell of gas}, {@code não há fumo}). The words of a
- *       negated match are not used again for another match of the same
- *       pattern. Any other wording raises the alert: the rules prefer a false
- *       alarm to a missed one.</li>
+ *       and any words of the same pattern between ({@code no smell of gas},
+ *       {@code no gas leak}, {@code não há fumo}). Portuguese {@code no} ("in
+ *       the") before a Portuguese word is not a negation ({@code no elevador}).
+ *       Any other wording raises the alert, also when the same words were
+ *       denied earlier ({@code no gas leak, but now I smell gas}): the rules
+ *       prefer a false alarm to a missed one.</li>
  * </ul>
  *
  * <p>The expected cases, including negation and misspellings, are in
@@ -60,48 +61,51 @@ public final class CriticalAlertsV1 implements CriticalRules {
     private static final int MAX_FILLERS = 2;
 
     private static final Set<String> NEGATIONS = words(
-            "no not without never isnt arent wasnt nao sem nem nenhum nenhuma nunca");
+            "no not without never isnt arent wasnt werent dont doesnt didnt cant cannot couldnt wont"
+                    + " nao sem nem nenhum nenhuma nunca jamais");
+    /** Portuguese {@code no} is also "in the" (em + o): before a Portuguese word it is not a negation. */
+    private static final String NO = "no";
     private static final Set<String> FILLERS = words(
             "a an any the of sign signs smell is are there on ha de do da um uma o qualquer sinal sinais cheiro esta em");
 
     private static final List<Rule> RULES = List.of(
             new Rule(SMOKE_OR_FIRE,
-                    one("smoke|smokes|smoking|smoky|smok|fumo|fumos|fumaca|fumarada|fumega|fumegar"),
+                    one("smoke|smokes|smoking|smoky|smok / fumo|fumos|fumaca|fumarada|fumega|fumegar"),
                     one("fire|fires").unlessFollowedBy(
                             "extinguisher extinguishers door doors exit exits escape escapes hose hoses drill drills"),
-                    one("flame|flames|blaze|ablaze|chamas|arder|arde|ardeu|ardem"),
-                    one("fogo|fogos").unlessPrecededBy("corta"),
-                    one("incendio|incendios|insendio|incendiou|incendiar"),
-                    all(NEAR, "burn*|queim*", "smell*|odor|odour|cheir*"),
-                    one("spark|sparks|sparking|sparked|faisca|faiscas|faiscar")),
+                    one("flame|flames|blaze|ablaze / chamas|arder|arde|ardeu|ardem"),
+                    one(" / fogo|fogos").unlessPrecededBy("corta"),
+                    one(" / incendio|incendios|insendio|incendiou|incendiar"),
+                    all(NEAR, "burn* / queim*", "smell*|odor|odour / cheir*"),
+                    one("spark|sparks|sparking|sparked / faisca|faiscas|faiscar")),
             new Rule(GAS_SMELL,
-                    all(NEAR, "gas|gaz", "smell*|odor|odour|stink*|stench|leak*|escap*|cheir*|fuga|fugas"),
-                    one("monoxide|monoxido")),
+                    all(NEAR, "gas|gaz", "smell*|odor|odour|stink*|stench|leak*|escap* / cheir*|fuga|fugas"),
+                    one("monoxide / monoxido")),
             new Rule(EXPOSED_WIRING,
-                    all(NEAR, "wire|wires|wiring|cable|cables|fio|fios|cabo|cabos|cablagem",
-                            "exposed|bare|loose|hanging|live|frayed|descarnad*|desencapad*|expost*|descobert*"
+                    all(NEAR, "wire|wires|wiring|cable|cables / fio|fios|cabo|cabos|cablagem",
+                            "exposed|bare|loose|hanging|live|frayed / descarnad*|desencapad*|expost*|descobert*"
                                     + "|pendurad*|solto|soltos|solta|soltas")),
             new Rule(WATER_NEAR_ELECTRICS,
-                    all(NEAR, "water|flood*|wet|drip*|agua|aguas|inund*|molhad*|ping*|infiltr*",
-                            "socket*|outlet*|electri*|eletri*|fuse*|switch|switches|switchboard|plug|plugs"
-                                    + "|tomada*|disjuntor*|interruptor*|fusive*")),
+                    all(NEAR, "water|flood*|wet|drip*|infiltr* / agua|aguas|inund*|molhad*|ping*",
+                            "socket*|outlet*|electri*|fuse*|switch|switches|switchboard|plug|plugs"
+                                    + " / eletri*|tomada*|disjuntor*|interruptor*|fusive*")),
             new Rule(ELECTRIC_SHOCK,
-                    one("electrocut*|eletrocut*|electrocuc*|eletrocuc*"),
-                    all(NEAR, "shock|shocks|shocked|choque|choques",
-                            "electri*|eletri*|socket*|outlet*|tomada*|switch*|interruptor*|wire|wires|fio|fios"
-                                    + "|touch*|toc*|apanh*|levei|levou")),
+                    one("electrocut* / eletrocut*|electrocuc*|eletrocuc*"),
+                    all(NEAR, "shock|shocks|shocked / choque|choques",
+                            "electri*|socket*|outlet*|switch*|wire|wires|touch*"
+                                    + " / eletri*|tomada*|interruptor*|fio|fios|toc*|apanh*|levei|levou")),
             new Rule(PERSON_TRAPPED,
-                    all(WIDE, "trapped|stuck|locked|preso|presa|presos|presas|fechado|fechada|fechados|fechadas"
+                    all(WIDE, "trapped|stuck|locked / preso|presa|presos|presas|fechado|fechada|fechados|fechadas"
                                     + "|encurralad*|retid*",
-                            "lift|lifts|elevator*|elevador*|ascensor*",
+                            "lift|lifts|elevator* / elevador*|ascensor*",
                             "inside|person|people|someone|somebody|child*|kid|kids|neighbo*|resident*|woman|man|lady"
                                     + "|mother|father|mum|mom|dad|wife|husband|son|daughter|baby|elderly|am|im|were"
-                                    + "|pessoa*|alguem|crianca*|vizinh*|morador*|dentro|senhor*|idos*|mae|pai|filh*"
+                                    + " / pessoa*|alguem|crianca*|vizinh*|morador*|dentro|senhor*|idos*|mae|pai|filh*"
                                     + "|marido|mulher|esposa|bebe|estou|estamos|fiquei|ficamos")),
             new Rule(COLLAPSE_RISK,
-                    one("collaps*|desab*|derroc*|desmoron*|ruiu|ruir"),
-                    all(NEAR, "ceiling|roof|wall|balcony|facade|teto|tecto|telhado|parede|varanda|fachada|muro",
-                            "fell|fallen|falling|caiu|cair|cairam|caindo|queda")));
+                    one("collaps* / desab*|derroc*|desmoron*|ruiu|ruir"),
+                    all(NEAR, "ceiling|roof|wall|balcony|facade / teto|tecto|telhado|parede|varanda|fachada|muro",
+                            "fell|fallen|falling / caiu|cair|cairam|caindo|queda")));
 
     @Override
     public String version() {
@@ -135,7 +139,7 @@ public final class CriticalAlertsV1 implements CriticalRules {
 
     /**
      * Every slot matched by a different word, all within {@code within}
-     * consecutive words, and no negation right before the first of them.
+     * consecutive words, and no negation before the first of them.
      *
      * @param notFollowedBy for a one-word pattern: the match does not count when one of these words comes
      *                      next ({@code fire extinguisher} is equipment, not a fire)
@@ -154,14 +158,38 @@ public final class CriticalAlertsV1 implements CriticalRules {
         boolean matches(Words words) {
             List<int[]> candidates = new ArrayList<>();
             collect(words, 0, new int[slots.size()], candidates);
-            // The words of a negated match are spent: "no smell of gas, the smell is from the bins" is no gas.
-            Set<Integer> negated = new HashSet<>();
-            for (int[] candidate : candidates) {
-                if (words.negatedAt(first(candidate))) {
-                    Arrays.stream(candidate).forEach(negated::add);
+            return candidates.stream().anyMatch(candidate -> !negatedAt(words, first(candidate)));
+        }
+
+        /**
+         * A negation before the word, in its clause. Between them may stand up to {@link CriticalAlertsV1#MAX_FILLERS} small words
+         * and any words of this pattern, so in "no gas leak" the leak is denied too, and in "não cheira a gás, o
+         * cheiro vem do lixo" so is the second smell (it follows a clause break, so its match starts at the gas).
+         * A word is never spent by a denied match: "no gas leak, but now I smell gas" raises the alert.
+         */
+        private boolean negatedAt(Words words, int position) {
+            int fillers = 0;
+            for (int i = position; i > 0 && !words.startsClause(i); i--) {
+                String before = words.at(i - 1);
+                if (NEGATIONS.contains(before)) {
+                    return !(before.equals(NO) && portugueseOnly(words.at(i)));
+                }
+                if (inPattern(before)) {
+                    continue;
+                }
+                if (!FILLERS.contains(before) || ++fillers > MAX_FILLERS) {
+                    return false;
                 }
             }
-            return candidates.stream().anyMatch(candidate -> Arrays.stream(candidate).noneMatch(negated::contains));
+            return false;
+        }
+
+        private boolean inPattern(String word) {
+            return slots.stream().anyMatch(slot -> slot.matches(word));
+        }
+
+        private boolean portugueseOnly(String word) {
+            return slots.stream().anyMatch(slot -> slot.portugueseOnly(word));
         }
 
         /**
@@ -207,18 +235,45 @@ public final class CriticalAlertsV1 implements CriticalRules {
         }
     }
 
-    /** Alternatives separated by {@code |}; one ending in {@code *} matches any word that starts with it. */
+    /**
+     * Alternatives separated by {@code |}; one ending in {@code *} matches any word that starts with it. Those
+     * after {@code /} are Portuguese only; those before it are English, or both languages ({@code gas}).
+     */
     private static final class Slot {
+
+        private final Alternatives shared;
+        private final Alternatives portuguese;
+
+        Slot(String alternatives) {
+            int split = alternatives.indexOf('/');
+            shared = new Alternatives(split < 0 ? alternatives : alternatives.substring(0, split));
+            portuguese = new Alternatives(split < 0 ? "" : alternatives.substring(split + 1));
+        }
+
+        boolean matches(String word) {
+            return shared.matches(word) || portuguese.matches(word);
+        }
+
+        boolean portugueseOnly(String word) {
+            return portuguese.matches(word) && !shared.matches(word);
+        }
+    }
+
+    private static final class Alternatives {
 
         private final List<String> exact = new ArrayList<>();
         private final List<String> prefixes = new ArrayList<>();
 
-        Slot(String alternatives) {
+        Alternatives(String alternatives) {
             for (String alternative : alternatives.split("\\|")) {
-                if (alternative.endsWith("*")) {
-                    prefixes.add(Words.squeeze(alternative.substring(0, alternative.length() - 1)));
+                String trimmed = alternative.strip();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.endsWith("*")) {
+                    prefixes.add(Words.squeeze(trimmed.substring(0, trimmed.length() - 1)));
                 } else {
-                    exact.add(Words.squeeze(alternative));
+                    exact.add(Words.squeeze(trimmed));
                 }
             }
         }
@@ -287,19 +342,9 @@ public final class CriticalAlertsV1 implements CriticalRules {
                     && these.contains(words.get(position - 1));
         }
 
-        /** A negation right before the word, in its clause, with at most {@link #MAX_FILLERS} small words between. */
-        boolean negatedAt(int position) {
-            int fillers = 0;
-            for (int i = position; i > 0 && !startsClause.get(i); i--) {
-                String before = words.get(i - 1);
-                if (NEGATIONS.contains(before)) {
-                    return true;
-                }
-                if (!FILLERS.contains(before) || ++fillers > MAX_FILLERS) {
-                    return false;
-                }
-            }
-            return false;
+        /** Whether punctuation or a line break separates this word from the one before. */
+        boolean startsClause(int position) {
+            return startsClause.get(position);
         }
     }
 }

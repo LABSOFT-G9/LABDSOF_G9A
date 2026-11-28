@@ -1,6 +1,7 @@
 package pt.isep.bmc.issue.config;
 
 import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import pt.isep.bmc.issue.adapters.in.startup.PendingCriticalChecksRunner;
@@ -87,8 +88,9 @@ class UseCaseConfig {
                 CompletePendingCriticalChecksService.DEFAULT_BATCH_SIZE);
     }
 
-    /** At every start: complete the critical checks that are still pending. */
+    /** At every start, in the background: complete the critical checks that are still pending. */
     @Bean
+    @ConditionalOnProperty(name = "bmc.critical-check.pending-at-start", havingValue = "true", matchIfMissing = true)
     PendingCriticalChecksRunner pendingCriticalChecksRunner(CompletePendingCriticalChecksUseCase checks) {
         return new PendingCriticalChecksRunner(checks);
     }

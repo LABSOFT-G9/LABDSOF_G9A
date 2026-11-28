@@ -99,6 +99,10 @@ class CriticalAlertsV1Test {
             Não há fumo, é só uma lâmpada fundida
             Não cheira a gás, o cheiro vem do lixo
             Sem sinais de fogo no contentor, foi falso alarme
+            No gas leak and no smell in the kitchen
+            I dont smell gas anymore
+            I can't smell any gas now
+            It doesn't smell of gas, it is the drains
             """)
     void aNegationRightBeforeTheWordsRaisesNothing(String text) {
         assertThat(codes(text)).isEmpty();
@@ -114,8 +118,23 @@ class CriticalAlertsV1Test {
             It is not a water leak, it is a gas leak                            | gas_smell
             Não sei se é gás mas cheira muito mal                               | gas_smell
             Não é brincadeira: há fogo na garagem                               | smoke_or_fire
+            No gas leak. Now I smell gas                                        | gas_smell
+            There is no gas leak but I can smell gas                            | gas_smell
+            Não há fuga de gás, mas agora cheira a gás                          | gas_smell
             """)
     void anyOtherWordingWithANegationStillRaisesTheAlert(String text, String code) {
+        assertThat(codes(text)).contains(code);
+    }
+
+    @ParameterizedTest(name = "[{index}] {1}: {0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            No elevador está presa uma pessoa                                   | person_trapped
+            No elevador está presa a minha vizinha                              | person_trapped
+            No teto caiu um pedaço                                              | collapse_risk
+            No corredor há fumo                                                 | smoke_or_fire
+            No quadro há fios descarnados                                       | exposed_wiring
+            """)
+    void portugueseNoBeforeAPortugueseWordIsInTheNotANegation(String text, String code) {
         assertThat(codes(text)).contains(code);
     }
 
