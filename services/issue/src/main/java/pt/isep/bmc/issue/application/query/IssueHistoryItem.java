@@ -3,6 +3,7 @@ package pt.isep.bmc.issue.application.query;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import pt.isep.bmc.issue.domain.dispatch.VisitWindow;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
@@ -31,7 +32,8 @@ public record IssueHistoryItem(
         Optional<TriageReason> reason,
         Optional<SuggestionOrigin> origin,
         Optional<Boolean> applied,
-        Optional<String> code) {
+        Optional<String> code,
+        Optional<VisitWindow> window) {
 
     public IssueHistoryItem {
         Objects.requireNonNull(type, "type");
@@ -44,11 +46,15 @@ public record IssueHistoryItem(
         Objects.requireNonNull(origin, "origin");
         Objects.requireNonNull(applied, "applied");
         Objects.requireNonNull(code, "code");
+        Objects.requireNonNull(window, "window");
     }
 
-    /** The same entry with the internal reason removed. */
-    public IssueHistoryItem withoutReason() {
+    /**
+     * The same entry as residents see it: without the decision's reason and without a code, such as why a
+     * contractor declined or why an intervention was cancelled.
+     */
+    public IssueHistoryItem withoutInternalDetails() {
         return new IssueHistoryItem(sequence, type, visibility, actorRole, occurredAt, category, urgency, Optional.empty(),
-                origin, applied, code);
+                origin, applied, Optional.empty(), window);
     }
 }

@@ -26,11 +26,16 @@ public record IssueHistoryResponse(List<Entry> items) {
             String reason,
             String origin,
             Boolean applied,
-            String code) {
+            String code,
+            Window window) {
 
         @Override
         public String toString() {
             return "Entry[sequence=" + sequence + ", type=" + type + ", reason=redacted]";
         }
+    }
+
+    /** The booked window of a {@code booking_confirmed} or {@code booking_confirmed_manually} entry. */
+    public record Window(String start, String end) {
     }
 }

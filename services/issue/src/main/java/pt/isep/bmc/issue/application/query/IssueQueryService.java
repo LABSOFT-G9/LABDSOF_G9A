@@ -92,7 +92,7 @@ public final class IssueQueryService implements GetIssueQuery, ListIssuesQuery, 
             }
             return entries.stream()
                     .filter(entry -> entry.visibility() == HistoryVisibility.PUBLIC)
-                    .map(IssueHistoryItem::withoutReason)
+                    .map(IssueHistoryItem::withoutInternalDetails)
                     .toList();
         });
     }

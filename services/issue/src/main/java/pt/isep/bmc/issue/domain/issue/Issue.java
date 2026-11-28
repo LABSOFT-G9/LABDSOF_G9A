@@ -222,6 +222,28 @@ public final class Issue {
                 createdAt, raisesAlert ? now : updatedAt));
     }
 
+    /**
+     * Dispatch reported the active intervention in a state that stands for
+     * {@code target} (technical design 3.3): the issue follows it, whatever its
+     * open state, because the event carries the full intervention state and a
+     * late or missing event must not leave the issue behind. Category,
+     * urgency and the summary stay as they are.
+     *
+     * @return the next version of the issue, or empty when it is already in {@code target}
+     * @throws IllegalStateException for a resolved or cancelled issue, which no event moves
+     */
+    public Optional<Issue> followIntervention(IssueState target, Instant now) {
+        Objects.requireNonNull(target, "target");
+        if (!state.isOpen()) {
+            throw new IllegalStateException("a " + state.value() + " issue does not follow an intervention");
+        }
+        if (target == state) {
+            return Optional.empty();
+        }
+        return Optional.of(new Issue(id, buildingId, areaId, target, version + 1, category, urgency,
+                criticalCheckStatus, criticalRulesVersion, publishedSummaryId, createdAt, now));
+    }
+
     public IssueId id() {
         return id;
     }

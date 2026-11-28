@@ -301,7 +301,9 @@ class IssueController {
                 item.reason().map(TriageReason::value).orElse(null),
                 item.origin().map(SuggestionOrigin::value).orElse(null),
                 item.applied().orElse(null),
-                item.code().orElse(null));
+                item.code().orElse(null),
+                item.window().map(w -> new IssueHistoryResponse.Window(DateTimeFormatter.ISO_INSTANT.format(w.start()),
+                        DateTimeFormatter.ISO_INSTANT.format(w.end()))).orElse(null));
     }
 
     private static IssueResponse.CriticalCheck criticalCheck(CriticalCheckView check) {
