@@ -40,16 +40,26 @@ Mirrored for every agent harness: canonical `.agents/skills/labdsof-workflow/SKI
 
 ## Pull requests and reviews
 
-- Follow the PR template: Problem and outcome / Traceability / Change / Verification / Checklist / Deployment and recovery.
+- Follow the PR template: Problem and outcome / Traceability / Change / Verification / Preview (frontend only) / Checklist / Deployment and recovery.
 - `Closes #N` **only** when a real GitHub issue exists and the PR completes it; otherwise reference with `Refs #N`. Also cite the local backlog ID.
 - Request review from another member; resolve comments before merge. Squash merges preferred, preserving item reference and authorship. Delete merged branches when safe.
-- **Frontend work shows media.** Any issue or PR with frontend work (`frontend` label, or changes to UI screens or components) includes screenshots, GIFs or short videos of the work in a preview table: one row per screen or flow, with a Before/After column pair for changes to existing UI, or a single Preview column for new UI. An issue shows the mockup or current state; a PR shows the result. Upload media by dragging it into the GitHub issue or PR body, not by committing it; use only seeded or demo data, never real participant data. Example:
+- **Frontend work shows media.** Any issue or PR with frontend work (`frontend` label, or changes to UI screens or components) includes screenshots, GIFs or short videos of the work in a preview table: one row per screen or flow, with a Before/After column pair for changes to existing UI, or a single Preview column for new UI. An issue shows the mockup or current state; a PR shows the result.
+  - **Upload, never commit.** Drag the media into the GitHub issue or PR body. The repository is public, and an uploaded file stays reachable from its URL even after it is removed from the body.
+  - **Demo data and a demo account only.** No real participant data, and no real person's name or email in the signed-in header, which is the easiest leak in a screenshot.
+  - **Images in the table, video below it.** `<img>` works for PNG and GIF. GitHub shows the player for an `.mp4` only when its URL is alone on its own line, so put videos under the table, one per line.
+  - **Agents leave the media to a person.** GitHub has no API for these uploads. An agent opens the issue or PR with the table and `TODO: media` in the cells, saves any screenshots it took outside the repository and says where, and says that a person must add the media before review. It never invents an attachment link.
+
+  Example:
 
   ```markdown
   | Screen | Before | After |
   |---|---|---|
   | Report fault form | <img src="https://github.com/user-attachments/assets/..." width="320"> | <img src="https://github.com/user-attachments/assets/..." width="320"> |
   | Triage flow (GIF) | — | <img src="https://github.com/user-attachments/assets/..." width="320"> |
+
+  Triage flow (video):
+
+  https://github.com/user-attachments/assets/...
   ```
 - Documentation-only PRs: review content, sources and links; **do not claim code tests were run**. Never mark external configuration as active without evidence.
 - Recover merged mistakes by a revert PR (not by rewriting history).
