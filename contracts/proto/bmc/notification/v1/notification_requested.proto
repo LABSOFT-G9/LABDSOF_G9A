@@ -18,7 +18,7 @@ message NotificationRequested {
   string template_key = 4;
   // Identifiers and labels for the template.
   map<string, string> params = 5;
-  // OPEN: the values are settled in US-10.
+  // `low`, `normal` or `high`; empty is read as `normal` (US-10-01).
   string priority = 6;
   // Invitations only: the invitee has no account yet, so the address and the
   // invite link travel in the event. No other event carries an address.
