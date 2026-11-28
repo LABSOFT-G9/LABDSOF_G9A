@@ -67,4 +67,14 @@ class JdbcContractorCatalogue implements ContractorCatalogue {
                 })
                 .list();
     }
+
+    @Override
+    public Optional<String> findCalendarRef(ContractorId id) {
+        return jdbc.sql("SELECT calendar_ref FROM contractors WHERE id = :id")
+                .param("id", id.toString())
+                .query((rs, n) -> Optional.ofNullable(rs.getString("calendar_ref")))
+                .optional()
+                .flatMap(ref -> ref)
+                .filter(ref -> !ref.isBlank());
+    }
 }

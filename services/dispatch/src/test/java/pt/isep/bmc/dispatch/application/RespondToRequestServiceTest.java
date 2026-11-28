@@ -214,7 +214,7 @@ class RespondToRequestServiceTest {
         var failing = new pt.isep.bmc.dispatch.application.command.RespondToRequestService(ports, ports, ports,
                 ports, event -> {
                     throw new IllegalStateException("simulated outbox failure");
-                }, ports, ports, f.clock);
+                }, ports, ports, ports, f.clock);
 
         assertThatThrownBy(() -> failing.respond(f.counterpropose("k1", 2, 1)))
                 .isInstanceOf(IllegalStateException.class);

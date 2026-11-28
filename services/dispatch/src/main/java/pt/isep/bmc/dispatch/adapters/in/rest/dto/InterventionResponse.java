@@ -8,6 +8,8 @@ import java.util.List;
  *
  * @param proposal  the current proposal version
  * @param proposals every version, oldest first, with its approval and the contractor's response
+ * @param booking   the current booking (US-08); null before the terms are agreed
+ * @param bookings  every booking, oldest first
  */
 public record InterventionResponse(
         String interventionId,
@@ -19,8 +21,16 @@ public record InterventionResponse(
         List<Proposal> proposals,
         Integer approvedProposalVersion,
         Integer agreedProposalVersion,
+        BookingResponse booking,
+        List<BookingResponse> bookings,
+        Cancellation cancellation,
+        List<CompletionResponse> completions,
         String createdAt,
         String updatedAt) {
+
+    /** Why the intervention was cancelled; null unless a cancellation started. */
+    public record Cancellation(String reasonCode, String note) {
+    }
 
     public record Contractor(String contractorId, String displayName, boolean synthetic) {
     }

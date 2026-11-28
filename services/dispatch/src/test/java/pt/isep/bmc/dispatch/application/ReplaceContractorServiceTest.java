@@ -69,7 +69,8 @@ class ReplaceContractorServiceTest {
         Intervention i = stored();
         ports.interventions.put(interventionId, new Intervention(i.id(), i.issueId(), i.buildingId(),
                 i.contractorId(), state, i.version(), i.currentProposalVersion(), i.approvedProposalVersion(),
-                i.agreedProposalVersion(), i.contractorContacted(), i.projectedIssueVersion(),
+                i.agreedProposalVersion(), i.contractorContacted(), i.cancelReason(), i.cancelNote(),
+                i.projectedIssueVersion(),
                 i.projectionAppliedAt(), i.createdBy(), i.createdAt(), i.updatedAt()));
     }
 

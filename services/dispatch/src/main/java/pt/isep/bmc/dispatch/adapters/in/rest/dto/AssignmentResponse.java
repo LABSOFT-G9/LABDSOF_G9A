@@ -18,7 +18,13 @@ public record AssignmentResponse(
         Integer awaitingResponseTo,
         Integer agreedProposalVersion,
         List<InterventionResponse.Proposal> proposals,
+        Booking booking,
+        List<CompletionResponse> completions,
         String updatedAt) {
+
+    /** The current booking: its state, source and window; null before the terms are agreed. */
+    public record Booking(String state, String source, InterventionResponse.Window window) {
+    }
 
     /** @param category and urgency null while undecided */
     public record Work(String category, String urgency, String areaLabel) {

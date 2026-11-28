@@ -12,8 +12,9 @@ import pt.isep.bmc.dispatch.domain.shared.BuildingId;
  * intervention's state after the change, so Issue can apply it by version
  * (technical design 3.3).
  */
-public sealed interface DomainEvent permits ContractorResponded, InterventionApproved, InterventionDeclined,
-        InterventionTermsChanged {
+public sealed interface DomainEvent permits BookingConfirmed, BookingStateChanged, CompletionReported,
+        ContractorResponded, InterventionApproved, InterventionCancellationPending, InterventionCancelled,
+        InterventionDeclined, InterventionStarted, InterventionTermsChanged, ReworkRequested {
 
     /** CloudEvents {@code type}, for example {@code InterventionApproved}. */
     String type();

@@ -6,18 +6,19 @@
 -- 1. The synthetic contractor catalogue (US-06). Only Synthetic Plumbing Co.
 --    has a Keycloak account (synthetic.contractor@bmc.example, sub ...0301).
 --    The others have no login (user_id NULL), so approving a request for one
---    of them is refused with 422 CONTRACTOR_HAS_NO_ACCOUNT (US-07).
+--    of them is refused with 422 CONTRACTOR_HAS_NO_ACCOUNT (US-07). Each has a
+--    reference in the calendar simulator (US-08).
 --    Buildings: ...b001 = Synthetic Building A, ...b002 = Synthetic Building B,
 --    as in Issue's seed.
-INSERT INTO contractors (id, user_id, display_name, active, synthetic) VALUES
-  ('0199f2a0-0000-7000-8000-00000000e001', '0199f2a0-0000-7000-8000-000000000301', 'Synthetic Plumbing Co.', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e002', NULL, 'Synthetic Electrical Services', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e003', NULL, 'Synthetic Lift Maintenance', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e004', NULL, 'Synthetic Aqua Repairs', TRUE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e005', NULL, 'Synthetic Drain Masters', FALSE, TRUE),
-  ('0199f2a0-0000-7000-8000-00000000e006', NULL, 'Synthetic Aqua Plumbers', TRUE, TRUE)
+INSERT INTO contractors (id, user_id, display_name, active, synthetic, calendar_ref) VALUES
+  ('0199f2a0-0000-7000-8000-00000000e001', '0199f2a0-0000-7000-8000-000000000301', 'Synthetic Plumbing Co.', TRUE, TRUE, 'SIM-CTR-001'),
+  ('0199f2a0-0000-7000-8000-00000000e002', NULL, 'Synthetic Electrical Services', TRUE, TRUE, 'SIM-CTR-002'),
+  ('0199f2a0-0000-7000-8000-00000000e003', NULL, 'Synthetic Lift Maintenance', TRUE, TRUE, 'SIM-CTR-003'),
+  ('0199f2a0-0000-7000-8000-00000000e004', NULL, 'Synthetic Aqua Repairs', TRUE, TRUE, 'SIM-CTR-004'),
+  ('0199f2a0-0000-7000-8000-00000000e005', NULL, 'Synthetic Drain Masters', FALSE, TRUE, 'SIM-CTR-005'),
+  ('0199f2a0-0000-7000-8000-00000000e006', NULL, 'Synthetic Aqua Plumbers', TRUE, TRUE, 'SIM-CTR-006')
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), display_name = VALUES(display_name), active = VALUES(active),
-                        synthetic = VALUES(synthetic);
+                        synthetic = VALUES(synthetic), calendar_ref = VALUES(calendar_ref);
 
 INSERT INTO contractor_specialisations (contractor_id, category) VALUES
   ('0199f2a0-0000-7000-8000-00000000e001', 'plumbing'),

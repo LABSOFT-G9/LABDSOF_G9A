@@ -27,6 +27,8 @@ import pt.isep.bmc.dispatch.domain.shared.VersionConflictException;
  *                                contractor's counterproposal; what US-08 books
  * @param contractorContacted     whether a request was ever sent to the contractor; from then on the contractor
  *                                sees the intervention and cannot be replaced
+ * @param cancelReason            why the intervention was cancelled, once a cancellation started
+ * @param cancelNote              the administrator's optional text with it; never in an event
  * @param buildingId              snapshot of the issue's building, taken from the issue projection at creation
  *                                (technical design 4.3 step 4)
  * @param projectedIssueVersion   the issue version of the projection row used for the check at creation
@@ -43,6 +45,8 @@ public record Intervention(
         Optional<Integer> approvedProposalVersion,
         Optional<Integer> agreedProposalVersion,
         boolean contractorContacted,
+        Optional<CancelReason> cancelReason,
+        Optional<String> cancelNote,
         long projectedIssueVersion,
         Instant projectionAppliedAt,
         UserId createdBy,
@@ -59,6 +63,8 @@ public record Intervention(
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(approvedProposalVersion, "approvedProposalVersion");
         Objects.requireNonNull(agreedProposalVersion, "agreedProposalVersion");
+        Objects.requireNonNull(cancelReason, "cancelReason");
+        Objects.requireNonNull(cancelNote, "cancelNote");
         Objects.requireNonNull(projectionAppliedAt, "projectionAppliedAt");
         Objects.requireNonNull(createdBy, "createdBy");
         Objects.requireNonNull(createdAt, "createdAt");
@@ -73,7 +79,8 @@ public record Intervention(
             InterventionId id, IssueId issueId, BuildingId buildingId, ContractorId contractorId,
             long projectedIssueVersion, Instant projectionAppliedAt, UserId createdBy, Instant now) {
         return new Intervention(id, issueId, buildingId, contractorId, InterventionState.AWAITING_APPROVAL,
-                INITIAL_VERSION, 1, Optional.empty(), Optional.empty(), false, projectedIssueVersion,
+                INITIAL_VERSION, 1, Optional.empty(), Optional.empty(), false, Optional.empty(), Optional.empty(),
+                projectedIssueVersion,
                 projectionAppliedAt, createdBy, now, now);
     }
 
@@ -157,6 +164,127 @@ public record Intervention(
                 Optional.empty(), contractorContacted, now);
     }
 
+    /**
+     * The agreed window is booked (US-08), by the calendar or by hand:
+     * {@code booked}. A late confirmation for an intervention that is no
+     * longer {@code scheduling_pending}, for example one being cancelled,
+     * changes nothing.
+     */
+    public Optional<Intervention> booked(Instant now) {
+        if (state != InterventionState.SCHEDULING_PENDING) {
+            return Optional.empty();
+        }
+        return Optional.of(next(contractorId, InterventionState.BOOKED, currentProposalVersion,
+                approvedProposalVersion, agreedProposalVersion, contractorContacted, now));
+    }
+
+    /** An administrator confirmed the booking by hand (US-08): from {@code scheduling_pending} to {@code booked}. */
+    public Intervention bookManually(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.SCHEDULING_PENDING));
+        return next(contractorId, InterventionState.BOOKED, currentProposalVersion, approvedProposalVersion,
+                agreedProposalVersion, contractorContacted, now);
+    }
+
+    /**
+     * An administrator command on the booking (US-08: another booking request): allowed while {@code scheduling_pending}, from the
+     * version the administrator saw. The version moves.
+     */
+    public Intervention touchWhileScheduling(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.SCHEDULING_PENDING));
+        return next(contractorId, state, currentProposalVersion, approvedProposalVersion, agreedProposalVersion,
+                contractorContacted, now);
+    }
+
+    /** The state and version check of a command that changes nothing else, such as a reconciliation request. */
+    public void requireState(Set<InterventionState> allowed) {
+        if (!allowed.contains(state)) {
+            throw new InvalidTransitionException(state.value());
+        }
+    }
+
+    /**
+     * The administrator cancels (technical design 3.2). Before anything was
+     * agreed it is {@code cancelled} at once. From {@code scheduling_pending}
+     * on, a booking that exists or may exist is cancelled at the calendar
+     * first: {@code cancellation_pending} until that is checked.
+     *
+     * @param bookingNeedsCalendar whether the active booking must be cancelled at the calendar
+     */
+    public Intervention cancel(
+            long expectedVersion, CancelReason reason, Optional<String> note, boolean bookingNeedsCalendar,
+            Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.AWAITING_APPROVAL, InterventionState.SENT,
+                InterventionState.SCHEDULING_PENDING, InterventionState.BOOKED, InterventionState.IN_PROGRESS));
+        boolean early = state == InterventionState.AWAITING_APPROVAL || state == InterventionState.SENT;
+        InterventionState target = !early && bookingNeedsCalendar
+                ? InterventionState.CANCELLATION_PENDING
+                : InterventionState.CANCELLED;
+        return new Intervention(id, issueId, buildingId, contractorId, target, version + 1, currentProposalVersion,
+                approvedProposalVersion, agreedProposalVersion, contractorContacted, Optional.of(reason), note,
+                projectedIssueVersion, projectionAppliedAt, createdBy, createdAt, now);
+    }
+
+    /** The calendar confirmed the booking's cancellation: {@code cancellation_pending} becomes {@code cancelled}. */
+    public Optional<Intervention> cancellationCompleted(Instant now) {
+        if (state != InterventionState.CANCELLATION_PENDING) {
+            return Optional.empty();
+        }
+        return Optional.of(next(contractorId, InterventionState.CANCELLED, currentProposalVersion,
+                approvedProposalVersion, agreedProposalVersion, contractorContacted, now));
+    }
+
+    /** The contractor starts the work (technical design 3.2): from {@code booked} to {@code in_progress}. Optional. */
+    public Intervention start(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.BOOKED));
+        return next(contractorId, InterventionState.IN_PROGRESS, currentProposalVersion, approvedProposalVersion,
+                agreedProposalVersion, contractorContacted, now);
+    }
+
+    /**
+     * The work is reported complete (US-09): {@code completion_reported}.
+     * Not a closure: only Issue closes the issue.
+     */
+    public Intervention reportCompletion(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.BOOKED, InterventionState.IN_PROGRESS));
+        return next(contractorId, InterventionState.COMPLETION_REPORTED, currentProposalVersion,
+                approvedProposalVersion, agreedProposalVersion, contractorContacted, now);
+    }
+
+    /** The administrator sends a reported completion back (US-09): {@code in_progress} again. */
+    public Intervention requestRework(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.COMPLETION_REPORTED));
+        return next(contractorId, InterventionState.IN_PROGRESS, currentProposalVersion, approvedProposalVersion,
+                agreedProposalVersion, contractorContacted, now);
+    }
+
+    /**
+     * Issue resolved or cancelled the issue (technical design 3.2 and 4.3
+     * step 8). A reported completion is {@code closed}. Anything earlier is
+     * cancelled, through {@code cancellation_pending} while a booking that
+     * exists or may exist is cancelled at the calendar. A terminal or pending
+     * intervention does not change, so a repeated event has no effect.
+     *
+     * @param bookingNeedsCalendar whether the active booking must be cancelled at the calendar
+     */
+    public Optional<Intervention> endedByIssue(CancelReason reason, boolean bookingNeedsCalendar, Instant now) {
+        InterventionState target = switch (state) {
+            case COMPLETION_REPORTED -> InterventionState.CLOSED;
+            case AWAITING_APPROVAL, SENT -> InterventionState.CANCELLED;
+            case SCHEDULING_PENDING, BOOKED, IN_PROGRESS -> bookingNeedsCalendar
+                    ? InterventionState.CANCELLATION_PENDING
+                    : InterventionState.CANCELLED;
+            case CANCELLATION_PENDING, DECLINED, CANCELLED, CLOSED -> null;
+        };
+        if (target == null) {
+            return Optional.empty();
+        }
+        Optional<CancelReason> recorded = target == InterventionState.CLOSED ? cancelReason : Optional.of(reason);
+        return Optional.of(new Intervention(id, issueId, buildingId, contractorId, target, version + 1,
+                currentProposalVersion, approvedProposalVersion, agreedProposalVersion, contractorContacted, recorded,
+                target == InterventionState.CLOSED ? cancelNote : Optional.empty(), projectedIssueVersion,
+                projectionAppliedAt, createdBy, createdAt, now));
+    }
+
     private void requireCurrent(long expectedVersion, Set<InterventionState> allowed) {
         if (!allowed.contains(state)) {
             throw new InvalidTransitionException(state.value());
@@ -190,6 +318,7 @@ public record Intervention(
             ContractorId contractor, InterventionState nextState, int current, Optional<Integer> approved,
             Optional<Integer> agreed, boolean contacted, Instant now) {
         return new Intervention(id, issueId, buildingId, contractor, nextState, version + 1, current, approved, agreed,
-                contacted, projectedIssueVersion, projectionAppliedAt, createdBy, createdAt, now);
+                contacted, cancelReason, cancelNote, projectedIssueVersion, projectionAppliedAt, createdBy, createdAt,
+                now);
     }
 }

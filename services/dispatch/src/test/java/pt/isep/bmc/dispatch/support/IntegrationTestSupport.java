@@ -19,6 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.mysql.MySQLContainer;
 import pt.isep.bmc.dispatch.application.port.in.ApplyIssueStateChangedUseCase;
 import pt.isep.bmc.dispatch.application.port.in.ApplyMembershipChangeUseCase;
+import pt.isep.bmc.dispatch.application.port.in.RunBookingWorkUseCase;
 
 /**
  * Boots the whole service on a random port against a real MySQL 8.4 (Flyway
@@ -31,7 +32,7 @@ public abstract class IntegrationTestSupport {
 
     /** Tables emptied before each test, children first. */
     private static final String[] TABLES = {
-        "outbox", "contractor_responses", "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
+        "outbox", "completion_reports", "booking_calls", "bookings", "contractor_responses", "proposal_versions", "interventions", "contractor_coverage", "contractor_specialisations", "contractors",
         "issue_projection", "membership_projection", "idempotency_keys"};
 
     protected static final String SCOPE = "Leak above garage light fitting, level -1. Access via management.";
@@ -52,6 +53,11 @@ public abstract class IntegrationTestSupport {
     @Autowired
     private ApplyMembershipChangeUseCase applyMembership;
 
+    @Autowired
+    protected RunBookingWorkUseCase bookingWorker;
+
+    protected final CalendarStub calendar = CalendarStub.shared();
+
     protected final TestTokens tokens = TestTokens.get();
     protected Api api;
     protected SyntheticEvents events;
@@ -70,6 +76,8 @@ public abstract class IntegrationTestSupport {
         registry.add("bmc.security.jwk-set-uri", () -> TestTokens.get().jwksUri());
         registry.add("bmc.scheduling.enabled", () -> "false");
         registry.add("management.server.port", () -> "0");
+        registry.add("bmc.calendar.base-url", () -> CalendarStub.shared().url());
+        registry.add("bmc.calendar.timeout", () -> "PT1S");
     }
 
     @BeforeEach
@@ -80,6 +88,7 @@ public abstract class IntegrationTestSupport {
         try (var connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us06-catalogue.sql"));
         }
+        calendar.reset();
         api = new Api(environment.getRequiredProperty("local.server.port", Integer.class));
         events = new SyntheticEvents(applyIssue, applyMembership);
         events.granted(MEMBERSHIP_ADMIN_A, ADMIN_A, BUILDING_A, "administrator", 1);
@@ -172,11 +181,45 @@ public abstract class IntegrationTestSupport {
         return interventionId;
     }
 
+    /** A request sent and accepted: {@code scheduling_pending} at version 3, with its booking requested. */
+    protected String agreedIntervention() {
+        String interventionId = sentIntervention();
+        Api.Response accepted = respond(CONTRACTOR, interventionId, 2, accept(1));
+        if (accepted.status() != 200) {
+            throw new IllegalStateException("acceptance failed: " + accepted.status());
+        }
+        return interventionId;
+    }
+
+    /** Makes every pending booking call due now, then runs the worker once, as the scheduler would. */
+    protected int runBookingWorker() {
+        jdbc.sql("UPDATE bookings SET next_attempt_at = UTC_TIMESTAMP(6) WHERE next_attempt_at IS NOT NULL").update();
+        return bookingWorker.runDue();
+    }
+
+    /** The intervention's current booking, as the administrator sees it. */
+    protected Map<String, Object> bookingOf(String interventionId) {
+        return Api.map(api.get("/interventions/" + interventionId, tokens.token(ADMIN_A)).json().get("booking"));
+    }
+
     /** The outbox rows' CloudEvents payloads, oldest first. */
     protected List<Map<String, Object>> outboxEvents() {
         return jdbc.sql("SELECT payload FROM outbox ORDER BY created_at, id").query(String.class).list().stream()
                 .map(Api::parse)
                 .toList();
+    }
+
+    /**
+     * The newest outbox event of a type. The outbox orders rows by time at
+     * millisecond precision only, so events written close together are found
+     * by type, not by position.
+     */
+    protected Map<String, Object> event(String type) {
+        List<Map<String, Object>> matching = outboxEvents().stream().filter(e -> type.equals(e.get("type"))).toList();
+        if (matching.isEmpty()) {
+            throw new AssertionError("no " + type + " in the outbox");
+        }
+        return matching.getLast();
     }
 
     protected long count(String table) {

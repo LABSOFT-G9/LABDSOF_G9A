@@ -3,6 +3,7 @@ package pt.isep.bmc.dispatch.adapters.in.messaging;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import pt.isep.bmc.dispatch.application.command.IssueClosure;
 import pt.isep.bmc.dispatch.domain.projection.MembershipId;
 import pt.isep.bmc.dispatch.domain.projection.ProjectedIssue;
 import pt.isep.bmc.dispatch.domain.projection.ProjectedMembership;
@@ -26,6 +27,8 @@ public final class IssueEvents {
     public static final String ISSUE_STATE_CHANGED = "IssueStateChanged";
     public static final String MEMBERSHIP_GRANTED = "MembershipGranted";
     public static final String MEMBERSHIP_REVOKED = "MembershipRevoked";
+    public static final String ISSUE_RESOLVED = "IssueResolved";
+    public static final String ISSUE_CANCELLED = "IssueCancelled";
 
     private IssueEvents() {
     }
@@ -60,6 +63,16 @@ public final class IssueEvents {
                 active,
                 version(data),
                 appliedAt);
+    }
+
+    /** {@code IssueResolved} or {@code IssueCancelled}: the issue whose intervention ends (US-09). */
+    public static IssueClosure closure(String eventType, JsonNode data, String correlationId) {
+        IssueClosure.Kind kind = switch (eventType) {
+            case ISSUE_RESOLVED -> IssueClosure.Kind.RESOLVED;
+            case ISSUE_CANCELLED -> IssueClosure.Kind.CANCELLED;
+            default -> throw new IllegalArgumentException("not a closure event: " + eventType);
+        };
+        return new IssueClosure(new IssueId(uuid(data, "issueId")), kind, correlationId);
     }
 
     private static String text(JsonNode data, String field) {

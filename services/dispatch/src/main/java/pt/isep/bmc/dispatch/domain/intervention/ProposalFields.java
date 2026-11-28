@@ -16,7 +16,7 @@ import pt.isep.bmc.dispatch.domain.shared.PlainText;
  * changed terms and a counterproposal. Each adds its violations to the list,
  * so a request reports every invalid field at once.
  */
-final class ProposalFields {
+public final class ProposalFields {
 
     static final int SCOPE_MIN = 10;
     static final int SCOPE_MAX = 2_000;
@@ -46,7 +46,7 @@ final class ProposalFields {
         return text(raw, FIELD_TERMS, TERMS_MIN, TERMS_MAX, violations);
     }
 
-    static Optional<String> text(String raw, String field, int min, int max, List<FieldViolation> violations) {
+    public static Optional<String> text(String raw, String field, int min, int max, List<FieldViolation> violations) {
         Optional<String> reason = PlainText.violation(raw, min, max);
         reason.ifPresent(r -> violations.add(new FieldViolation(field, r)));
         return reason.isPresent() ? Optional.empty() : Optional.of(raw.strip());
@@ -56,7 +56,7 @@ final class ProposalFields {
      * RFC 3339 with an offset, kept in UTC at millisecond precision; the start
      * is in the future and the end after it.
      */
-    static Optional<TimeWindow> window(String rawStart, String rawEnd, Instant now, List<FieldViolation> violations) {
+    public static Optional<TimeWindow> window(String rawStart, String rawEnd, Instant now, List<FieldViolation> violations) {
         Optional<Instant> start = instant(rawStart, FIELD_WINDOW_START, violations);
         Optional<Instant> end = instant(rawEnd, FIELD_WINDOW_END, violations);
         boolean valid = start.isPresent() && end.isPresent();
