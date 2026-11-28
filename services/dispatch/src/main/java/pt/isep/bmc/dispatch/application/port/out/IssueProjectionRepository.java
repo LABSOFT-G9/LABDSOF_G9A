@@ -1,5 +1,7 @@
 package pt.isep.bmc.dispatch.application.port.out;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import pt.isep.bmc.dispatch.domain.projection.ProjectedIssue;
 import pt.isep.bmc.dispatch.domain.shared.IssueId;
@@ -11,6 +13,9 @@ import pt.isep.bmc.dispatch.domain.shared.IssueId;
 public interface IssueProjectionRepository {
 
     Optional<ProjectedIssue> find(IssueId id);
+
+    /** The issues found among {@code ids}, in one read; a missing ID is simply absent. */
+    Map<IssueId, ProjectedIssue> findAll(Collection<IssueId> ids);
 
     /**
      * Locks the row until the transaction ends. Creating an intervention and

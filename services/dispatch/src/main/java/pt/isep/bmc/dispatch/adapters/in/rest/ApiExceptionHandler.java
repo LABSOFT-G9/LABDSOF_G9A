@@ -20,6 +20,7 @@ import pt.isep.bmc.dispatch.application.error.NotFoundException;
 import pt.isep.bmc.dispatch.application.error.StorageUnavailableException;
 import pt.isep.bmc.dispatch.application.port.out.TransactionConflictException;
 import pt.isep.bmc.dispatch.domain.shared.AccessDeniedException;
+import pt.isep.bmc.dispatch.domain.shared.BusinessRuleException;
 import pt.isep.bmc.dispatch.domain.shared.DomainException;
 import pt.isep.bmc.dispatch.domain.shared.InvalidTransitionException;
 import pt.isep.bmc.dispatch.domain.shared.ValidationException;
@@ -28,7 +29,9 @@ import pt.isep.bmc.dispatch.domain.shared.VersionConflictException;
 /**
  * Maps errors to {@code application/problem+json} (technical design 4.1):
  * {@code 400} validation, {@code 404} unknown or outside scope, {@code 409}
- * stale version or invalid transition, {@code 422} idempotency key reused, {@code 503} database unavailable. Unexpected errors
+ * stale version or invalid transition, {@code 422} idempotency key reused or a business rule
+ * ({@code CONTRACTOR_HAS_NO_ACCOUNT}, {@code CONTRACTOR_NOT_ELIGIBLE}, {@code CONTRACTOR_ALREADY_CONTACTED}),
+ * {@code 503} database unavailable. Unexpected errors
  * answer {@code 500} without details; only the exception class is logged.
  */
 @RestControllerAdvice
@@ -72,6 +75,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setProperty("currentState", e.currentState());
         e.activeInterventionId().ifPresent(id -> problem.setProperty("activeInterventionId", id.toString()));
         return respond(problem);
+    }
+
+    /** A business rule refused a well-formed request ({@code 422}, technical design 4.1 "semantic rule"). */
+    @ExceptionHandler(BusinessRuleException.class)
+    ResponseEntity<ProblemDetail> businessRule(BusinessRuleException e, HttpServletRequest request) {
+        return respond(problem(HttpStatus.UNPROCESSABLE_CONTENT, e, request));
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)

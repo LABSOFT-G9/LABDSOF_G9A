@@ -105,6 +105,12 @@ public final class Api {
         }
     }
 
+    /** A JSON object from text, for example an outbox payload. */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parse(String json) {
+        return JSON.readValue(json, Map.class);
+    }
+
     /** A JSON object nested in a response body. */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> map(Object value) {

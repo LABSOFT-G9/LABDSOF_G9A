@@ -68,7 +68,8 @@ class ReplaceContractorServiceTest {
     void givenTheDraftIs(InterventionState state) {
         Intervention i = stored();
         ports.interventions.put(interventionId, new Intervention(i.id(), i.issueId(), i.buildingId(),
-                i.contractorId(), state, i.version(), i.currentProposalVersion(), i.projectedIssueVersion(),
+                i.contractorId(), state, i.version(), i.currentProposalVersion(), i.approvedProposalVersion(),
+                i.agreedProposalVersion(), i.contractorContacted(), i.projectedIssueVersion(),
                 i.projectionAppliedAt(), i.createdBy(), i.createdAt(), i.updatedAt()));
     }
 

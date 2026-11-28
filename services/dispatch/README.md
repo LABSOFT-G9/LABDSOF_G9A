@@ -9,8 +9,14 @@ Implemented so far:
   - the synthetic contractor catalogue, eligibility and its documented order;
   - draft interventions (`awaiting_approval`) and replacing a draft's contractor;
   - the issue and membership projections, applied by version from Issue's events.
+- US-07-01 ([#101](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/101)):
+  - approval of a proposal version, which sends the request;
+  - the assigned contractor's answer: accept, decline with a reason, or counterpropose;
+  - changed terms by the administrator before the answer;
+  - the contractor's own view of the requests sent to them;
+  - the transactional outbox with `InterventionApproved`, `ContractorResponded`, `InterventionDeclined` and `InterventionTermsChanged`.
 
-Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service yet; approval and the contractor's response (US-07); booking (US-08); completion and closure (US-09). An issue that becomes `resolved` or `cancelled` only updates the projection: its non-terminal interventions are not cancelled yet (technical design 4.3 step 8). That needs the `IssueResolved` and `IssueCancelled` consumer of EN-02-02 and the cancellation of US-09.
+Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service and the outbox rows stay `pending`; booking (US-08); completion and closure (US-09). An issue that becomes `resolved` or `cancelled` only updates the projection: its non-terminal interventions are not cancelled yet (technical design 4.3 step 8). That needs the `IssueResolved` and `IssueCancelled` consumer of EN-02-02 and the cancellation of US-09.
 
 ## Architecture
 
@@ -41,8 +47,12 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
 | `GET /contractors?issueId=` | Administrators of the issue's building | `{issueId, criteria, items}`. `criteria` is `{category, issueState, dispatchable, eligibility, order}`. Each item is `{contractorId, displayName, synthetic, specialisations, matched, unknown}` |
 | `POST /interventions` + `Idempotency-Key` | The same | Body `{issueId, contractorId, scopeExtract, window: {start, end}, terms}`. `201`, `ETag: "1"`, `Location`, `{interventionId, state: "awaiting_approval", version: 1, proposalVersion: 1, contractorId}`. Sends nothing |
 | `PATCH /interventions/{id}` + `If-Match: "<version>"` + `Idempotency-Key` | The same, for the intervention's building | Body `{contractorId}`. Only in `awaiting_approval`. `200`, `ETag` with the new version, `{interventionId, state, version, contractorId}` |
-| `GET /interventions/{id}` | The same | `ETag` with the version. `{interventionId, issueId, state, version, contractor: {contractorId, displayName, synthetic}, proposal: {proposalVersion, authorRole, scopeExtract, window, terms, createdAt}, createdAt, updatedAt}` |
-| `GET /interventions?issueId=` | Administrators of the issue's building | `{items}`, newest first, terminal ones included. `assigned=me` for contractors comes with US-07 |
+| `POST /interventions/{id}/approval` + `If-Match` + `Idempotency-Key` | Administrators of the intervention's building | Body `{proposalVersion}`, the current one. `200`, `{interventionId, state, version, approvedProposalVersion}`: `sent`, or `scheduling_pending` for a contractor's counterproposal. Writes `InterventionApproved` |
+| `POST /interventions/{id}/proposals` + `If-Match` + `Idempotency-Key` | The same | Body `{scopeExtract, window, terms}`, as a draft. From `awaiting_approval` or `sent`. `200`, `{interventionId, state: "awaiting_approval", version, proposalVersion}`. An earlier approval no longer counts. Writes `InterventionTermsChanged` (the new and the replaced version, who wrote the replaced one, the state before; the contractor's `userId` when the request had been sent to them or they wrote the replaced version) |
+| `POST /interventions/{id}/response` + `If-Match` + `Idempotency-Key` | The assigned contractor, once sent | Body `{proposalVersion, decision}` with `decision` `accept`, `decline` (+ `reasonCode`, optional `note`) or `counterpropose` (+ `window`, `terms`, optional `proposedCost: {amount, currency}`). `200`, `{interventionId, state, version, proposalVersion}`. Writes `ContractorResponded`, or `InterventionDeclined` for a decline |
+| `GET /interventions/{id}` | Administrators of the building; the assigned contractor, once sent | `ETag` with the version. Administrators: `{interventionId, issueId, state, version, contractor, proposal, proposals, approvedProposalVersion, agreedProposalVersion, createdAt, updatedAt}`, where `proposal` is the current version and `proposals` every version with `proposedCost`, `approvedAt` and the contractor's `response`. The contractor: `{interventionId, state, version, contractor, work: {category, urgency, areaLabel}, awaitingResponseTo, agreedProposalVersion, proposals, updatedAt}` |
+| `GET /interventions?issueId=` | Administrators of the issue's building | `{items}`, newest first, terminal ones included |
+| `GET /interventions?assigned=me` | Contractors | `{items}`: the requests sent to the caller, last changed first, in the contractor's shape |
 
 **Rules (US-06):**
 
@@ -64,9 +74,21 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
   5. Issue still dispatchable (`409 INVALID_TRANSITION`). Here `currentState` is the issue's state, not the intervention's: both lists have `in_progress` and `cancelled`, and the draft itself is still `awaiting_approval`.
   6. Eligible now (`400 not_eligible`).
 
-  The draft is read again under its row lock before the version check, so two replacements sent with the same `If-Match` answer `200` and `409 VERSION_CONFLICT`.
+  The draft is read again under its row lock before the version check, so two replacements sent with the same `If-Match` answer `200` and `409 VERSION_CONFLICT`. The same holds for every command below; their proposal versions are read with a locking read too, so they see a version another transaction has just added.
 
   Every successful save moves the version, even when it saves the same contractor, because the save re-checked eligibility. The terms (proposal version 1) stay as they were.
+- **Approval (US-07).** The checks run in this order:
+  1. Administrator of the building (`404`).
+  2. `proposalVersion` present (`400`).
+  3. Still `awaiting_approval` (`409 INVALID_TRANSITION`), then the version (`409 VERSION_CONFLICT`).
+  4. `proposalVersion` is the current one (`400 not_current`).
+  5. Issue still dispatchable (`409`, the issue's `currentState`).
+  6. The contractor is still eligible (`422 CONTRACTOR_NOT_ELIGIBLE`) and has a login (`422 CONTRACTOR_HAS_NO_ACCOUNT`).
+
+  Approving an administrator's version sends it: `sent`. Approving a contractor's counterproposal is their acceptance as well, so the terms are agreed: `scheduling_pending` (technical design 3.2). Once a request was sent, the contractor sees the intervention and cannot be replaced (`PATCH` answers `422 CONTRACTOR_ALREADY_CONTACTED`); another contractor needs a new intervention after a decline.
+- **The contractor's answer (US-07).** Only the contractor whose login is the catalogue entry's, after the request was sent; anyone else gets `404`. Then the fields (`400`), the state `sent` (`409`), the version (`409`), `proposalVersion` is the approved one (`400 not_current`), and the issue (`409`). Decline reasons are `unavailable`, `outside_expertise`, `terms_not_acceptable` and `other`; the `note` (1–500 characters) is for the building's administrators and never goes into an event or a log. A counterproposal keeps the administrator's scope extract and sets a new window and terms, with an optional cost in `EUR` as a decimal string (`"85.00"`, at most 9,999,999.99). Fields that do not belong to the decision are ignored. Silence is never acceptance: a request without an answer stays `sent`.
+- **Changed terms (US-07).** A new administrator version from `awaiting_approval` or `sent`, back in `awaiting_approval`: an approval sent earlier no longer counts, so the contractor cannot answer it (`409`), and the contractor does not see the new terms until they are approved. Agreed terms (`scheduling_pending`) do not change.
+- **Events.** Each change writes one outbox row in its transaction, as CloudEvents JSON with the proto3 JSON `data` of `contracts/proto/bmc/dispatch/v1` and routing key `dispatch.<type>`. They carry IDs, versions, codes and the new `interventionState`, never the scope, terms or note. A repeated command writes nothing again.
 - **One active intervention per issue.** Saving a draft locks the issue's projection row, and so does applying an Issue event (technical design 4.3 step 8). A unique key on the active intervention per issue backs this up.
 - **Idempotency.** Same as Issue: the key is scoped per user and operation and kept for 24 hours. A replay re-checks the caller's permissions. The same key with a different body gets `422 IDEMPOTENCY_KEY_REUSED`.
 - **Errors** are `application/problem+json` with `code` and `correlationId`, as in Issue. A deadlock between concurrent transactions answers `503 DEPENDENCY_UNAVAILABLE` with `Retry-After`; nothing was saved.
@@ -86,7 +108,7 @@ Each event is applied by its version, so a repeated, late or out-of-order event 
 
 `BMC_SEED_SYNTHETIC=true` (local and dev only) loads `db/seed/R__synthetic_fixtures.sql`:
 
-- **Catalogue.** Six synthetic contractors. Only `Synthetic Plumbing Co.` (`…e001`) is linked to a Keycloak account, `synthetic.contractor@bmc.example` (`sub …0301`). The other user IDs are placeholders with no account.
+- **Catalogue.** Six synthetic contractors. Only `Synthetic Plumbing Co.` (`…e001`) is linked to a Keycloak account, `synthetic.contractor@bmc.example` (`sub …0301`). The others have no login (`user_id` NULL), so a request to one of them cannot be approved (`422 CONTRACTOR_HAS_NO_ACCOUNT`).
 - **Temporary projection stand-in**, until RabbitMQ is wired:
   - the five memberships Issue seeds, with the same IDs and versions;
   - one dispatchable plumbing issue in Synthetic Building A, `0199f2a0-0000-7000-8000-00000000f001`.
@@ -103,14 +125,15 @@ The variables are the same as Issue's (see [its README](../issue/README.md#confi
 mvn verify   # unit + ArchUnit (surefire, *Test) and MySQL 8.4 integration tests (failsafe, *IT; needs Docker)
 ```
 
-The unit tests cover the domain rules, and the use cases at the application layer with in-memory fakes of the ports (`application/InMemoryPorts`), as in Issue: the check order of a draft and of a replacement, replays, and projections applied by version, with their retries.
+The unit tests cover the domain rules, and the use cases at the application layer with in-memory fakes of the ports (`application/InMemoryPorts`), as in Issue: the check order of a draft, a replacement, an approval, an answer and changed terms, the events they write, replays, and projections applied by version, with their retries.
 
 The integration tests use Testcontainers and locally signed tokens, as Issue's do. They cover:
 
 - the access matrix, including a revoked administrator;
 - eligibility and its order;
 - every validation error at once;
-- the `409`s, including two replacements sent from the same version;
+- the `409`s, including two replacements or two approvals sent from the same version, and an acceptance racing changed terms;
+- approval, acceptance, decline and counterproposal over HTTP, with the outbox rows they write and the contractor's view;
 - idempotent replays and key reuse, concurrent retries with one key, expired keys and their purge (`IdempotencyIT`);
 - concurrent drafts for one issue;
 - events that race for one projection row;

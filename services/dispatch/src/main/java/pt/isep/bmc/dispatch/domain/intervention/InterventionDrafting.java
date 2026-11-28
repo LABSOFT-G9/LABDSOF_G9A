@@ -1,9 +1,6 @@
 package pt.isep.bmc.dispatch.domain.intervention;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +13,6 @@ import pt.isep.bmc.dispatch.domain.projection.AdministratorAccess;
 import pt.isep.bmc.dispatch.domain.projection.ProjectedIssue;
 import pt.isep.bmc.dispatch.domain.shared.FieldViolation;
 import pt.isep.bmc.dispatch.domain.shared.InvalidTransitionException;
-import pt.isep.bmc.dispatch.domain.shared.PlainText;
 import pt.isep.bmc.dispatch.domain.shared.UserId;
 import pt.isep.bmc.dispatch.domain.shared.ValidationException;
 
@@ -40,18 +36,12 @@ import pt.isep.bmc.dispatch.domain.shared.ValidationException;
  */
 public final class InterventionDrafting {
 
-    public static final int SCOPE_MIN = 10;
-    public static final int SCOPE_MAX = 2_000;
-    public static final int TERMS_MIN = 1;
-    public static final int TERMS_MAX = 1_000;
+    public static final int SCOPE_MIN = ProposalFields.SCOPE_MIN;
+    public static final int SCOPE_MAX = ProposalFields.SCOPE_MAX;
+    public static final int TERMS_MIN = ProposalFields.TERMS_MIN;
+    public static final int TERMS_MAX = ProposalFields.TERMS_MAX;
 
     static final String FIELD_CONTRACTOR = "contractorId";
-    static final String FIELD_SCOPE = "scopeExtract";
-    static final String FIELD_WINDOW_START = "window.start";
-    static final String FIELD_WINDOW_END = "window.end";
-    /** The last instant a MySQL {@code DATETIME(3)} column holds, in UTC. */
-    static final Instant LATEST_STORABLE = Instant.parse("9999-12-31T23:59:59.999Z");
-    static final String FIELD_TERMS = "terms";
 
     private static final Pattern CANONICAL_UUID =
             Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -74,23 +64,13 @@ public final class InterventionDrafting {
             String contractorId, String scopeExtract, String windowStart, String windowEnd, String terms, Instant now) {
         List<FieldViolation> violations = new ArrayList<>();
         Optional<ContractorId> contractor = contractorId(contractorId, violations);
-        PlainText.violation(scopeExtract, SCOPE_MIN, SCOPE_MAX)
-                .ifPresent(reason -> violations.add(new FieldViolation(FIELD_SCOPE, reason)));
-        PlainText.violation(terms, TERMS_MIN, TERMS_MAX)
-                .ifPresent(reason -> violations.add(new FieldViolation(FIELD_TERMS, reason)));
-        Optional<Instant> start = instant(windowStart, FIELD_WINDOW_START, violations);
-        Optional<Instant> end = instant(windowEnd, FIELD_WINDOW_END, violations);
-        if (start.isPresent() && !start.get().isAfter(now)) {
-            violations.add(new FieldViolation(FIELD_WINDOW_START, "not_in_future"));
-        }
-        if (start.isPresent() && end.isPresent() && !end.get().isAfter(start.get())) {
-            violations.add(new FieldViolation(FIELD_WINDOW_END, "not_after_start"));
-        }
+        Optional<String> scope = ProposalFields.scope(scopeExtract, violations);
+        Optional<String> text = ProposalFields.terms(terms, violations);
+        Optional<TimeWindow> window = ProposalFields.window(windowStart, windowEnd, now, violations);
         if (!violations.isEmpty()) {
             throw new ValidationException(violations);
         }
-        return new DraftTerms(contractor.orElseThrow(), scopeExtract.strip(), new TimeWindow(start.get(), end.get()),
-                terms.strip());
+        return new DraftTerms(contractor.orElseThrow(), scope.orElseThrow(), window.orElseThrow(), text.orElseThrow());
     }
 
     /**
@@ -112,11 +92,11 @@ public final class InterventionDrafting {
         requireDispatchable(issue, activeIntervention);
         requireEligible(contractor, issue);
         UserId actor = access.userId();
-        Intervention intervention = new Intervention(newId, issue.issueId(), issue.buildingId(), terms.contractorId(),
-                InterventionState.AWAITING_APPROVAL, Intervention.INITIAL_VERSION, 1, issue.version(),
-                issue.appliedAt(), actor, now, now);
-        ProposalVersion proposal = new ProposalVersion(newId, 1, ProposalVersion.AUTHOR_ADMINISTRATOR,
-                terms.scopeExtract(), terms.window(), terms.terms(), actor, now);
+        Intervention intervention = Intervention.draft(newId, issue.issueId(), issue.buildingId(), terms.contractorId(),
+                issue.version(), issue.appliedAt(), actor, now);
+        ProposalVersion proposal = ProposalVersion.proposed(newId, 1, ProposalVersion.AUTHOR_ADMINISTRATOR,
+                terms.scopeExtract(), terms.window(), terms.terms(), Optional.empty(), Intervention.INITIAL_VERSION,
+                actor, now);
         return new DraftOutcome(intervention, proposal);
     }
 
@@ -184,24 +164,5 @@ public final class InterventionDrafting {
             return Optional.empty();
         }
         return Optional.of(new ContractorId(UUID.fromString(raw)));
-    }
-
-    private static Optional<Instant> instant(String raw, String field, List<FieldViolation> violations) {
-        if (raw == null || raw.isBlank()) {
-            violations.add(new FieldViolation(field, "required"));
-            return Optional.empty();
-        }
-        Instant instant;
-        try {
-            instant = OffsetDateTime.parse(raw).toInstant().truncatedTo(ChronoUnit.MILLIS);
-        } catch (DateTimeParseException e) {
-            violations.add(new FieldViolation(field, "invalid_format"));
-            return Optional.empty();
-        }
-        if (instant.isAfter(LATEST_STORABLE)) {
-            violations.add(new FieldViolation(field, "out_of_range"));
-            return Optional.empty();
-        }
-        return Optional.of(instant);
     }
 }

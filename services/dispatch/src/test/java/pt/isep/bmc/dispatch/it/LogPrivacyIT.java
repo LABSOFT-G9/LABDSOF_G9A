@@ -3,6 +3,7 @@ package pt.isep.bmc.dispatch.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pt.isep.bmc.dispatch.support.Fixtures.*;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,29 @@ class LogPrivacyIT extends IntegrationTestSupport {
         api.get("/interventions?issueId=" + issueId, token);
 
         assertThat(output.getAll()).contains("/interventions").doesNotContain("PrivateMarker", "Jane Synthetic");
+    }
+
+    @Test
+    void theContractorsNoteAndCounterproposalNeverReachTheLogs(CapturedOutput output) {
+        String interventionId = sentIntervention();
+        Map<String, Object> counter = new HashMap<>();
+        counter.put("proposalVersion", 1);
+        counter.put("decision", "counterpropose");
+        counter.put("window", Map.of("start", "2099-11-06T09:00:00Z", "end", "2099-11-06T11:00:00Z"));
+        counter.put("terms", MARKER + " can come on Saturday.");
+        assertThat(respond(CONTRACTOR, interventionId, 2, counter).status()).isEqualTo(200);
+        respond(CONTRACTOR, interventionId, 2, counter);                                             // 409
+        assertThat(approve(ADMIN_A, interventionId, 3, 2).status()).isEqualTo(200);
+        String other = sentIntervention();
+        Map<String, Object> decline = new HashMap<>(Map.of("proposalVersion", 1, "decision", "decline",
+                "reasonCode", "other", "note", MARKER + " is on holiday."));
+        assertThat(respond(CONTRACTOR, other, 2, decline).status()).isEqualTo(200);
+        decline.put("note", MARKER + "x".repeat(600));
+        respond(CONTRACTOR, other, 3, decline);                                                       // 400
+        api.get("/interventions/" + other, tokens.token(ADMIN_A));
+        api.get("/interventions?assigned=me", tokens.token(CONTRACTOR));
+
+        assertThat(output.getAll()).contains("/response").doesNotContain("PrivateMarker", "Jane Synthetic");
     }
 
     private static Map<String, Object> withMarker(Map<String, Object> body) {

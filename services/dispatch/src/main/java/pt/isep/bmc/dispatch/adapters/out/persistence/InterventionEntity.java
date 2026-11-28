@@ -33,6 +33,15 @@ class InterventionEntity {
     @Column(name = "current_proposal_version", nullable = false)
     int currentProposalVersion;
 
+    @Column(name = "approved_proposal_version")
+    Integer approvedProposalVersion;
+
+    @Column(name = "agreed_proposal_version")
+    Integer agreedProposalVersion;
+
+    @Column(name = "contractor_contacted", nullable = false)
+    boolean contractorContacted;
+
     @Column(name = "projected_issue_version", nullable = false)
     long projectedIssueVersion;
 

@@ -9,7 +9,8 @@ package pt.isep.bmc.dispatch.domain.shared;
  * return.
  */
 public abstract sealed class DomainException extends RuntimeException
-        permits AccessDeniedException, InvalidTransitionException, ValidationException, VersionConflictException {
+        permits AccessDeniedException, BusinessRuleException, InvalidTransitionException, ValidationException,
+                VersionConflictException {
 
     private final String code;
 
