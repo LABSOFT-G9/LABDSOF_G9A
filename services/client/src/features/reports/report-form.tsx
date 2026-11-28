@@ -26,7 +26,7 @@ import { t } from "@/shared/i18n";
 import { isApiError, isUnavailable, NetworkError } from "@/shared/lib/errors";
 import { formatDateTime } from "@/shared/lib/format";
 import { randomId } from "@/shared/lib/id";
-import { keepUnsentReport, takeUnsentReport } from "@/shared/lib/unsent-report";
+import { forgetUnsentReport, keepUnsentReport, peekUnsentReport } from "@/shared/lib/unsent-report";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
@@ -44,19 +44,23 @@ export function ReportForm() {
   const session = useSession();
   const { issues } = useServices();
   const queryClient = useQueryClient();
+  const submit = submitReportMutation(issues, queryClient);
   const mutation = useMutation({
-    ...submitReportMutation(issues, queryClient),
-    // The session ended while the report was being written: the app goes to sign-in, and the report is kept for after.
-    onError: (error, { report }) => {
+    ...submit,
+    // Here and not in `send`'s per-call onError: a 401 sends the person to sign-in and unmounts this form, and per-call
+    // callbacks do not run after that. The report is kept for after sign-in. The factory's own onError still runs.
+    onError: (...args) => {
+      const [error, { report }] = args;
       if (isApiError(error, 401)) keepUnsentReport(session.sub, report);
+      return submit.onError?.(...args);
     },
   });
   const id = useId();
 
   const buildings = session.memberships;
-  // Read once: taking the kept report also removes it.
-  const [restored] = useState(() => {
-    const kept = takeUnsentReport(session.sub);
+  // Read during render, removed once on screen (the effect below): a render React throws away loses nothing.
+  const [restored, setRestored] = useState(() => {
+    const kept = peekUnsentReport(session.sub);
     if (!kept) return null;
     // The building may no longer be one of the person's: the text is still theirs.
     return buildings.some((m) => m.buildingId === kept.buildingId)
@@ -78,6 +82,15 @@ export function ReportForm() {
   const receiptHeading = useRef<HTMLHeadingElement>(null);
 
   const areas = useQuery({ ...areasQuery(issues, values.buildingId), enabled: values.buildingId !== "" });
+
+  useEffect(() => {
+    if (restored) forgetUnsentReport();
+    // Once, on mount: only the report read for the first render is removed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // An area the building no longer lists (a restored report's, say) counts as none chosen, never as hidden.
+  const areaId = areas.data && !areas.data.some((area) => area.areaId === values.areaId) ? "" : values.areaId;
 
   useEffect(() => {
     if (receipt) receiptHeading.current?.focus();
@@ -104,6 +117,7 @@ export function ReportForm() {
       {
         onSuccess: (answer) => {
           idempotencyKey.current = null;
+          setRestored(null);
           setReceipt(answer);
         },
         onError: (error) => {
@@ -119,7 +133,7 @@ export function ReportForm() {
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsed = SubmitReportSchema.safeParse(values);
+    const parsed = SubmitReportSchema.safeParse({ ...values, areaId });
     if (!parsed.success) {
       const next: ReportFieldErrors = {};
       for (const issue of parsed.error.issues) {
@@ -135,6 +149,7 @@ export function ReportForm() {
   }
 
   function startOver() {
+    setRestored(null);
     setReceipt(null);
     setErrors({});
     mutation.reset();
@@ -238,7 +253,7 @@ export function ReportForm() {
           <Label htmlFor={fieldId("areaId")}>{t.reports.area}</Label>
           <NativeSelect
             id={fieldId("areaId")}
-            value={values.areaId}
+            value={areaId}
             onChange={(event) => change({ areaId: event.target.value })}
             disabled={values.buildingId === "" || !areas.isSuccess}
             aria-invalid={errors.areaId ? true : undefined}

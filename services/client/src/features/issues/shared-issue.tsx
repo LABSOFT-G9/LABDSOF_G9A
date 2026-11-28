@@ -171,8 +171,10 @@ export function PublishSummary({ issue }: { issue: Issue }) {
             variant="outline"
             size="sm"
             onClick={() => {
-              // Start from the summary on screen: a refetch may have brought another administrator's since.
+              // Start from the summary on screen, and save against the version that summary belongs to: a newer one
+              // published meanwhile is then a conflict, never overwritten by an edit of this one.
               setText(issue.summary?.text ?? "");
+              setBasis(issue.version);
               setSaved(false);
               setEditing(true);
             }}

@@ -909,6 +909,58 @@ describe("shared issue (US-04-02)", () => {
     );
   });
 
+  it("saves a change against the version of the summary it started from, so a newer one is a conflict", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const opened: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 4,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The entrance light is out.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 0, mine: false },
+    };
+    const getIssue = vi
+      .fn<() => Promise<Issue>>()
+      .mockResolvedValueOnce(opened)
+      .mockResolvedValue({
+        ...opened,
+        version: 5,
+        summary: { text: "An electrician comes on Friday.", publishedAt: "2026-11-24T11:00:00Z" },
+      });
+    const publish = vi.fn(async (_id: string, _version: number, publication: { summary: string }) => ({
+      issueId: "i1",
+      version: 6,
+      summary: { text: publication.summary, publishedAt: "2026-11-24T12:00:00Z" },
+    }));
+    const { router } = renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), publish }) },
+    });
+    await screen.findByText("The entrance light is out.");
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    expect(summary).toHaveValue("The entrance light is out.");
+    // Another administrator publishes while this one has the editor open; a refetch brings it in.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    expect(await screen.findAllByText("This issue has changed since you opened it")).not.toHaveLength(0);
+
+    await user.type(summary, " Use the back door.");
+    await user.click(screen.getByRole("button", { name: "Update the summary" }));
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    expect(publish).toHaveBeenCalledWith(
+      "i1",
+      4,
+      { summary: "The entrance light is out. Use the back door." },
+      expect.any(String),
+    );
+  });
+
   it("lets an administrator choose notifications for themselves, without a confirm button", async () => {
     const user = userEvent.setup();
     signInAs("administrator-a");

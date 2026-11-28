@@ -171,6 +171,44 @@ describe("report form (mock Issue service)", () => {
       expect(second![0]).toEqual(first![0]);
       // The `401` stored nothing, so this is a new action with a new key.
       expect(second![1]).not.toBe(first![1]);
+
+      // Sent: the notice is gone, also from the next, empty form.
+      expect(screen.queryByText("Your report was not sent")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Report another fault" }));
+      expect(screen.getByRole("textbox", { name: "What is wrong?" })).toHaveValue("");
+      expect(screen.queryByText("Your report was not sent")).not.toBeInTheDocument();
+    });
+
+    it("removes the author's kept report when they sign out", async () => {
+      const user = userEvent.setup();
+      keepUnsentReport("0199f2a0-0000-7000-8000-000000000101", { buildingId: "b1", areaId: "a1", text: TEXT });
+      renderApp("/reports");
+      await screen.findByRole("heading", { level: 1, name: "Reports" });
+      expect(sessionStorage.getItem("bmc-unsent-report")).toContain(TEXT);
+
+      await user.click(screen.getByRole("button", { name: "Account menu" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
+      await screen.findByRole("heading", { name: "Sign in to BMC" });
+      expect(sessionStorage.getItem("bmc-unsent-report")).toBeNull();
+    });
+
+    it("does not keep an area that is no longer in the building", async () => {
+      const user = userEvent.setup();
+      const submitReport = vi.fn<(report: SubmitReport, key: string) => Promise<ReportReceipt>>();
+      keepUnsentReport("0199f2a0-0000-7000-8000-000000000101", {
+        buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+        areaId: "an-area-since-removed",
+        text: TEXT,
+      });
+      renderApp("/reports/new", { services: { issues: stubIssueApi({ listAreas: async () => areas, submitReport }) } });
+
+      await screen.findByText("Your report was not sent");
+      const area = screen.getByRole("combobox", { name: "Where is the fault?" });
+      await waitFor(() => expect(area).toBeEnabled());
+      expect(area).toHaveValue("");
+      await user.click(screen.getByRole("button", { name: "Send report" }));
+      expect(area).toHaveFocus();
+      expect(submitReport).not.toHaveBeenCalled();
     });
 
     it("removes a kept report on any page once someone else is signed in, and keeps the author's", async () => {
