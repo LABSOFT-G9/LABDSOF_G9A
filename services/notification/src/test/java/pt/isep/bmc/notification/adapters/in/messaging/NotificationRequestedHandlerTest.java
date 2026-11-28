@@ -16,7 +16,6 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import pt.isep.bmc.notification.adapters.in.messaging.NotificationRequestedHandler.Outcome;
 import pt.isep.bmc.notification.application.InMemoryPorts;
 import pt.isep.bmc.notification.application.command.NotificationFacade;
-import pt.isep.bmc.notification.application.command.Receipt;
 import pt.isep.bmc.notification.application.error.StorageUnavailableException;
 import pt.isep.bmc.notification.application.port.out.TransactionConflictException;
 import tools.jackson.databind.JsonNode;
@@ -101,17 +100,37 @@ class NotificationRequestedHandlerTest {
     }
 
     @Test
-    void aConflictWithAConcurrentTransactionIsRetried() {
+    void aConflictTheFacadeCouldNotResolveIsNotRetriedAgain(CapturedOutput output) {
+        // The facade retries conflicts itself (NotificationFacadeTest); one that reaches the handler has used them up.
         int[] calls = new int[1];
         NotificationRequestedHandler handler = new NotificationRequestedHandler(request -> {
-            if (++calls[0] < 3) {
-                throw new TransactionConflictException(new IllegalStateException("deadlock"));
-            }
-            return new Receipt(1, 0);
+            calls[0]++;
+            throw new TransactionConflictException(new IllegalStateException("deadlock"));
         }, meters, 5, Duration.ZERO);
         assertThat(handler.handle(ENVELOPE, data(UUID.randomUUID().toString(), Map.of("issueId", ISSUE))))
-                .isEqualTo(Outcome.DELIVERED);
-        assertThat(calls[0]).isEqualTo(3);
+                .isEqualTo(Outcome.EXHAUSTED);
+        assertThat(calls[0]).isEqualTo(1);
+        assertThat(output.getAll()).contains("still conflicted", ENVELOPE.eventId(), "c-7f9d");
+    }
+
+    @Test
+    void anInterruptStopsTheRetriesAndLeavesTheMessageForRedelivery(CapturedOutput output) {
+        int[] calls = new int[1];
+        NotificationRequestedHandler handler = new NotificationRequestedHandler(request -> {
+            calls[0]++;
+            Thread.currentThread().interrupt(); // the service is shutting down during this attempt
+            throw new StorageUnavailableException(new IllegalStateException("down"));
+        }, meters, 5, Duration.ofSeconds(2));
+        try {
+            assertThat(handler.handle(ENVELOPE, data(UUID.randomUUID().toString(), Map.of("issueId", ISSUE))))
+                    .isEqualTo(Outcome.INTERRUPTED);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted(); // clear the flag for the other tests
+        }
+        assertThat(calls[0]).isEqualTo(1);
+        assertThat(meters.counter("bmc.notification.requests", "outcome", "interrupted").count()).isEqualTo(1);
+        assertThat(output.getAll()).contains("interrupted after attempt 1 of 5", ENVELOPE.eventId());
     }
 
     @Test

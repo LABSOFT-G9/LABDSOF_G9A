@@ -59,7 +59,15 @@ public final class TemplateCatalogue {
             new Template("contractor.request_sent", Map.of("interventionId", ID), Map.of("areaLabel", LABEL),
                     "You have a new work request.", null),
             new Template("contractor.booking_cancelled", Map.of("interventionId", ID), Map.of(),
-                    "A booked visit was cancelled.", null)));
+                    "A booked visit was cancelled.", null),
+            // InterventionTermsChanged: a request sent to the contractor is withdrawn, or their counterproposal superseded.
+            new Template("contractor.terms_changed", Map.of("interventionId", ID), Map.of(),
+                    "The terms of a work request changed.", null),
+            // Cancelled before any visit was booked; contractor.booking_cancelled is for a booked one.
+            new Template("contractor.request_cancelled", Map.of("interventionId", ID), Map.of(),
+                    "A work request was cancelled.", null),
+            new Template("contractor.rework_requested", Map.of("interventionId", ID), Map.of(),
+                    "Rework was requested on a job you completed.", null)));
 
     /** Shown for a stored notification whose template was later removed from the catalogue. */
     public static final String FALLBACK_TITLE = "You have an update.";

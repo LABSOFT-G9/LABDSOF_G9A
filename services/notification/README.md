@@ -59,7 +59,10 @@ The payload is `contracts/proto/bmc/notification/v1/notification_requested.proto
 | `DELIVERED` | At least one recipient got a new notification | Acknowledge |
 | `DUPLICATE` | Every recipient already had it: a redelivery or a replay | Acknowledge |
 | `REJECTED` | The request is invalid. Refused at once, because a retry cannot fix it | Reject to the dead-letter queue |
-| `EXHAUSTED` | A temporary failure (database unavailable, or a transaction rolled back by a concurrent one) happened `max-attempts` times (default 5, 2 s apart), or any other failure happened once: a defect is not retried | Reject to the dead-letter queue |
+| `EXHAUSTED` | The database was unavailable `max-attempts` times (default 5, 2 s apart); a transaction still conflicted with concurrent ones after the facade ran it 10 times; or any other failure happened once: a defect is not retried | Reject to the dead-letter queue |
+| `INTERRUPTED` | The service is shutting down while waiting to retry. No further attempt; nothing was committed | Leave unacknowledged, so RabbitMQ delivers it again after the restart |
+
+Retries have one owner each. A conflict between concurrent deliveries is run again at once by the facade, up to 10 transactions. A database outage is retried by the handler, up to `max-attempts`. So one delivery is at most `max-attempts` attempts, each of at most 10 transactions, and only when both happen together.
 
 **Rules.**
 
@@ -81,6 +84,9 @@ The payload is `contracts/proto/bmc/notification/v1/notification_requested.proto
   | `issue.reopened` | `issueId` | `reasonCode` | `/issues/{issueId}` |
   | `contractor.request_sent` | `interventionId` | `areaLabel` | none |
   | `contractor.booking_cancelled` | `interventionId` | | none |
+  | `contractor.terms_changed` | `interventionId` | | none |
+  | `contractor.request_cancelled` | `interventionId` | | none |
+  | `contractor.rework_requested` | `interventionId` | | none |
 
 - **Priority** is `low`, `normal` or `high`. An absent or empty value is `normal`. The contract left the values open for US-10; this is the US-10-01 proposal.
 - **Recipients** are 1–500 Keycloak `sub`s; repeats count once. Who is notified is the producer's decision (ADR-007): Notification never reads memberships.

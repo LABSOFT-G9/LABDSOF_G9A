@@ -30,6 +30,17 @@ class TemplateCatalogueTest {
     }
 
     @Test
+    void everyContractorNotificationOfTheDesignHasATemplate() {
+        // Technical design 4.4: Dispatch events that carry a contractorUserId, so Issue can address the contractor.
+        assertThat(TemplateCatalogue.all()).extracting(Template::key).contains(
+                "contractor.request_sent",       // InterventionApproved
+                "contractor.terms_changed",      // InterventionTermsChanged
+                "contractor.request_cancelled",  // InterventionCancelled before a booking
+                "contractor.booking_cancelled",  // InterventionCancelled after a booking
+                "contractor.rework_requested");  // ReworkRequested
+    }
+
+    @Test
     void noTemplateTakesFreeTextAndEveryLinkIsAClientPath() {
         for (Template template : TemplateCatalogue.all()) {
             assertThat(template.required().values()).doesNotContain(ParamKind.LABEL);
