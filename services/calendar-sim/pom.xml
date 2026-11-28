@@ -15,7 +15,7 @@
   <artifactId>calendar-sim</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <name>calendar-sim</name>
-  <description>BMC calendar-sim service (skeleton for pipeline testing)</description>
+  <description>BMC calendar simulator: a controllable external calendar for Dispatch (ADR-006)</description>
 
   <properties>
     <java.version>25</java.version>
@@ -25,6 +25,10 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-webmvc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

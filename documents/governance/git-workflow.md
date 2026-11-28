@@ -31,6 +31,7 @@ Which of these are applied is tracked in the [settings checklist](../devops/pipe
 - PRs reference the local ID and issue URL. Use “Closes #N” only when a real GitHub issue exists and the PR completes it.
 - Documentation accompanies scope/contract changes in the same PR.
 - Resolve conflicts by reviewing both sides' behaviour and repeating affected checks.
+- The pull-request checks (`pr.yml`) run only when the base branch is `main`. A pull request stacked on another branch gets none: its author and its reviewer run the affected checks locally and say which in the PR. Once it is retargeted to `main`, the checks run from the next push.
 - Never commit tokens, environment files with secrets, recordings or identifiable participant notes.
 - Research may commit anonymous answers after a check before the first commit and peer review before merge. Exclude identity mappings, contact lists, consent attachments and identifying context/metadata. Follow the [research handling rules](../09-security-privacy.md#41-research-data-handling-disc-01-01).
 - Do not bypass security controls for a demonstration.

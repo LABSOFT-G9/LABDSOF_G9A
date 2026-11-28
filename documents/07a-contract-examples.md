@@ -100,11 +100,17 @@ Errors of the triage call, all `application/problem+json` and none with a partia
 GET /contractors?issueId=0199f2a1-0000-7000-8000-000000002001
 
 200 OK
-{ "items": [
+{ "issueId": "0199f2a1-0000-7000-8000-000000002001",
+  "criteria": { "category": "plumbing", "issueState": "triaged", "dispatchable": true,
+                "eligibility": ["active", "specialisation", "coverage:building"],
+                "order": ["displayName", "contractorId"] },
+  "items": [
     { "contractorId": "0199f2a0-0000-7000-8000-000000000401",
       "displayName": "Synthetic Plumbing Co.",
+      "synthetic": true,
+      "specialisations": ["plumbing"],
       "matched": ["specialisation:plumbing", "coverage:building"],
-      "unknown": ["price", "distance"] } ] }
+      "unknown": ["price", "distance", "availability"] } ] }
 ```
 
 ```http
@@ -146,8 +152,27 @@ Routing key `issue.IssueStateChanged`. No raw report text; a published summary w
 ETag: "1"
 
 { "interventionId": "0199f2a2-0000-7000-8000-000000003001",
-  "state": "awaiting_approval", "version": 1, "proposalVersion": 1 }
+  "state": "awaiting_approval", "version": 1, "proposalVersion": 1,
+  "contractorId": "0199f2a0-0000-7000-8000-000000000401" }
 ```
+
+Before approval, the administrator may select another eligible contractor for the draft (added with US-06-01). The terms stay as proposal version 1:
+
+```http
+PATCH /interventions/0199f2a2-0000-7000-8000-000000003001
+If-Match: "1"
+Idempotency-Key: 5c0d…
+
+{ "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+
+200 OK
+ETag: "2"
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "awaiting_approval", "version": 2,
+  "contractorId": "0199f2a0-0000-7000-8000-000000000402" }
+```
+
+The approval below follows the `201` directly, without the replacement. After a replacement, `If-Match` carries the new version (`"2"` here).
 
 ```http
 POST /interventions/0199f2a2-0000-7000-8000-000000003001/approval
@@ -158,7 +183,8 @@ Idempotency-Key: 77aa…
 
 200 OK
 ETag: "2"
-{ "state": "sent", "version": 2, "approvedProposalVersion": 1 }
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "sent", "version": 2, "approvedProposalVersion": 1 }
 ```
 
 Event written to Dispatch's outbox with the approval, published to `bmc.events` with routing key `dispatch.InterventionApproved` after the commit, and consumed by Issue from `issue.inbox` (CloudEvents 1.0 structured JSON; `data` in the proto3 JSON mapping; [Technical Design §4.4](07-technical-design.md#44-event-contracts)):
@@ -196,10 +222,45 @@ Idempotency-Key: 5c3d…
 
 200 OK
 ETag: "3"
-{ "state": "scheduling_pending", "version": 3 }
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "scheduling_pending", "version": 3, "proposalVersion": 1 }
 ```
 
-Dispatch authorises this from its own data: the intervention's contractor `…0401` has `userId` `…0301`, which equals the token's `sub`.
+Dispatch authorises this from its own data: the intervention's contractor `…0401` has `userId` `…0301`, which equals the token's `sub`. Event `ContractorResponded` with `data` `{ "issueId": "…2001", "decision": "accept", "proposalVersion": 1, "interventionState": "scheduling_pending" }`.
+
+The contractor may instead decline, with a reason code and an optional note that only the building's administrators see (added with US-07-01):
+
+```http
+POST /interventions/0199f2a2-0000-7000-8000-000000003001/response
+If-Match: "2"
+Idempotency-Key: 6d1e…
+
+{ "proposalVersion": 1, "decision": "decline", "reasonCode": "unavailable",
+  "note": "Away until March." }
+
+200 OK
+ETag: "3"
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "declined", "version": 3, "proposalVersion": 1 }
+```
+
+Event `InterventionDeclined` with `data` `{ "issueId": "…2001", "reasonCode": "unavailable", "interventionState": "declined" }`: the note stays in Dispatch. Or counterpropose, keeping the administrator's scope extract; the new version needs the administrator's approval, which then agrees the terms without a second acceptance:
+
+```http
+POST /interventions/0199f2a2-0000-7000-8000-000000003001/response
+If-Match: "2"
+Idempotency-Key: 7e2f…
+
+{ "proposalVersion": 1, "decision": "counterpropose",
+  "window": { "start": "2026-11-06T09:00:00Z", "end": "2026-11-06T11:00:00Z" },
+  "terms": "Friday morning; parts extra.",
+  "proposedCost": { "amount": "85.00", "currency": "EUR" } }
+
+200 OK
+ETag: "3"
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "awaiting_approval", "version": 3, "proposalVersion": 2 }
+```
 
 ### 1.5 Booking with a timeout and reconciliation (Dispatch ↔ calendar simulator)
 
@@ -214,7 +275,7 @@ Idempotency-Key: 0199f2a2-0000-7000-8000-000000004001
   "summary": "Plumbing intervention" }
 ```
 
-No answer within 5 s, so the booking becomes `uncertain`. Before any re-send, Dispatch reconciles:
+As built in US-08-01, Dispatch sends the building ID as `buildingCode` and a summary made from the category only, and stores both, so every re-send is the same request. No answer within 5 s, so the booking becomes `uncertain`. Before any re-send, Dispatch reconciles:
 
 ```http
 GET /bookings?requestId=0199f2a2-0000-7000-8000-000000004001
@@ -245,13 +306,16 @@ POST /interventions/0199f2a2-0000-7000-8000-000000003001/completion
 If-Match: "4"
 Idempotency-Key: 8e1b…
 
-{ "notes": "Replaced cracked pipe joint; light fitting dried and tested.",
-  "proposedCost": { "amount": "85.00", "currency": "EUR" } }
+{ "summary": "Replaced cracked pipe joint; light fitting dried and tested.",
+  "performedAt": "2026-11-05T11:40:00Z" }
 
 200 OK
 ETag: "5"
-{ "state": "completion_reported", "version": 5 }
+{ "interventionId": "0199f2a2-0000-7000-8000-000000003001",
+  "state": "completion_reported", "version": 5 }
 ```
+
+As built in US-09-01, an administrator reporting for the contractor adds a `reason`; a cost comes with US-11. `CompletionReported` carries only `issueId` and `interventionState`: the summary stays in Dispatch.
 
 After `CompletionReported` reaches Issue (issue `awaiting_validation`, version 6):
 

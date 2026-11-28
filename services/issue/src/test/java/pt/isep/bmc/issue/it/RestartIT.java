@@ -83,6 +83,45 @@ class RestartIT {
         }
     }
 
+    /** US-04: the summary, a resident's impact confirmation and their subscription are still there after a restart. */
+    @Test
+    void summaryImpactAndSubscriptionSurviveARestart() throws Exception {
+        MySQLContainer mysql = TestDatabase.shared();
+        TestTokens tokens = TestTokens.get();
+        String summary = "Restart check: the garage door does not close fully.";
+        String issueId;
+
+        try (ConfigurableApplicationContext first = start(mysql)) {
+            try (var connection = first.getBean(javax.sql.DataSource.class).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ClassPathResource("fixtures/us01-fixtures.sql"));
+            }
+            Api api = api(first);
+            var created = api.post("/reports", tokens.token(RESIDENT_A1), UUID.randomUUID().toString(),
+                    Map.of("buildingId", BUILDING_A, "areaId", AREA_A_GARAGE, "text", "Restart check for sharing, garage."));
+            issueId = (String) created.json().get("issueId");
+            var published = api.postWithHeaders("/issues/" + issueId + "/publication", tokens.token(ADMIN_A),
+                    Map.of("If-Match", "\"1\"", "Idempotency-Key", UUID.randomUUID().toString()),
+                    Map.of("summary", summary));
+            assertThat(published.status()).isEqualTo(200);
+            assertThat(api.method("PUT", "/issues/" + issueId + "/impact", tokens.token(RESIDENT_A2), null).status())
+                    .isEqualTo(200);
+            assertThat(api.method("PUT", "/issues/" + issueId + "/subscription", tokens.token(RESIDENT_A2), null)
+                    .status()).isEqualTo(200);
+        }
+
+        try (ConfigurableApplicationContext second = start(mysql)) {
+            var issue = api(second).get("/issues/" + issueId, tokens.token(RESIDENT_A2));
+            assertThat(issue.status()).isEqualTo(200);
+            assertThat(issue.json()).containsEntry("version", 2).containsEntry("subscribed", true);
+            assertThat((Map<?, ?>) issue.json().get("summary")).extracting("text").isEqualTo(summary);
+            assertThat(issue.json().get("impact")).isEqualTo(Map.of("count", 1, "mine", true));
+            // The other resident's own choices are theirs: nothing confirmed, not subscribed.
+            var other = api(second).get("/issues/" + issueId, tokens.token(RESIDENT_A1));
+            assertThat(other.json()).containsEntry("subscribed", false);
+            assertThat(other.json().get("impact")).isEqualTo(Map.of("count", 1, "mine", false));
+        }
+    }
+
     static ConfigurableApplicationContext start(MySQLContainer mysql, String... extraArgs) {
         Map<String, Object> properties = new HashMap<>();
         properties.put("server.port", "0");

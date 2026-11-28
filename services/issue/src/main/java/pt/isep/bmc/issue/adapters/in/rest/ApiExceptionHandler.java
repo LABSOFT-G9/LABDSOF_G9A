@@ -23,13 +23,14 @@ import pt.isep.bmc.issue.domain.shared.DomainException;
 import pt.isep.bmc.issue.domain.shared.ForbiddenException;
 import pt.isep.bmc.issue.domain.shared.InvalidAreaException;
 import pt.isep.bmc.issue.domain.shared.InvalidTransitionException;
+import pt.isep.bmc.issue.domain.shared.NotPublishedException;
 import pt.isep.bmc.issue.domain.shared.ValidationException;
 import pt.isep.bmc.issue.domain.shared.VersionConflictException;
 
 /**
  * Maps errors to {@code application/problem+json} (technical design 4.1):
  * {@code 400} validation, {@code 403} wrong actor, {@code 404} unknown or
- * outside scope, {@code 409} stale version or invalid transition, {@code 422}
+ * outside scope, {@code 409} stale version, invalid transition or no published summary, {@code 422}
  * idempotency key reused, {@code 503} database unavailable. Unexpected errors
  * answer {@code 500} without details; only the exception class is logged.
  */
@@ -81,6 +82,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.CONFLICT, e, request);
         problem.setProperty("currentState", e.currentState());
         return respond(problem);
+    }
+
+    /** The operation needs a published summary first (US-04). Nothing was changed. */
+    @ExceptionHandler(NotPublishedException.class)
+    ResponseEntity<ProblemDetail> notPublished(NotPublishedException e, HttpServletRequest request) {
+        return respond(problem(HttpStatus.CONFLICT, e, request));
     }
 
     @ExceptionHandler(IdempotencyKeyReusedException.class)
