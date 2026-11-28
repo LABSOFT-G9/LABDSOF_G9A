@@ -6,7 +6,6 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,12 +36,13 @@ class BookingController {
     }
 
     /**
-     * {@code 201} new booking, {@code 200} the same booking again, {@code 409}
+     * {@code 201} new booking, {@code 200} the same booking again (cancelled
+     * too, if it was cancelled since: the caller checks {@code status}), {@code 409}
      * slot conflict, {@code 422} invalid request or a reused key with other
      * content, {@code 503} unavailable.
      */
     @PostMapping(path = "/bookings", consumes = MediaType.APPLICATION_JSON_VALUE,
-            produces = MediaType.APPLICATION_JSON_VALUE)
+            produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_PROBLEM_JSON_VALUE})
     ResponseEntity<Object> create(
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody(required = false) Bodies.CreateBooking body) {
@@ -66,7 +66,10 @@ class BookingController {
             }
         }
         Calendar.CreateResult result = calendar.create(request);
-        if (outcome.type() == Outcome.Type.TIMEOUT_AFTER_CREATE) {
+        boolean booked = result instanceof Calendar.CreateResult.Created
+                || result instanceof Calendar.CreateResult.Replayed;
+        if (outcome.type() == Outcome.Type.TIMEOUT_AFTER_CREATE && booked) {
+            // Only once something is booked; a conflict or a reused key answers at once.
             pause(properties.hang());
         }
         return switch (result) {
@@ -79,8 +82,9 @@ class BookingController {
         };
     }
 
-    /** Reconciliation: the booking for this request ID, cancelled or not, or no item. */
-    @GetMapping(path = "/bookings", produces = MediaType.APPLICATION_JSON_VALUE)
+    /** Reconciliation: the booking for this request ID, cancelled or not, or no item; {@code 422} without one. */
+    @GetMapping(path = "/bookings",
+            produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_PROBLEM_JSON_VALUE})
     ResponseEntity<Object> find(@RequestParam(name = "requestId", required = false) String requestId) {
         if (requestId == null || requestId.isBlank()) {
             return Problems.invalid(List.of(Map.of("field", "requestId", "reason", "required")));
@@ -102,8 +106,12 @@ class BookingController {
                 calendar.find(requestId).map(Bodies.BookingBody::of).stream().toList()));
     }
 
-    /** {@code 200} cancelled (also when cancelled before), {@code 404} unknown reference, {@code 503}. */
-    @PostMapping(path = "/bookings/{externalRef}/cancellation", produces = MediaType.APPLICATION_JSON_VALUE)
+    /**
+     * {@code 200} cancelled (also when cancelled before), {@code 404} unknown
+     * reference, {@code 422} without an {@code Idempotency-Key}, {@code 503}.
+     */
+    @PostMapping(path = "/bookings/{externalRef}/cancellation",
+            produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_PROBLEM_JSON_VALUE})
     ResponseEntity<Object> cancel(
             @PathVariable String externalRef,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
@@ -122,11 +130,6 @@ class BookingController {
         return calendar.cancel(externalRef)
                 .<ResponseEntity<Object>>map(b -> ResponseEntity.ok(Bodies.BookingBody.of(b)))
                 .orElseGet(() -> Problems.of(HttpStatus.NOT_FOUND, "NOT_FOUND", "No booking has this reference."));
-    }
-
-    @ExceptionHandler(BookingRequests.InvalidRequestException.class)
-    ResponseEntity<Object> invalid(BookingRequests.InvalidRequestException e) {
-        return Problems.invalid(e.errors());
     }
 
     private static ResponseEntity<Object> conflict() {

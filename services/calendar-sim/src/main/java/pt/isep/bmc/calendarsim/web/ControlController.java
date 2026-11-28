@@ -27,7 +27,8 @@ import pt.isep.bmc.calendarsim.booking.Outcome;
  * {@code SIM_CONTROL_ENABLED=true}; otherwise every path answers {@code 404}.
  */
 @RestController
-@RequestMapping(path = "/control", produces = MediaType.APPLICATION_JSON_VALUE)
+@RequestMapping(path = "/control",
+        produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_PROBLEM_JSON_VALUE})
 @ConditionalOnProperty(name = "sim.control-enabled", havingValue = "true")
 class ControlController {
 

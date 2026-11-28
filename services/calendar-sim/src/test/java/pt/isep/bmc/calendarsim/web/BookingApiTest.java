@@ -96,6 +96,52 @@ class BookingApiTest {
     }
 
     @Test
+    void anUnreadableBodyIs422WithTheFieldAtFault() throws Exception {
+        var wrongType = sim.createRaw(requestId, "{\"requestId\":\"" + requestId
+                + "\",\"contractorRef\":\"SIM-CTR-1\",\"window\":\"2099-11-05\",\"buildingCode\":\"B-001\","
+                + "\"summary\":\"Plumbing intervention\"}");
+        var objectId = sim.createRaw(requestId, "{\"requestId\":{}}");
+        var notJson = sim.createRaw(requestId, "{\"requestId\":");
+        var badDelay = sim.scriptRaw("{\"operation\":\"create\",\"outcomes\":[{\"type\":\"delay\",\"delayMs\":\"soon\"}]}");
+
+        for (var response : List.of(wrongType, objectId, notJson, badDelay)) {
+            assertThat(response.status()).isEqualTo(422);
+            assertThat(response.contentType()).startsWith("application/problem+json");
+            assertThat(response.json()).containsEntry("code", "INVALID_REQUEST");
+        }
+        assertThat(wrongType.json().get("errors")).isEqualTo(List.of(Map.of("field", "window", "reason", "invalid_type")));
+        assertThat(objectId.json().get("errors")).isEqualTo(List.of(Map.of("field", "requestId", "reason", "invalid_type")));
+        assertThat(notJson.json().get("errors")).isEqualTo(List.of(Map.of("field", "body", "reason", "unreadable")));
+        assertThat(badDelay.json().get("errors"))
+                .isEqualTo(List.of(Map.of("field", "outcomes[0].delayMs", "reason", "invalid_type")));
+        assertThat(sim.find(requestId).items()).isEmpty();
+        assertThat(sim.control("GET", "/outcomes").json().get("create")).isEqualTo(List.of());
+    }
+
+    @Test
+    void everyErrorIsAProblemDocument() throws Exception {
+        String ref = (String) book("SIM-CTR-1").json().get("externalRef");
+        String other = UUID.randomUUID().toString();
+        sim.script("query", List.of(Map.of("type", "unavailable")));
+
+        var conflict = sim.create(other, booking(other, "SIM-CTR-1", START, END));
+        var unavailable = sim.find(requestId);
+        var missingId = sim.find("");
+        var noKey = sim.cancel(ref, null);
+        var unknown = sim.cancel("SIM-BK-0", "k1");
+        var refused = sim.script("restart", List.of(Map.of("type", "ok")));
+
+        assertThat(List.of(conflict, unavailable, missingId, noKey, unknown, refused))
+                .extracting(SimClient.Response::status).containsExactly(409, 503, 422, 422, 404, 422);
+        assertThat(List.of(conflict, unavailable, missingId, noKey, unknown, refused))
+                .allSatisfy(r -> assertThat(r.contentType()).startsWith("application/problem+json"));
+        assertThat(missingId.json()).containsEntry("detail", "The request is invalid.");
+        assertThat(refused.json()).containsEntry("detail", "The request is invalid.");
+        assertThat(sim.findAcceptingProblems("").status()).as("no 406 for a strict client").isEqualTo(422);
+        assertThat(book("SIM-CTR-1").contentType()).startsWith("application/json");
+    }
+
+    @Test
     void theSameRequestIdWithOtherContentIs422() throws Exception {
         book("SIM-CTR-1");
 
@@ -149,6 +195,31 @@ class BookingApiTest {
         var found = sim.find(requestId).items();
         assertThat(found).singleElement().satisfies(b -> assertThat(b).containsEntry("status", "confirmed"));
         assertThat(book("SIM-CTR-1").status()).as("re-sending with the same key").isEqualTo(200);
+        assertThat(sim.get("http://localhost:" + port + "/control/bookings").items()).hasSize(1);
+    }
+
+    @Test
+    void aTimeoutAfterCreateThatBooksNothingAnswersAtOnce() throws Exception {
+        book("SIM-CTR-1");
+        String other = UUID.randomUUID().toString();
+        sim.script("create", List.of(Map.of("type", "timeout_after_create")));
+
+        long start = System.nanoTime();
+        var conflict = sim.create(other, booking(other, "SIM-CTR-1", START, END));
+
+        assertThat(conflict.status()).isEqualTo(409);
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(2));
+    }
+
+    @Test
+    void reSendingACancelledRequestAnswersTheCancelledBooking() throws Exception {
+        String ref = (String) book("SIM-CTR-1").json().get("externalRef");
+        sim.cancel(ref, "k1");
+
+        var again = book("SIM-CTR-1");
+
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(again.json()).containsEntry("status", "cancelled").containsEntry("externalRef", ref);
         assertThat(sim.get("http://localhost:" + port + "/control/bookings").items()).hasSize(1);
     }
 

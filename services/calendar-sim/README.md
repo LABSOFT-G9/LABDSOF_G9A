@@ -14,11 +14,11 @@ The contract of §4.5, with the shapes of [annex A 1.5](../../documents/07a-cont
 
 | Operation | Answers |
 |---|---|
-| `POST /bookings` + `Idempotency-Key` (= `requestId`) | `201` booked; `200` the same booking again (same request ID and content); `409 SLOT_CONFLICT` (the same contractor reference has a confirmed booking whose window overlaps); `422 INVALID_REQUEST` with every invalid field, or `422 IDEMPOTENCY_KEY_REUSED` (the same request ID with other content); `503 UNAVAILABLE` |
-| `GET /bookings?requestId=` | `200 {items}`: the booking, cancelled or not, or none. Used to reconcile before any re-send |
-| `POST /bookings/{externalRef}/cancellation` + `Idempotency-Key` | `200` cancelled, also when it was cancelled before; `404 NOT_FOUND`; `503` |
+| `POST /bookings` + `Idempotency-Key` (= `requestId`) | `201` booked; `200` the same booking again (same request ID and content), in the status it has now, so a request ID cancelled since answers `status: cancelled`, never a new booking; `409 SLOT_CONFLICT` (the same contractor reference has a confirmed booking whose window overlaps); `422 INVALID_REQUEST` with every invalid field, also for a body that is not JSON or has a field of the wrong type, or `422 IDEMPOTENCY_KEY_REUSED` (the same request ID with other content); `503 UNAVAILABLE` |
+| `GET /bookings?requestId=` | `200 {items}`: the booking, cancelled or not, or none. Used to reconcile before any re-send. `422 INVALID_REQUEST` without a `requestId`; `503` |
+| `POST /bookings/{externalRef}/cancellation` + `Idempotency-Key` | `200` cancelled, also when it was cancelled before; `404 NOT_FOUND`; `422 INVALID_REQUEST` without an `Idempotency-Key`; `503` |
 
-At most one booking exists per request ID, even when retries arrive at the same time (NFR-11).
+At most one booking exists per request ID, even when retries arrive at the same time (NFR-11). A reference is `SIM-BK-<run>-<n>`, where `run` is new at every start, so a reference from before a restart never names a later booking: cancelling it answers `404`. Every error is `application/problem+json` with a `code`.
 
 ## Scripting failures
 
@@ -31,7 +31,7 @@ Only with `SIM_CONTROL_ENABLED=true`; otherwise `/control` answers `404`. Each o
 | `unavailable` | `503`, nothing booked | `503` | `503`, nothing cancelled |
 | `invalid` | `201` without `externalRef` or `window`, nothing booked | An item without `externalRef` | — |
 | `delay` + `delayMs` (≤ 60,000) | Waits, then normal | Waits, then normal | Waits, then normal |
-| `timeout_after_create` | Books, then waits `SIM_HANG` (15 s, beyond Dispatch's 5 s timeout) before answering | — | — |
+| `timeout_after_create` | Books, then waits `SIM_HANG` (15 s, beyond Dispatch's 5 s timeout) before answering. A conflict or a reused key books nothing and answers at once | — | — |
 
 | Control call | Effect |
 |---|---|

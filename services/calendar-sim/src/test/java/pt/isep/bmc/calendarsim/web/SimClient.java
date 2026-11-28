@@ -20,7 +20,7 @@ final class SimClient {
         this.base = "http://localhost:" + port;
     }
 
-    record Response(int status, String body) {
+    record Response(int status, String body, String contentType) {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> json() {
@@ -52,6 +52,26 @@ final class SimClient {
             request.header("Idempotency-Key", key);
         }
         return send(request.build());
+    }
+
+    /** A booking request with a body as given, which need not be valid JSON. */
+    Response createRaw(String key, String body) throws Exception {
+        return send(HttpRequest.newBuilder(URI.create(base + "/bookings"))
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", key)
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build());
+    }
+
+    Response scriptRaw(String body) throws Exception {
+        return send(HttpRequest.newBuilder(URI.create(base + "/control/outcomes"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build());
+    }
+
+    /** {@code GET /bookings} accepting only {@code application/problem+json}, as a strict client might. */
+    Response findAcceptingProblems(String requestId) throws Exception {
+        return send(HttpRequest.newBuilder(URI.create(base + "/bookings?requestId=" + requestId))
+                .header("Accept", "application/problem+json").GET().build());
     }
 
     Response find(String requestId) throws Exception {
@@ -86,6 +106,7 @@ final class SimClient {
 
     private Response send(HttpRequest request) throws Exception {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        return new Response(response.statusCode(), response.body());
+        return new Response(response.statusCode(), response.body(),
+                response.headers().firstValue("Content-Type").orElse(""));
     }
 }

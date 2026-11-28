@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,10 @@ import org.springframework.stereotype.Component;
  * and the scripted outcomes of the next calls. Every method holds the same
  * lock, so concurrent calls with one request ID still create one booking
  * (NFR-11). Delays happen outside this class, never under the lock.
+ *
+ * <p>A booking reference is {@code SIM-BK-<run>-<n>}: {@code run} is new at
+ * every start, so a reference handed out before a restart never names a
+ * booking made after it, and cancelling it answers {@code 404}.
  */
 @Component
 public class Calendar {
@@ -24,6 +29,7 @@ public class Calendar {
     private final Map<String, Booking> byRequestId = new LinkedHashMap<>();
     private final Map<Operation, Deque<Outcome>> scripts = new EnumMap<>(Operation.class);
     private final AtomicLong references = new AtomicLong(10_000);
+    private final String run = UUID.randomUUID().toString().substring(0, 8);
     private final Clock clock;
 
     public Calendar(Clock clock) {
@@ -54,9 +60,10 @@ public class Calendar {
     }
 
     /**
-     * Books, or answers the booking already made for this request ID. A slot
-     * conflict is another confirmed booking of the same contractor whose
-     * window overlaps.
+     * Books, or answers the booking already made for this request ID, in
+     * whatever status it now has: a request ID that was cancelled answers
+     * the cancelled booking, never a new one. A slot conflict is another
+     * confirmed booking of the same contractor whose window overlaps.
      */
     public synchronized CreateResult create(BookingRequest request) {
         Booking existing = byRequestId.get(request.requestId());
@@ -70,7 +77,7 @@ public class Calendar {
         if (conflict) {
             return new CreateResult.Conflict();
         }
-        Booking booking = new Booking(request, "SIM-BK-" + references.incrementAndGet(), Booking.Status.CONFIRMED,
+        Booking booking = new Booking(request, "SIM-BK-" + run + "-" + references.incrementAndGet(), Booking.Status.CONFIRMED,
                 clock.instant());
         byRequestId.put(request.requestId(), booking);
         return new CreateResult.Created(booking);

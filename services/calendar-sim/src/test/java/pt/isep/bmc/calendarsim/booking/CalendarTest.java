@@ -33,6 +33,29 @@ class CalendarTest {
     }
 
     @Test
+    void referencesAreNotHandedOutAgainAfterARestart() {
+        Calendar restarted = new Calendar(Clock.fixed(Instant.parse("2026-11-26T10:00:00Z"), ZoneOffset.UTC));
+
+        var before = (Calendar.CreateResult.Created) calendar.create(request("r1", "SIM-CTR-1", NINE, Duration.ofHours(3)));
+        var after = (Calendar.CreateResult.Created) restarted.create(request("r2", "SIM-CTR-1", NINE, Duration.ofHours(3)));
+
+        assertThat(before.booking().externalRef()).matches("SIM-BK-[0-9a-f]{8}-10001");
+        assertThat(after.booking().externalRef()).isNotEqualTo(before.booking().externalRef());
+        assertThat(restarted.cancel(before.booking().externalRef())).isEmpty();
+    }
+
+    @Test
+    void aCancelledRequestIdAnswersTheCancelledBookingNotANewOne() {
+        var created = (Calendar.CreateResult.Created) calendar.create(request("r1", "SIM-CTR-1", NINE, Duration.ofHours(3)));
+        calendar.cancel(created.booking().externalRef());
+
+        var again = calendar.create(request("r1", "SIM-CTR-1", NINE, Duration.ofHours(3)));
+
+        assertThat(again).isEqualTo(new Calendar.CreateResult.Replayed(created.booking().cancelled()));
+        assertThat(calendar.all()).hasSize(1);
+    }
+
+    @Test
     void theSameRequestIdWithOtherContentIsAReusedKey() {
         calendar.create(request("r1", "SIM-CTR-1", NINE, Duration.ofHours(3)));
 
