@@ -29,7 +29,7 @@ export type IssueListParams = PageParams;
 export interface IssueApi {
   /**
    * Issues the caller may see, newest first, one page at a time: those of the buildings the caller administers, those
-   * of the caller's own reports and (ASSUMPTION, US-04-01 #89) those shared with the caller's buildings. The server
+   * of the caller's own reports and (US-04-01, #147) those shared with the caller's buildings. The server
    * filters. `signal` comes from TanStack Query, which aborts the request
    * when nobody needs the answer any more (the user left the page).
    */

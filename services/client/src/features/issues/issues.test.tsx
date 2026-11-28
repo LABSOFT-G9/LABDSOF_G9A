@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Issue, TriageResult } from "@/contracts/issue";
+import type { Session } from "@/ports/auth-session";
 import { ApiError } from "@/shared/lib/errors";
 import { stubIssueApi } from "@/test/fakes";
 import { renderApp } from "@/test/render-app";
@@ -854,6 +855,176 @@ describe("shared issue (US-04-02)", () => {
     await user.click(screen.getByRole("button", { name: "Update the summary" }));
     await screen.findByText("Summary shared with the building.");
     expect(screen.getByText("The garage door on level -1 is being repaired on Thursday.")).toBeInTheDocument();
+  });
+
+  it("starts a change from the summary on screen, not from the one the page opened with", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const opened: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 3,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The entrance light is out.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 0, mine: false },
+    };
+    const getIssue = vi
+      .fn<() => Promise<Issue>>()
+      .mockResolvedValueOnce(opened)
+      .mockResolvedValue({
+        ...opened,
+        version: 4,
+        summary: { text: "An electrician comes on Friday.", publishedAt: "2026-11-24T11:00:00Z" },
+      });
+    const publish = vi.fn(async (_id: string, _version: number, publication: { summary: string }) => ({
+      issueId: "i1",
+      version: 5,
+      summary: { text: publication.summary, publishedAt: "2026-11-24T12:00:00Z" },
+    }));
+    const { router } = renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), publish }) },
+    });
+    await screen.findByText("The entrance light is out.");
+
+    // Another administrator published meanwhile; a refetch brings their summary in.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    await screen.findByText("An electrician comes on Friday.");
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    expect(summary).toHaveValue("An electrician comes on Friday.");
+    await user.type(summary, " Use the back door.");
+    await user.click(screen.getByRole("button", { name: "Update the summary" }));
+    await screen.findByText("Summary shared with the building.");
+    expect(publish).toHaveBeenCalledWith(
+      "i1",
+      4,
+      { summary: "An electrician comes on Friday. Use the back door." },
+      expect.any(String),
+    );
+  });
+
+  it("saves a change against the version of the summary it started from, so a newer one is a conflict", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    const opened: Issue = {
+      issueId: "i1",
+      buildingId: "0199f2a0-0000-7000-8000-00000000b001",
+      buildingName: "Synthetic Building A",
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 4,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The entrance light is out.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 0, mine: false },
+    };
+    const getIssue = vi
+      .fn<() => Promise<Issue>>()
+      .mockResolvedValueOnce(opened)
+      .mockResolvedValue({
+        ...opened,
+        version: 5,
+        summary: { text: "An electrician comes on Friday.", publishedAt: "2026-11-24T11:00:00Z" },
+      });
+    const publish = vi.fn(async (_id: string, _version: number, publication: { summary: string }) => ({
+      issueId: "i1",
+      version: 6,
+      summary: { text: publication.summary, publishedAt: "2026-11-24T12:00:00Z" },
+    }));
+    const { router } = renderApp("/issues/i1", {
+      services: { issues: stubIssueApi({ getIssue, getHistory: async () => ({ items: [] }), publish }) },
+    });
+    await screen.findByText("The entrance light is out.");
+
+    await user.click(screen.getByRole("button", { name: "Change the summary" }));
+    const summary = screen.getByRole("textbox", { name: "Summary for residents" });
+    expect(summary).toHaveValue("The entrance light is out.");
+    // Another administrator publishes while this one has the editor open; a refetch brings it in.
+    await router.options.context.queryClient.invalidateQueries({ queryKey: ["issues"] });
+    expect(await screen.findAllByText("This issue has changed since you opened it")).not.toHaveLength(0);
+
+    await user.type(summary, " Use the back door.");
+    await user.click(screen.getByRole("button", { name: "Update the summary" }));
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    expect(publish).toHaveBeenCalledWith(
+      "i1",
+      4,
+      { summary: "The entrance light is out. Use the back door." },
+      expect.any(String),
+    );
+  });
+
+  it("lets an administrator choose notifications for themselves, without a confirm button", async () => {
+    const user = userEvent.setup();
+    signInAs("administrator-a");
+    renderApp(`/issues/${SHARED}`);
+    await screen.findByRole("heading", { level: 1, name: "Garage level -1" });
+    const own = screen.getByRole("heading", { name: "Your own choices" }).closest("section")!;
+    expect(within(own).queryByRole("button", { name: "This affects me too" })).not.toBeInTheDocument();
+
+    await user.click(within(own).getByRole("checkbox", { name: "Notify me when this issue changes" }));
+    expect(await within(own).findByText("You will be notified when this issue changes.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(own).getByRole("checkbox", { name: "Notify me when this issue changes" })).toBeChecked(),
+    );
+  });
+
+  it("offers no own choices before a summary is shared", async () => {
+    signInAs("administrator-a");
+    renderApp(`/issues/${SUGGESTED}`);
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    expect(screen.getByText(/Not shared yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Your own choices" })).not.toBeInTheDocument();
+  });
+
+  it("lets someone who administers and lives in the building confirm the impact", async () => {
+    const user = userEvent.setup();
+    const building = { buildingId: "0199f2a0-0000-7000-8000-00000000b001", buildingName: "Synthetic Building A" };
+    const session: Session = {
+      sub: "u-both",
+      name: "Synthetic Both",
+      email: null,
+      memberships: [
+        { membershipId: "m-admin", ...building, unit: null, role: "administrator" },
+        { membershipId: "m-resident", ...building, unit: null, role: "resident" },
+      ],
+      platformRoles: [],
+      contractor: null,
+    };
+    const issue: Issue = {
+      issueId: "i1",
+      ...building,
+      areaLabel: "Entrance hall",
+      state: "triaged",
+      version: 3,
+      createdAt: "2026-11-24T10:00:00Z",
+      triage: null,
+      suggestion: null,
+      summary: { text: "The entrance light is out.", publishedAt: "2026-11-24T10:05:00Z" },
+      impact: { count: 0, mine: false },
+      subscribed: false,
+    };
+    const setImpact = vi.fn(async (_id: string, affected: boolean) => ({ count: affected ? 1 : 0, mine: affected }));
+    renderApp("/issues/i1", {
+      services: {
+        auth: { me: async () => session, login: async () => undefined, logout: async () => undefined },
+        issues: stubIssueApi({ getIssue: async () => issue, getHistory: async () => ({ items: [] }), setImpact }),
+      },
+    });
+    await screen.findByRole("heading", { level: 1, name: "Entrance hall" });
+    // Both cards: the publication, and their own choices as a resident.
+    expect(screen.getByRole("button", { name: "Change the summary" })).toBeInTheDocument();
+    const own = screen.getByRole("heading", { name: "Your own choices" }).closest("section")!;
+    await user.click(within(own).getByRole("button", { name: "This affects me too" }));
+    expect(await within(own).findByText("Your confirmation was recorded.")).toBeInTheDocument();
+    expect(setImpact).toHaveBeenCalledWith("i1", true);
   });
 
   it("on a conflict, overwrites nothing and offers to reload", async () => {

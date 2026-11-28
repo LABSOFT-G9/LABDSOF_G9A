@@ -164,8 +164,8 @@ export const TRIAGE_PENDING_AFTER_MS = 2 * 60_000;
 /*
  * Shared issue, impact and subscription (US-04). Paths from technical design §4.2 and the US-04 story:
  * `POST /issues/{id}/publication`, `PUT`/`DELETE /issues/{id}/impact`, `PUT`/`DELETE /issues/{id}/subscription`.
- * ASSUMPTION: every shape below, until US-04-01 (#89) defines them. All issue fields are optional, so the service as it
- * is today still parses.
+ * The shapes are those of US-04-01 (#147). All issue fields are optional, so an Issue service without them still
+ * parses.
  */
 
 /** The administrator's reviewed summary, the only text residents of the building see (never the report text). */

@@ -220,6 +220,7 @@ export const en = {
     shared: {
       badge: "Shared",
       title: "Shared with the building",
+      ownChoicesTitle: "Your own choices",
       adminTitle: "Share with the building",
       adminHint:
         "Residents of the building see this summary instead of the report. The report text and who reported it stay private.",
@@ -304,6 +305,9 @@ export const en = {
       unknown: "This value was not accepted.",
       summary: "The report was not sent. Check the highlighted fields.",
     },
+    restored: "Your report was not sent",
+    restoredBody:
+      "Your session ended before it was sent. Nothing was saved. Your text is back: check it and send it again.",
     notSaved: "Your report was not saved",
     notSavedBody:
       "BMC could not store it right now, so nobody has received it. Your text is still here. Try again in a moment.",

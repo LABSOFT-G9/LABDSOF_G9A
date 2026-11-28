@@ -272,7 +272,7 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
   });
 });
 
-describe("mockIssueApi shared issue (US-04 rules, ASSUMPTION until #89)", () => {
+describe("mockIssueApi shared issue (US-04 rules, as built in #147)", () => {
   const shared = "0199f2a1-0000-7000-8000-000000002002"; // Building A, shared, Resident A2's report, A2 confirmed
   const unshared = "0199f2a1-0000-7000-8000-000000002001"; // Building A, not shared, Resident A1's report
 

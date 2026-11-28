@@ -88,6 +88,11 @@ when it exists.
 reference and a retry. A 404 in a loader becomes the not-found page (`routeData`), and any 401 anywhere ends the
 session (`createQueryClient` → `expireSession`).
 
+A report refused with `401` is not lost on the way through sign-in: the form keeps it in `sessionStorage`
+(`src/shared/lib/unsent-report.ts`) under the author's `sub` and takes it back, once, when the same person returns
+within 15 minutes. It is removed on sign-out, unread as soon as anyone else is signed in, and once it expires
+(threat T-20). Nothing else the user typed is stored in the browser.
+
 **HTTP client** (`src/adapters/http/client.ts`). Same origin (`credentials: "same-origin"`, no CORS), `cache:
 "no-store"`. On every request it sets `X-Correlation-Id`. On every write it sets the CSRF header `X-BMC-CSRF: 1`, a
 **placeholder** whose name is open in EN01-U6 (`CSRF_HEADER`, one constant). On every POST it sets an
@@ -104,9 +109,9 @@ The root route resolves the session before any guard runs:
 - an unusable `/me` shows on the login page, with a sign-out button.
 
 `/me` is the Issue service's `ProfileResponse` (`ProfileSchema`, US-01-01). The HTTP auth adapter maps it to the
-client's `Session` model (`src/ports/auth-session.ts`), so the UI never depends on wire names. `/me` does not yet carry
-an email, platform roles or a contractor link (asked on EN-02-04, #80), so over HTTP these are empty and the admin and
-contractor areas do not appear.
+client's `Session` model (`src/ports/auth-session.ts`), so the UI never depends on wire names. `/me` carries the
+email and the platform roles (EN-02-04, #139). It does not carry a contractor link, which belongs to Dispatch (#80), so
+over HTTP the contractor area does not appear.
 
 **Mock personas** are the Issue service's synthetic seed users (`R__synthetic_fixtures.sql`), with the same IDs, names
 and buildings: Residents A1, A2 and B1, Administrators A and B, and the contractor account. Platform staff is mock only,
@@ -189,7 +194,7 @@ Copy `.env.example` to `.env.local`. `VITE_*` values are compiled into the bundl
 | ---------------------- | --------------------- | ------------------------------------------------------------------ |
 | `VITE_ADAPTERS`        | `mock`                | `mock` or `http`: the adapters the container wires (image: `http`) |
 | `VITE_MOCK_LATENCY_MS` | `300`                 | simulated latency of mock adapters                                 |
-| `VITE_LOGIN_URI`       | `/oidc/login`         | edge OIDC plugin login path (placeholder until spike item 3)       |
+| `VITE_LOGIN_URI`       | `/oidc/login`         | edge OIDC plugin login path (`LoginUri` in `compose.yaml`)         |
 | `VITE_LOGOUT_URI`      | `/logout`             | edge OIDC plugin logout path                                       |
 | `API_PROXY_TARGET`     | `http://localhost:80` | dev/preview server only: where the edge paths are proxied          |
 
@@ -235,14 +240,14 @@ keyboard pass each UI story records in its PR.
   asked again every 10 seconds. US-14-03 adds `rulesVersion` and `modelVersion` on the suggestion (agreed on #108),
   `origin` and `applied` on `triage_suggested` history entries (#108), and one `critical_alert_raised` entry per
   signal, with its `code` (#96).
-- US-04-02 (shared issue) is built on ASSUMPTION shapes until US-04-01 (#89) defines them: `summary`, `impact`
+- US-04-02 (shared issue) uses the shapes US-04-01 (#147) defines: `summary`, `impact`
   (`{count, mine}`) and `subscribed` on the issue; `POST /issues/{id}/publication` (`If-Match`, answers the new
   version and summary); `PUT`/`DELETE /issues/{id}/impact` (answers the count) and `/subscription` (answers
   `{subscribed}`); the `summary_published` history type; and residents of the building seeing shared issues in
-  `GET /issues`. All are optional, so the service as it is today still parses. Publishing moves the issue version, so
-  an open triage form then offers to reload.
-- `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
-  HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
+  `GET /issues`. All are optional in the schema. Publishing moves the issue version, so
+  an open triage form then offers to reload. An administrator also gets their own choices under the publication card:
+  notifications, and "this affects me too" when they are a resident of the building as well.
+- `/me` never carries the contractor link, which belongs to Dispatch (#80), so over HTTP `contractor` is `null`.
 - The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
   (#80). The CSRF header and the edge paths match EN-02-04 (#139) but are untested against the real edge until it
   reaches dev.

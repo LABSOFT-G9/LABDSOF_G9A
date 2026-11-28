@@ -2,6 +2,7 @@ import type { MockIdentity } from "@/adapters/mock/auth-session";
 import { AREAS, BUILDINGS, type MockIssueRecord, seedIssues } from "@/adapters/mock/data";
 import type { MockRuntime } from "@/adapters/mock/runtime";
 import {
+  type BuildingRole,
   type HistoryEntry,
   type Issue,
   type IssueState,
@@ -64,7 +65,10 @@ export function mockIssueApi(
   /** `null` caller = no persona to apply rules to: treated as an administrator everywhere. */
   const roleIn = (me: Session | null, buildingId: string) =>
     me ? me.memberships.find((m) => m.buildingId === buildingId)?.role : "administrator";
-  const administers = (me: Session | null, buildingId: string) => roleIn(me, buildingId) === "administrator";
+  /** A person may hold both roles in one building (the service checks each role on its own). */
+  const hasRole = (me: Session, buildingId: string, role: BuildingRole) =>
+    me.memberships.some((m) => m.buildingId === buildingId && m.role === role);
+  const administers = (me: Session | null, buildingId: string) => !me || hasRole(me, buildingId, "administrator");
 
   const mayReadReport = (me: Session | null, report: StoredReport) =>
     !me || report.authorId === me.sub || administers(me, report.buildingId);
@@ -360,7 +364,7 @@ export function mockIssueApi(
         const me = caller();
         const issue = findIssue(me, issueId);
         // Residents of the building confirm impact on a published issue; nobody else, and never for someone else.
-        if (!me || roleIn(me, issue.buildingId) !== "resident") {
+        if (!me || !hasRole(me, issue.buildingId, "resident")) {
           throw new ApiError(403, "FORBIDDEN", "Only the building's residents confirm impact.", "mock-correlation-id");
         }
         if (!issue.summary) {
