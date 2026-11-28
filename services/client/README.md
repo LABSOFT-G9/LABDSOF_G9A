@@ -90,8 +90,8 @@ session (`createQueryClient` → `expireSession`).
 
 A report refused with `401` is not lost on the way through sign-in: the form keeps it in `sessionStorage`
 (`src/shared/lib/unsent-report.ts`) under the author's `sub` and takes it back, once, when the same person returns
-within 15 minutes. It is removed, unread, as soon as anyone else is signed in (threat T-20). Nothing else the user
-typed is stored in the browser.
+within 15 minutes. It is removed on sign-out, unread as soon as anyone else is signed in, and once it expires
+(threat T-20). Nothing else the user typed is stored in the browser.
 
 **HTTP client** (`src/adapters/http/client.ts`). Same origin (`credentials: "same-origin"`, no CORS), `cache:
 "no-store"`. On every request it sets `X-Correlation-Id`. On every write it sets the CSRF header `X-BMC-CSRF: 1`, a
