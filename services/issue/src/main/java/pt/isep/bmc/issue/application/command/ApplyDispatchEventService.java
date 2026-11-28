@@ -78,6 +78,9 @@ public final class ApplyDispatchEventService implements ApplyDispatchEventUseCas
 
             DispatchOutcome outcome = DispatchEventIntake.apply(issue, interventions.forIssue(issue.id()), event,
                     issues.nextHistorySequence(issue.id()), areaLabel, now);
+            if (outcome.retryLaterNeeded()) {
+                return DispatchEventResult.RETRY_LATER;
+            }
 
             outcome.issue().ifPresent(issues::update);
             outcome.history().ifPresent(issues::appendHistory);

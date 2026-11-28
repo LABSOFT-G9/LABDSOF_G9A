@@ -117,6 +117,31 @@ class ApplyDispatchEventServiceTest {
     }
 
     @Test
+    void aSecondActiveInterventionWritesNothingSoItsNextDeliveryIsApplied() {
+        service.apply(command("e-1", issue.id(), 2, InterventionState.SENT));
+        UUID second = UUID.randomUUID();
+        ApplyDispatchEventCommand secondApproved = new ApplyDispatchEventCommand(new DispatchEvent("e-3",
+                DispatchEventType.INTERVENTION_APPROVED, second, 2, A, issue.id(), InterventionState.SENT,
+                NOW.minusSeconds(5), Optional.empty(), Optional.empty(), false, Optional.of("contractor-2")),
+                CORRELATION);
+
+        assertThat(service.apply(secondApproved)).isEqualTo(DispatchEventResult.RETRY_LATER);
+        assertThat(ports.dispatchEvents).containsOnlyKeys("e-1");
+        assertThat(ports.history).hasSize(1);
+        assertThat(ports.interventions).containsOnlyKeys(INTERVENTION);
+        assertThat(ports.outbox).hasSize(1);
+
+        // The first one's decline was still on its way.
+        service.apply(new ApplyDispatchEventCommand(new DispatchEvent("e-2", DispatchEventType.INTERVENTION_DECLINED,
+                INTERVENTION, 3, A, issue.id(), InterventionState.DECLINED, NOW.minusSeconds(5),
+                Optional.of("unavailable"), Optional.empty(), false, Optional.empty()), CORRELATION));
+
+        assertThat(service.apply(secondApproved)).isEqualTo(DispatchEventResult.APPLIED);
+        assertThat(stored().state()).isEqualTo(IssueState.IN_COORDINATION);
+        assertThat(ports.interventions.get(second).contractorUserId()).contains("contractor-2");
+    }
+
+    @Test
     void anEventForAnUnknownIssueIsKeptForInspectionAndCountsAsReceived() {
         IssueId unknown = new IssueId(UUID.randomUUID());
 

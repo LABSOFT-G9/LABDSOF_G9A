@@ -20,15 +20,24 @@ import pt.isep.bmc.issue.domain.issue.IssueState;
  *
  * <ol>
  *   <li>The event's building must be the issue's; otherwise it {@code failed}.</li>
+ *   <li>{@code BookingStateChanged} is shown in history only. A booking is its
+ *       own aggregate: the intervention does not move, and the event carries
+ *       the version of the event that last moved it, which may still be on its
+ *       way (Dispatch writes {@code InterventionApproved} and a failed booking
+ *       with one version).</li>
  *   <li>A resolved or cancelled issue never moves: the event is shown in
  *       history only, and Dispatch is ending the intervention anyway. Its
  *       projection still follows, so a reopened issue has no active one left.</li>
  *   <li>An event of an intervention Issue knows is applied when it is newer
  *       than the last version applied for it, and while the intervention has
- *       not ended. Otherwise it is shown in history only.</li>
+ *       not ended. Otherwise it is shown in history only, and still gives the
+ *       projection the contractor it names when an event applied first did
+ *       not, so notifications reach the contractor.</li>
  *   <li>An intervention Issue does not know becomes the active one when the
- *       issue is {@code triaged} and has none. A second active intervention, or
- *       one for an issue that is not {@code triaged}, {@code failed}.</li>
+ *       issue is {@code triaged} and has none. While another one is active,
+ *       the event waits to be delivered again: Dispatch keeps one active
+ *       intervention per issue, so the event that ended the first one is still
+ *       on its way. One for an issue that is not {@code triaged} {@code failed}.</li>
  *   <li>Applied, the issue takes the state the intervention state stands for
  *       ({@link InterventionState#issueState()}), on its next version, and
  *       {@code IssueStateChanged} tells Dispatch. A declined or cancelled
@@ -38,7 +47,8 @@ import pt.isep.bmc.issue.domain.issue.IssueState;
  *
  * <p>For example, {@code BookingConfirmed} (version 4) arriving before
  * {@code InterventionApproved} (version 2) moves a {@code triaged} issue to
- * {@code scheduled}, and the late version 2 is shown in history only.
+ * {@code scheduled}, and the late version 2 is shown in history only and
+ * gives the projection its contractor.
  */
 public final class DispatchEventIntake {
 
@@ -65,25 +75,30 @@ public final class DispatchEventIntake {
                 .filter(p -> p.interventionId().equals(event.interventionId()))
                 .findFirst();
 
+        if (event.type() == DispatchEventType.BOOKING_STATE_CHANGED) {
+            return historyOnly(issue, Optional.empty(), event, DispatchEventRecord.BOOKING_ONLY, sequence, now);
+        }
         if (!issue.state().isOpen()) {
             Optional<InterventionProjection> followed = known
                     .filter(p -> !p.state().isTerminal() && event.aggregateVersion() > p.lastVersion())
-                    .map(p -> p.next(event, now));
+                    .map(p -> p.next(event, now))
+                    .or(() -> known.flatMap(p -> p.withContractorOf(event, now)));
             return historyOnly(issue, followed, event, DispatchEventRecord.ISSUE_CLOSED, sequence, now);
         }
         if (known.isPresent()) {
             InterventionProjection projection = known.get();
             if (event.aggregateVersion() <= projection.lastVersion()) {
-                return historyOnly(issue, Optional.empty(), event, DispatchEventRecord.STALE_VERSION, sequence, now);
+                return historyOnly(issue, projection.withContractorOf(event, now), event,
+                        DispatchEventRecord.STALE_VERSION, sequence, now);
             }
             if (projection.state().isTerminal()) {
-                return historyOnly(issue, Optional.empty(), event, DispatchEventRecord.ENDED_INTERVENTION, sequence,
-                        now);
+                return historyOnly(issue, projection.withContractorOf(event, now), event,
+                        DispatchEventRecord.ENDED_INTERVENTION, sequence, now);
             }
             return applied(issue, projection.next(event, now), event, sequence, areaLabel, now);
         }
         if (interventions.stream().anyMatch(p -> !p.state().isTerminal())) {
-            return failed(event, DispatchEventRecord.SECOND_INTERVENTION, now);
+            return DispatchOutcome.retryLater();
         }
         if (issue.state() != IssueState.TRIAGED) {
             return failed(event, DispatchEventRecord.NOT_DISPATCHABLE, now);
@@ -100,8 +115,8 @@ public final class DispatchEventIntake {
         List<DomainEvent> events = moved.<List<DomainEvent>>map(m -> List.of(IssueStateChanged.of(m, areaLabel)))
                 .orElse(List.of());
         return new DispatchOutcome(moved, Optional.of(projection), Optional.of(entry(after, event, sequence)),
-                new DispatchEventRecord(event, DispatchEventRecord.Outcome.APPLIED, Optional.empty(),
-                        Optional.of(sequence), now),
+                Optional.of(new DispatchEventRecord(event, DispatchEventRecord.Outcome.APPLIED, Optional.empty(),
+                        Optional.of(sequence), now)),
                 events);
     }
 
@@ -109,15 +124,15 @@ public final class DispatchEventIntake {
             Issue issue, Optional<InterventionProjection> projection, DispatchEvent event, String reason, int sequence,
             Instant now) {
         return new DispatchOutcome(Optional.empty(), projection, Optional.of(entry(issue, event, sequence)),
-                new DispatchEventRecord(event, DispatchEventRecord.Outcome.HISTORY_ONLY, Optional.of(reason),
-                        Optional.of(sequence), now),
+                Optional.of(new DispatchEventRecord(event, DispatchEventRecord.Outcome.HISTORY_ONLY,
+                        Optional.of(reason), Optional.of(sequence), now)),
                 List.of());
     }
 
     private static DispatchOutcome failed(DispatchEvent event, String reason, Instant now) {
         return new DispatchOutcome(Optional.empty(), Optional.empty(), Optional.empty(),
-                new DispatchEventRecord(event, DispatchEventRecord.Outcome.FAILED, Optional.of(reason),
-                        Optional.empty(), now),
+                Optional.of(new DispatchEventRecord(event, DispatchEventRecord.Outcome.FAILED, Optional.of(reason),
+                        Optional.empty(), now)),
                 List.of());
     }
 

@@ -145,6 +145,56 @@ class DispatchEventIT extends IntegrationTestSupport {
                 false);
         assertThat(history(issueId, RESIDENT_A1)).extracting(entry -> entry.get("type"))
                 .doesNotContain("booking_state_changed");
+        // The late approval still gives the intervention its contractor, for notifications.
+        assertThat(contractor(intervention)).isEqualTo(CONTRACTOR);
+        assertThat(jdbc.sql("SELECT last_version FROM issue_interventions WHERE intervention_id = :id")
+                .param("id", intervention).query(Long.class).single()).isEqualTo(4);
+    }
+
+    String contractor(String intervention) {
+        return jdbc.sql("SELECT contractor_user_id FROM issue_interventions WHERE intervention_id = :id")
+                .param("id", intervention).query(String.class).single();
+    }
+
+    @Test
+    void aFailedBookingWithTheApprovalsVersionThatArrivesFirstLeavesTheApprovalToApply() {
+        String issueId = triagedIssue();
+        String intervention = UUID.randomUUID().toString();
+
+        // Approving a counterproposal whose booking request fails at once: both events carry version 3.
+        assertThat(send("BookingStateChanged", issueId, intervention, 3, "scheduling_pending",
+                ", \"bookingState\": \"failed\"")).isEqualTo(DispatchEventResult.HISTORY_ONLY);
+        assertThat(count("issue_interventions")).isZero();
+        assertThat(send("InterventionApproved", issueId, intervention, 3, "scheduling_pending",
+                ", \"contractorUserId\": \"" + CONTRACTOR + "\"")).isEqualTo(DispatchEventResult.APPLIED);
+
+        assertThat(issue(issueId)).containsEntry("state", "in_coordination").containsEntry("version", 3);
+        assertThat(contractor(intervention)).isEqualTo(CONTRACTOR);
+        assertThat(history(issueId, ADMIN_A)).filteredOn(e -> "intervention_approved".equals(e.get("type")))
+                .singleElement().satisfies(e -> assertThat(e).containsEntry("applied", true));
+        assertThat(jdbc.sql("SELECT reason FROM dispatch_events WHERE outcome = 'history_only'")
+                .query(String.class).single()).isEqualTo("booking_only");
+    }
+
+    @Test
+    void aSecondInterventionWaitsForTheEndOfTheFirstAndIsThenApplied() {
+        String issueId = triagedIssue();
+        String first = UUID.randomUUID().toString();
+        String second = UUID.randomUUID().toString();
+        String secondApproved = UUID.randomUUID().toString();
+        send("InterventionApproved", issueId, first, 2, "sent", ", \"contractorUserId\": \"" + CONTRACTOR + "\"");
+
+        assertThat(send(secondApproved, "InterventionApproved", issueId, second, 2, "sent",
+                ", \"contractorUserId\": \"c-2\"")).isEqualTo(DispatchEventResult.RETRY_LATER);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM dispatch_events WHERE event_id = :id").param("id", secondApproved)
+                .query(Long.class).single()).isZero();
+
+        send("InterventionDeclined", issueId, first, 3, "declined", ", \"reasonCode\": \"unavailable\"");
+        assertThat(send(secondApproved, "InterventionApproved", issueId, second, 2, "sent",
+                ", \"contractorUserId\": \"c-2\"")).isEqualTo(DispatchEventResult.APPLIED);
+
+        assertThat(issue(issueId)).containsEntry("state", "in_coordination").containsEntry("version", 5);
+        assertThat(contractor(second)).isEqualTo("c-2");
     }
 
     @Test

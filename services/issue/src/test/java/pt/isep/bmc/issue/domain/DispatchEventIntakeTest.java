@@ -27,6 +27,7 @@ import pt.isep.bmc.issue.domain.issue.HistoryEntryType;
 import pt.isep.bmc.issue.domain.issue.HistoryVisibility;
 import pt.isep.bmc.issue.domain.issue.Issue;
 import pt.isep.bmc.issue.domain.issue.IssueCategory;
+import pt.isep.bmc.issue.domain.issue.IssueHistoryEntry;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
 
@@ -174,14 +175,28 @@ class DispatchEventIntakeTest {
         assertThat(late.record().outcome()).isEqualTo(Outcome.HISTORY_ONLY);
         assertThat(late.record().reason()).contains(DispatchEventRecord.STALE_VERSION);
         assertThat(late.issue()).isEmpty();
-        assertThat(late.intervention()).isEmpty();
         assertThat(late.events()).isEmpty();
         assertThat(late.history()).hasValueSatisfying(entry -> {
             assertThat(entry.type()).isEqualTo(HistoryEntryType.INTERVENTION_APPROVED);
             assertThat(entry.issueVersion()).isEqualTo(3);
         });
         assertThat(run.issue.state()).isEqualTo(IssueState.SCHEDULED);
+        // The late approval still names the contractor, which the booking did not: only that is taken from it.
         assertThat(run.intervention(A).lastVersion()).isEqualTo(4);
+        assertThat(run.intervention(A).state()).isEqualTo(InterventionState.BOOKED);
+        assertThat(run.intervention(A).contractorUserId()).contains(CONTRACTOR);
+    }
+
+    @Test
+    void aLateEventNeverReplacesTheContractorKnown() {
+        Run run = new Run(IssueState.TRIAGED, 2);
+        run.apply(event(DispatchEventType.INTERVENTION_TERMS_CHANGED, A, 4, InterventionState.AWAITING_APPROVAL,
+                Optional.empty(), false, Optional.of("another-contractor")));
+
+        DispatchOutcome late = run.apply(approved(A, 2));
+
+        assertThat(late.intervention()).isEmpty();
+        assertThat(run.intervention(A).contractorUserId()).contains("another-contractor");
     }
 
     @Test
@@ -189,14 +204,76 @@ class DispatchEventIntakeTest {
         Run run = new Run(IssueState.TRIAGED, 2);
         run.apply(event(DispatchEventType.BOOKING_CONFIRMED, A, 4, InterventionState.BOOKED));
 
-        // Booking-state events carry the intervention's current version (#161, decision 6).
-        DispatchOutcome sameVersion = run.apply(event(DispatchEventType.BOOKING_STATE_CHANGED, A, 4,
-                InterventionState.BOOKED, Optional.of("uncertain"), false, Optional.empty()));
+        DispatchOutcome sameVersion = run.apply(event(DispatchEventType.INTERVENTION_STARTED, A, 4,
+                InterventionState.IN_PROGRESS));
 
         assertThat(sameVersion.record().outcome()).isEqualTo(Outcome.HISTORY_ONLY);
-        assertThat(sameVersion.history()).hasValueSatisfying(entry ->
-                assertThat(entry.type()).isEqualTo(HistoryEntryType.BOOKING_STATE_CHANGED));
+        assertThat(sameVersion.record().reason()).contains(DispatchEventRecord.STALE_VERSION);
+        assertThat(run.issue.state()).isEqualTo(IssueState.SCHEDULED);
         assertThat(run.issue.version()).isEqualTo(3);
+    }
+
+    @Test
+    void aBookingStateIsShownInHistoryOnlyAndNeverMovesTheIntervention() {
+        Run run = new Run(IssueState.TRIAGED, 2);
+        run.apply(approved(A, 2));
+        run.apply(event(DispatchEventType.CONTRACTOR_RESPONDED, A, 3, InterventionState.SCHEDULING_PENDING,
+                Optional.of("accept"), false, Optional.empty()));
+
+        // Another booking request moves the intervention's version, not its state (BookingService.requestAgain).
+        DispatchOutcome requested = run.apply(event(DispatchEventType.BOOKING_STATE_CHANGED, A, 4,
+                InterventionState.SCHEDULING_PENDING, Optional.of("requested"), false, Optional.empty()));
+
+        assertThat(requested.record().outcome()).isEqualTo(Outcome.HISTORY_ONLY);
+        assertThat(requested.record().reason()).contains(DispatchEventRecord.BOOKING_ONLY);
+        assertThat(requested.intervention()).isEmpty();
+        assertThat(requested.issue()).isEmpty();
+        assertThat(requested.history()).hasValueSatisfying(entry ->
+                assertThat(entry.type()).isEqualTo(HistoryEntryType.BOOKING_STATE_CHANGED));
+        assertThat(run.intervention(A).lastVersion()).isEqualTo(3);
+
+        run.apply(event(DispatchEventType.BOOKING_CONFIRMED, A, 5, InterventionState.BOOKED));
+        assertThat(run.issue.state()).isEqualTo(IssueState.SCHEDULED);
+    }
+
+    @Test
+    void aBookingStateOfAnInterventionIssueDoesNotKnowYetDoesNotMakeItActive() {
+        Run run = new Run(IssueState.TRIAGED, 2);
+
+        DispatchOutcome failed = run.apply(event(DispatchEventType.BOOKING_STATE_CHANGED, A, 2,
+                InterventionState.SCHEDULING_PENDING, Optional.of("failed"), false, Optional.empty()));
+
+        assertThat(failed.record().reason()).contains(DispatchEventRecord.BOOKING_ONLY);
+        assertThat(run.interventions).isEmpty();
+        assertThat(run.issue.state()).isEqualTo(IssueState.TRIAGED);
+    }
+
+    /**
+     * Approving a counterproposal goes straight to {@code scheduling_pending}; when the booking request fails at
+     * once, Dispatch writes {@code InterventionApproved} and {@code BookingStateChanged(failed)} with one version.
+     */
+    @ParameterizedTest(name = "[{index}] booking state first: {0}")
+    @CsvSource({"false", "true"})
+    void anApprovalAndAFailedBookingWithOneVersionApplyTheApprovalInEitherOrder(boolean bookingFirst) {
+        Run run = new Run(IssueState.TRIAGED, 2);
+        DispatchEvent approval = event(DispatchEventType.INTERVENTION_APPROVED, A, 3,
+                InterventionState.SCHEDULING_PENDING, Optional.empty(), false, Optional.of(CONTRACTOR));
+        DispatchEvent booking = event(DispatchEventType.BOOKING_STATE_CHANGED, A, 3,
+                InterventionState.SCHEDULING_PENDING, Optional.of("failed"), false, Optional.empty());
+
+        DispatchOutcome approved;
+        if (bookingFirst) {
+            run.apply(booking);
+            approved = run.apply(approval);
+        } else {
+            approved = run.apply(approval);
+            run.apply(booking);
+        }
+
+        assertThat(approved.record().outcome()).isEqualTo(Outcome.APPLIED);
+        assertThat(run.issue.state()).isEqualTo(IssueState.IN_COORDINATION);
+        assertThat(run.intervention(A).lastVersion()).isEqualTo(3);
+        assertThat(run.intervention(A).contractorUserId()).contains(CONTRACTOR);
     }
 
     @Test
@@ -224,20 +301,40 @@ class DispatchEventIntakeTest {
         assertThat(run.intervention(A).state()).isEqualTo(InterventionState.DECLINED);
     }
 
+    /**
+     * Dispatch keeps one active intervention per issue, so a second one means the event that ended the first is
+     * still on its way: A approved, B approved, then A declined.
+     */
     @Test
-    void aSecondActiveInterventionFailsAndChangesNothing() {
+    void aSecondActiveInterventionWritesNothingAndIsAppliedOnceTheFirstHasEnded() {
         Run run = new Run(IssueState.TRIAGED, 2);
         run.apply(approved(A, 2));
 
         DispatchOutcome second = run.apply(approved(B, 2));
 
-        assertThat(second.record().outcome()).isEqualTo(Outcome.FAILED);
-        assertThat(second.record().reason()).contains(DispatchEventRecord.SECOND_INTERVENTION);
-        assertThat(second.record().historySequence()).isEmpty();
+        assertThat(second.retryLaterNeeded()).isTrue();
         assertThat(second.history()).isEmpty();
         assertThat(second.issue()).isEmpty();
         assertThat(second.intervention()).isEmpty();
+        assertThat(second.events()).isEmpty();
+        assertThatThrownBy(second::record).isInstanceOf(IllegalStateException.class);
         assertThat(run.interventions).extracting(InterventionProjection::interventionId).containsExactly(A);
+
+        run.apply(event(DispatchEventType.INTERVENTION_DECLINED, A, 3, InterventionState.DECLINED,
+                Optional.of("unavailable"), false, Optional.empty()));
+        DispatchOutcome again = run.apply(approved(B, 2));
+
+        assertThat(again.record().outcome()).isEqualTo(Outcome.APPLIED);
+        assertThat(run.issue.state()).isEqualTo(IssueState.IN_COORDINATION);
+        assertThat(run.intervention(B).contractorUserId()).contains(CONTRACTOR);
+    }
+
+    @Test
+    void anOutcomeDeliveredAgainLaterCarriesNothingToWrite() {
+        assertThatThrownBy(() -> new DispatchOutcome(Optional.empty(), Optional.empty(),
+                Optional.of(IssueHistoryEntry.dispatch(issue(IssueState.TRIAGED, 2), 2,
+                        HistoryEntryType.INTERVENTION_APPROVED, HistoryVisibility.PUBLIC, "administrator", NOW)),
+                Optional.empty(), List.of())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @ParameterizedTest
@@ -289,12 +386,28 @@ class DispatchEventIntakeTest {
         DispatchOutcome late = run.apply(event(DispatchEventType.INTERVENTION_STARTED, A, 6,
                 InterventionState.IN_PROGRESS));
         DispatchOutcome unknown = run.apply(approved(B, 2));
+        DispatchOutcome booking = run.apply(event(DispatchEventType.BOOKING_STATE_CHANGED, A, 7,
+                InterventionState.CANCELLED, Optional.of("cancelled"), false, Optional.empty()));
+        assertThat(booking.intervention()).isEmpty();
         assertThat(late.record().outcome()).isEqualTo(Outcome.HISTORY_ONLY);
         assertThat(unknown.record().outcome()).isEqualTo(Outcome.HISTORY_ONLY);
         assertThat(unknown.intervention()).isEmpty();
         assertThat(run.issue.state().value()).isEqualTo(state);
         assertThat(run.issue.version()).isEqualTo(5);
         assertThat(run.intervention(A).state()).isEqualTo(InterventionState.CANCELLED);
+    }
+
+    @Test
+    void aLateApprovalOfAClosedIssueStillGivesTheContractor() {
+        Run run = new Run(IssueState.TRIAGED, 2);
+        run.apply(event(DispatchEventType.BOOKING_CONFIRMED, A, 4, InterventionState.BOOKED));
+        run.issue = issue(IssueState.RESOLVED, 4);
+
+        DispatchOutcome late = run.apply(approved(A, 2));
+
+        assertThat(late.record().reason()).contains(DispatchEventRecord.ISSUE_CLOSED);
+        assertThat(run.intervention(A).contractorUserId()).contains(CONTRACTOR);
+        assertThat(run.intervention(A).lastVersion()).isEqualTo(4);
     }
 
     @Test

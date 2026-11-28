@@ -23,7 +23,7 @@ public record DispatchEventRecord(
     public enum Outcome {
         /** It changed the intervention's projection, and the issue state when it maps to another. */
         APPLIED("applied"),
-        /** Shown in history only: older than what was applied, of an earlier intervention, or of a closed issue. */
+        /** Shown in history only: a booking's own change, older than what was applied, of an ended intervention, or of a closed issue. */
         HISTORY_ONLY("history_only"),
         /** It fits no rule; kept for inspection, with no effect. */
         FAILED("failed");
@@ -43,8 +43,6 @@ public record DispatchEventRecord(
     public static final String UNKNOWN_ISSUE = "unknown_issue";
     /** The event's building is not the issue's. */
     public static final String BUILDING_MISMATCH = "building_mismatch";
-    /** The issue already has another active intervention. */
-    public static final String SECOND_INTERVENTION = "second_intervention";
     /** A new intervention for an issue that is not {@code triaged}. */
     public static final String NOT_DISPATCHABLE = "not_dispatchable";
     /** Not newer than the last version applied for that intervention. */
@@ -53,6 +51,8 @@ public record DispatchEventRecord(
     public static final String ENDED_INTERVENTION = "ended_intervention";
     /** The issue is resolved or cancelled. */
     public static final String ISSUE_CLOSED = "issue_closed";
+    /** A booking's own change ({@code BookingStateChanged}): the intervention did not move. */
+    public static final String BOOKING_ONLY = "booking_only";
 
     public DispatchEventRecord {
         Objects.requireNonNull(event, "event");

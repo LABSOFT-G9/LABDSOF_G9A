@@ -46,4 +46,17 @@ public record InterventionProjection(
         return new InterventionProjection(interventionId, issueId, event.interventionState(), event.aggregateVersion(),
                 event.contractorUserId().or(() -> contractorUserId), firstAppliedAt, now);
     }
+
+    /**
+     * The contractor a late event names, when Issue did not know it yet: an event applied first (such as
+     * {@code BookingConfirmed}) does not name one. The state and the version stay; a Dispatch intervention never
+     * changes contractor, so this only fills the gap.
+     */
+    Optional<InterventionProjection> withContractorOf(DispatchEvent event, Instant now) {
+        if (contractorUserId.isPresent() || event.contractorUserId().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new InterventionProjection(interventionId, issueId, state, lastVersion,
+                event.contractorUserId(), firstAppliedAt, now));
+    }
 }
