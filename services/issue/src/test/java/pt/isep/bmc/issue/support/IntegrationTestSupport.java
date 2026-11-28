@@ -54,7 +54,8 @@ public abstract class IntegrationTestSupport {
     @BeforeEach
     void resetData() throws Exception {
         for (String table : new String[] {
-            "outbox", "idempotency_keys", "triage_decisions", "issue_history", "reports", "issues"}) {
+            "outbox", "idempotency_keys", "impact_confirmations", "issue_subscriptions", "issue_summaries",
+            "triage_decisions", "issue_history", "reports", "issues"}) {
             jdbc.sql("DELETE FROM " + table).update();
         }
         try (var connection = dataSource.getConnection()) {
@@ -104,12 +105,46 @@ public abstract class IntegrationTestSupport {
                 .update();
     }
 
+    /**
+     * Revokes or restores the resident memberships of {@code sub}; restore in
+     * a {@code finally}, as for {@link #setAdministratorStatus}.
+     */
+    protected void setResidentStatus(String sub, String status) {
+        jdbc.sql("UPDATE memberships SET status = :status WHERE user_id = :user AND role = 'resident'")
+                .param("status", status)
+                .param("user", sub)
+                .update();
+    }
+
+    /** Ends the resident memberships of {@code sub} at {@code validUntil} (UTC), or never when {@code null}. */
+    protected void setResidentValidUntil(String sub, java.time.LocalDateTime validUntil) {
+        jdbc.sql("UPDATE memberships SET valid_until = :until WHERE user_id = :user AND role = 'resident'")
+                .param("until", validUntil)
+                .param("user", sub)
+                .update();
+    }
+
     protected Map<String, Object> triageBody(String category, String urgency, String reason) {
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("category", category);
         body.put("urgency", urgency);
         body.put("reason", reason);
         return body;
+    }
+
+    /** {@code POST /issues/{id}/publication} with {@code If-Match: "<version>"} and a fresh idempotency key. */
+    protected pt.isep.bmc.issue.support.Api.Response publish(String sub, String issueId, long version, String summary) {
+        return publish(sub, issueId, "\"" + version + "\"", java.util.UUID.randomUUID().toString(), summary);
+    }
+
+    protected pt.isep.bmc.issue.support.Api.Response publish(
+            String sub, String issueId, String ifMatch, String idempotencyKey, String summary) {
+        Map<String, String> headers = new java.util.HashMap<>();
+        headers.put("If-Match", ifMatch);
+        headers.put("Idempotency-Key", idempotencyKey);
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("summary", summary);
+        return api.postWithHeaders("/issues/" + issueId + "/publication", tokens.token(sub), headers, body);
     }
 
     protected long count(String table) {

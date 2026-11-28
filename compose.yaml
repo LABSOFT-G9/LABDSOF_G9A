@@ -249,6 +249,9 @@ services:
   calendar-sim:
     image: ghcr.io/labsoft-g9/labdsof-calendar-sim:${BMC_TAG:?}
     restart: unless-stopped
+    environment:
+      # /control scripts calendar failures (ADR-006); off unless the host sets it.
+      SIM_CONTROL_ENABLED: ${SIM_CONTROL_ENABLED:-false}
     networks: [internal]
 
 networks:

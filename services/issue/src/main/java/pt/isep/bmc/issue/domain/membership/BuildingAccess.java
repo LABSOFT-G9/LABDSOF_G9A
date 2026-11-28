@@ -20,8 +20,10 @@ import pt.isep.bmc.issue.domain.report.ReportSource;
  *   <li>raw report text: the author, or administrators of the building. Being a
  *       resident of the same building is not enough;</li>
  *   <li>an issue's status and public history: administrators of the building,
- *       and the residents who reported it (a published summary will widen
- *       this in US-04);</li>
+ *       the people who reported it and, once a summary is published, every
+ *       member of the building (US-04);</li>
+ *   <li>publish the shared summary: administrators of the building only;</li>
+ *   <li>confirm impact: residents of the building, for themselves;</li>
  *   <li>triage: administrators of the building only.</li>
  * </ul>
  *
@@ -74,6 +76,17 @@ public final class BuildingAccess {
         return administratorOf.contains(building);
     }
 
+    public boolean isResidentOf(BuildingId building) {
+        return residentOf.contains(building);
+    }
+
+    /** Every building this user belongs to, in either role. */
+    public Set<BuildingId> memberBuildings() {
+        Set<BuildingId> all = new HashSet<>(residentOf);
+        all.addAll(administratorOf);
+        return Set.copyOf(all);
+    }
+
     public Set<BuildingId> administeredBuildings() {
         return administratorOf;
     }
@@ -94,13 +107,15 @@ public final class BuildingAccess {
     }
 
     /**
-     * An issue's status: any issue of a building this user administers, or an
-     * issue this user reported.
+     * An issue's status: any issue of a building this user administers, an
+     * issue this user reported, or an issue with a published summary in a
+     * building this user belongs to.
      *
      * @param reportedByUser whether this user authored a report of the issue
+     * @param published      whether the issue has a published summary
      */
-    public boolean canViewIssue(BuildingId building, boolean reportedByUser) {
-        return reportedByUser || administers(building);
+    public boolean canViewIssue(BuildingId building, boolean reportedByUser, boolean published) {
+        return reportedByUser || administers(building) || (published && isMemberOf(building));
     }
 
     /** Raw text: own reports, or any report in a building this user administers. */

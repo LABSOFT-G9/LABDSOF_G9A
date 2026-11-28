@@ -10,6 +10,7 @@ import pt.isep.bmc.issue.domain.issue.IssueCategory;
 import pt.isep.bmc.issue.domain.issue.IssueId;
 import pt.isep.bmc.issue.domain.issue.IssueState;
 import pt.isep.bmc.issue.domain.issue.IssueUrgency;
+import pt.isep.bmc.issue.domain.issue.SummaryId;
 
 /**
  * The issue's current state, for Dispatch's issue projection (technical
@@ -17,7 +18,8 @@ import pt.isep.bmc.issue.domain.issue.IssueUrgency;
  * version and never needs an earlier event. No raw text: the area label names
  * a place, not a person.
  *
- * @param dispatchable whether an intervention may be created for the issue now
+ * @param dispatchable       whether an intervention may be created for the issue now
+ * @param publishedSummaryId the current shared summary, by reference; never its text
  */
 public record IssueStateChanged(
         IssueId issueId,
@@ -28,6 +30,7 @@ public record IssueStateChanged(
         Optional<IssueCategory> category,
         Optional<IssueUrgency> urgency,
         String areaLabel,
+        Optional<SummaryId> publishedSummaryId,
         Instant occurredAt)
         implements DomainEvent {
 
@@ -38,13 +41,15 @@ public record IssueStateChanged(
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(urgency, "urgency");
         Objects.requireNonNull(areaLabel, "areaLabel");
+        Objects.requireNonNull(publishedSummaryId, "publishedSummaryId");
         Objects.requireNonNull(occurredAt, "occurredAt");
     }
 
     /** The event for the issue as it is now. */
     public static IssueStateChanged of(Issue issue, String areaLabel) {
         return new IssueStateChanged(issue.id(), issue.buildingId(), issue.state(), issue.version(),
-                issue.state().isDispatchable(), issue.category(), issue.urgency(), areaLabel, issue.updatedAt());
+                issue.state().isDispatchable(), issue.category(), issue.urgency(), areaLabel, issue.publishedSummaryId(),
+                issue.updatedAt());
     }
 
     @Override

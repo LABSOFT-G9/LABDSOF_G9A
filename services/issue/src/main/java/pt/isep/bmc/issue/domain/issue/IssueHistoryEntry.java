@@ -55,6 +55,15 @@ public record IssueHistoryEntry(
                 ROLE_ADMINISTRATOR, triaged.version(), triaged.updatedAt());
     }
 
+    /**
+     * An administrator published or replaced the shared summary. Public: it
+     * is the moment the residents of the building can see the issue.
+     */
+    public static IssueHistoryEntry summaryPublished(Issue published, int sequence) {
+        return new IssueHistoryEntry(published.id(), sequence, HistoryEntryType.SUMMARY_PUBLISHED,
+                HistoryVisibility.PUBLIC, ROLE_ADMINISTRATOR, published.version(), published.updatedAt());
+    }
+
     /** An unconfirmed suggestion moved the issue to {@code in_triage}. Internal. */
     public static IssueHistoryEntry triageSuggested(Issue inTriage, int sequence) {
         return new IssueHistoryEntry(inTriage.id(), sequence, HistoryEntryType.TRIAGE_SUGGESTED,

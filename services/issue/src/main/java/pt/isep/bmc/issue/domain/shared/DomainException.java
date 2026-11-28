@@ -13,6 +13,7 @@ public abstract sealed class DomainException extends RuntimeException
                 ForbiddenException,
                 InvalidAreaException,
                 InvalidTransitionException,
+                NotPublishedException,
                 ValidationException,
                 VersionConflictException {
 
