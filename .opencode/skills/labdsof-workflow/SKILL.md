@@ -43,6 +43,14 @@ Mirrored for every agent harness: canonical `.agents/skills/labdsof-workflow/SKI
 - Follow the PR template: Problem and outcome / Traceability / Change / Verification / Checklist / Deployment and recovery.
 - `Closes #N` **only** when a real GitHub issue exists and the PR completes it; otherwise reference with `Refs #N`. Also cite the local backlog ID.
 - Request review from another member; resolve comments before merge. Squash merges preferred, preserving item reference and authorship. Delete merged branches when safe.
+- **Frontend work shows media.** Any issue or PR with frontend work (`frontend` label, or changes to UI screens or components) includes screenshots, GIFs or short videos of the work in a preview table: one row per screen or flow, with a Before/After column pair for changes to existing UI, or a single Preview column for new UI. An issue shows the mockup or current state; a PR shows the result. Upload media by dragging it into the GitHub issue or PR body, not by committing it; use only seeded or demo data, never real participant data. Example:
+
+  ```markdown
+  | Screen | Before | After |
+  |---|---|---|
+  | Report fault form | <img src="https://github.com/user-attachments/assets/..." width="320"> | <img src="https://github.com/user-attachments/assets/..." width="320"> |
+  | Triage flow (GIF) | — | <img src="https://github.com/user-attachments/assets/..." width="320"> |
+  ```
 - Documentation-only PRs: review content, sources and links; **do not claim code tests were run**. Never mark external configuration as active without evidence.
 - Recover merged mistakes by a revert PR (not by rewriting history).
 
