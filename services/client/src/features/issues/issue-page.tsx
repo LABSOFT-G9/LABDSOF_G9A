@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useServices } from "@/app/context";
 import type { IssueState } from "@/contracts/issue";
 import { hasBuildingRole, useSession } from "@/features/auth";
+import { BookingPanel } from "@/features/interventions";
 import { historyQuery, issueQuery } from "@/features/issues/api";
 import { IssueHistory } from "@/features/issues/issue-history";
 import { IssueStateBadge } from "@/features/issues/issue-state";
@@ -21,6 +22,8 @@ import { Skeleton } from "@/shared/ui/skeleton";
 
 /** Manual triage is allowed from these states (technical design §3.1). */
 const TRIAGEABLE: readonly IssueState[] = ["received", "in_triage", "triaged"];
+/** Before triage, Dispatch has no intervention for the issue, so it is not asked. */
+const BEFORE_DISPATCH: readonly IssueState[] = ["received", "in_triage"];
 
 /**
  * US-02: one issue. Everyone who may see it gets its status, where triage stands and its history (residents: public
@@ -91,6 +94,8 @@ export function IssuePage({ issueId }: { issueId: string }) {
               </CardContent>
             </Card>
           ) : null}
+
+          {isAdministrator && !BEFORE_DISPATCH.includes(issue.state) ? <BookingPanel issueId={issue.issueId} /> : null}
 
           {isAdministrator ? (
             <Card>

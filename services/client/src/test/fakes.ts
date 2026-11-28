@@ -1,3 +1,4 @@
+import type { DispatchApi } from "@/ports/dispatch-api";
 import type { IssueApi } from "@/ports/issue-api";
 
 const unused = (name: string) => () => Promise.reject(new Error(`${name} was not expected in this test`));
@@ -16,6 +17,15 @@ export function stubIssueApi(overrides: Partial<IssueApi> = {}): IssueApi {
     publish: unused("publish"),
     setImpact: unused("setImpact"),
     setSubscription: unused("setSubscription"),
+    ...overrides,
+  };
+}
+
+/** A DispatchApi whose every method fails loudly unless the test replaces it. */
+export function stubDispatchApi(overrides: Partial<DispatchApi> = {}): DispatchApi {
+  return {
+    listInterventions: unused("listInterventions"),
+    confirmManually: unused("confirmManually"),
     ...overrides,
   };
 }

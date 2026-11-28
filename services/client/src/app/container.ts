@@ -1,14 +1,16 @@
 import { httpAuthSession } from "@/adapters/http/auth-session";
 import { createHttpClient } from "@/adapters/http/client";
+import { httpDispatchApi } from "@/adapters/http/dispatch-api";
 import { httpIssueApi } from "@/adapters/http/issue-api";
 import { createMockIdentity, mockAuthSession } from "@/adapters/mock/auth-session";
+import { mockDispatchApi } from "@/adapters/mock/dispatch-api";
 import { mockIssueApi } from "@/adapters/mock/issue-api";
 import { createMockRuntime } from "@/adapters/mock/runtime";
 import { systemClock } from "@/adapters/system-clock";
 import type { AdapterMode, AppConfig } from "@/app/config";
 import type { Services } from "@/ports/services";
 
-type SwitchablePort = "auth" | "issues";
+type SwitchablePort = "auth" | "issues" | "dispatch";
 
 /**
  * Per-port override of VITE_ADAPTERS. Uncomment a line to wire one port differently from the rest, e.g. the real
@@ -16,6 +18,7 @@ type SwitchablePort = "auth" | "issues";
  */
 const PORT_ADAPTERS: Partial<Record<SwitchablePort, AdapterMode>> = {
   // issues: "http",
+  // dispatch: "http",
 };
 
 /**
@@ -43,6 +46,8 @@ export function createContainer(
   const services: Services = {
     auth,
     issues: modeOf("issues") === "mock" ? mockIssueApi(identity, runtime, clock, authIsMocked) : httpIssueApi(http),
+    dispatch:
+      modeOf("dispatch") === "mock" ? mockDispatchApi(identity, runtime, clock, authIsMocked) : httpDispatchApi(http),
     clock,
     ...(authIsMocked ? { devPersonas: mockAuth } : {}),
   };

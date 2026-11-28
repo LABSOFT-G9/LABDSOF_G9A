@@ -287,6 +287,44 @@ export function seedIssues(now: Date): MockIssueRecord[] {
       ],
     },
     {
+      // US-08: the contractor accepted, but the calendar refused the slot and then stayed unavailable. The
+      // administrator can confirm the booking by hand (the mock Dispatch service has its booking attempts).
+      issueId: issueId("000000002006"),
+      ...BUILDINGS.a,
+      areaLabel: "Lift lobby",
+      state: "in_coordination",
+      version: 4,
+      createdAt: at(20),
+      triage: {
+        category: "lift",
+        urgency: "high",
+        reason: "The lift stops between floors.",
+        decidedAt: at(19),
+        decisionSource: "human",
+      },
+      suggestion: null,
+      reporterIds: [residentA2],
+      history: [
+        received(20),
+        entry(2, {
+          type: "triage_decided",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(19),
+          category: "lift",
+          urgency: "high",
+          reason: "The lift stops between floors.",
+        }),
+        entry(3, {
+          type: "intervention_approved",
+          visibility: "public",
+          actorRole: "administrator",
+          occurredAt: at(18),
+        }),
+        entry(4, { type: "contractor_accepted", visibility: "public", actorRole: "contractor", occurredAt: at(17) }),
+      ],
+    },
+    {
       // US-03/US-14: the AI timed out, so the fallback rules answered with a lower urgency than Issue's own critical
       // check. The alert stays; the administrator decides.
       issueId: issueId("000000002005"),

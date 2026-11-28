@@ -38,7 +38,7 @@ src/
   app/          composition root: config.ts (env), container.ts (ports → adapters), router.tsx, query-client.ts,
                 context.tsx (ServicesProvider, useServices, useAppContext), loaders.ts (routeData)
   contracts/    zod schemas + inferred types, one file per backend service; problem.ts (RFC 9457 errors)
-  ports/        interfaces (and the models they return) the UI depends on: AuthSession, IssueApi, Clock; services.ts bundles them
+  ports/        interfaces (and the models they return) the UI depends on: AuthSession, IssueApi, DispatchApi, Clock; services.ts bundles them
   adapters/
     http/       client.ts (the one fetch wrapper) + one adapter per port, over /api/<service>/…
     mock/       in-memory adapters, synthetic personas and data, simulated latency and failures
@@ -171,7 +171,7 @@ page. A page without `<PageHeader>` renders `<DocumentTitle>` and an `<h1 tabInd
 - Everything: `VITE_ADAPTERS=http` in `.env.local` (dev). The Docker image already builds with `http`; pass
   `--build-arg VITE_ADAPTERS=mock` for an image without a backend.
 - One port: uncomment its line in `PORT_ADAPTERS` (`src/app/container.ts`), e.g. `issues: "http"` while sign-in
-  stays mocked.
+  stays mocked. `dispatch: "http"` does the same for the Dispatch service.
 
 In dev, `/api`, `/oidc`, `/logout` and `/auth` are proxied to `API_PROXY_TARGET` (default `http://localhost:80`, the
 local stack's Traefik), so cookies stay first-party.
@@ -241,6 +241,12 @@ keyboard pass each UI story records in its PR.
   `{subscribed}`); the `summary_published` history type; and residents of the building seeing shared issues in
   `GET /issues`. All are optional, so the service as it is today still parses. Publishing moves the issue version, so
   an open triage form then offers to reload.
+- US-08-02 (booking status) reads `GET /interventions?issueId=` and sends `POST /interventions/{id}/manual-confirmation`
+  as merged in Dispatch (#161, US-08-01); `src/contracts/dispatch.ts` parses only the fields the booking panel reads.
+  Dispatch answers `404` for an issue its projection does not know yet, which the panel shows as no intervention. The
+  issue moves to `scheduled` only once Issue applies `BookingConfirmed` (US-07-03, #109), so after a manual
+  confirmation the issue state may lag behind the booking. The mock Dispatch service keeps its own data, so a manual
+  confirmation there does not move the mock issue. The contractor's view of the booking belongs to US-07-02 (#102).
 - `/me` gains `email` and `platformRoles` with EN-02-04 (#139); until that is on `main` they are `null` and empty over
   HTTP. It never carries the contractor link, which belongs to Dispatch (#80).
 - The edge ignores a return path on sign-in and always lands on `/`; the client keeps it in `sessionStorage` instead
