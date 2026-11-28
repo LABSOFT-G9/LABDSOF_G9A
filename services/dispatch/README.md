@@ -21,7 +21,11 @@ Implemented so far:
   - the administrator's cancellation, pending while the calendar booking is cancelled;
   - `BookingConfirmed`, `BookingStateChanged`, `InterventionCancellationPending` and `InterventionCancelled`.
 
-Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service and the outbox rows stay `pending`; the Google Calendar adapter (US-13); completion and closure (US-09). An issue that becomes `resolved` or `cancelled` only updates the projection: its non-terminal interventions are not cancelled yet (technical design 4.3 step 8). That needs the `IssueResolved` and `IssueCancelled` consumer of EN-02-02, and US-09 will call the cancellation built here.
+- US-09-01 ([#105](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/105)):
+  - start, completion (by the contractor, or an administrator with a reason) and rework, with every completion report kept;
+  - Issue's `IssueResolved` and `IssueCancelled` end the issue's intervention (technical design 4.3 step 8), through the booking cancellation of US-08.
+
+Not yet: RabbitMQ and the messaging starter (EN-02-02, [#78](https://github.com/LABSOFT-G9/LABDSOF_G9A/issues/78)), so no event reaches this service and the outbox rows stay `pending`. The consumer of `IssueResolved` and `IssueCancelled` then only calls `IssueEvents.closure` and `ApplyIssueClosureUseCase`, as it does for the projections. Also not yet: the Google Calendar adapter (US-13) and costs (US-11).
 
 ## Architecture
 
@@ -55,12 +59,15 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
 | `POST /interventions/{id}/approval` + `If-Match` + `Idempotency-Key` | Administrators of the intervention's building | Body `{proposalVersion}`, the current one. `200`, `{interventionId, state, version, approvedProposalVersion}`: `sent`, or `scheduling_pending` for a contractor's counterproposal. Writes `InterventionApproved` |
 | `POST /interventions/{id}/proposals` + `If-Match` + `Idempotency-Key` | The same | Body `{scopeExtract, window, terms}`, as a draft. From `awaiting_approval` or `sent`. `200`, `{interventionId, state: "awaiting_approval", version, proposalVersion}`. An earlier approval no longer counts. No event |
 | `POST /interventions/{id}/response` + `If-Match` + `Idempotency-Key` | The assigned contractor, once sent | Body `{proposalVersion, decision}` with `decision` `accept`, `decline` (+ `reasonCode`, optional `note`) or `counterpropose` (+ `window`, `terms`, optional `proposedCost: {amount, currency}`). `200`, `{interventionId, state, version, proposalVersion}`. Writes `ContractorResponded`, or `InterventionDeclined` for a decline |
-| `GET /interventions/{id}` | Administrators of the building; the assigned contractor, once sent | `ETag` with the version. Administrators: `{interventionId, issueId, state, version, contractor, proposal, proposals, approvedProposalVersion, agreedProposalVersion, booking, bookings, cancellation, createdAt, updatedAt}`, where `proposal` is the current version and `proposals` every version with `proposedCost`, `approvedAt` and the contractor's `response`. The contractor: `{interventionId, state, version, contractor, work: {category, urgency, areaLabel}, awaitingResponseTo, agreedProposalVersion, proposals, booking: {state, source, window}, updatedAt}` |
+| `GET /interventions/{id}` | Administrators of the building; the assigned contractor, once sent | `ETag` with the version. Administrators: `{interventionId, issueId, state, version, contractor, proposal, proposals, approvedProposalVersion, agreedProposalVersion, booking, bookings, cancellation, completions, createdAt, updatedAt}`, where `proposal` is the current version and `proposals` every version with `proposedCost`, `approvedAt` and the contractor's `response`. The contractor: `{interventionId, state, version, contractor, work: {category, urgency, areaLabel}, awaitingResponseTo, agreedProposalVersion, proposals, booking: {state, source, window}, completions, updatedAt}` |
 | `GET /interventions?issueId=` | Administrators of the issue's building | `{items}`, newest first, terminal ones included |
 | `POST /interventions/{id}/manual-confirmation` + `If-Match` + `Idempotency-Key` | Administrators of the building | Body `{window, source, reason}`, `source` `phone`, `email` or `in_person`. Only in `scheduling_pending`. `200`, `booked`. Writes `BookingConfirmed` with source `manual` |
 | `POST /interventions/{id}/booking` + `If-Match` + `Idempotency-Key` | The same | Another request for the agreed window after `rejected` or `failed`. `200` |
 | `POST /interventions/{id}/booking/reconciliation` | The same | `202`: the worker checks the calendar-confirmed booking now |
 | `POST /interventions/{id}/cancellation` + `If-Match` + `Idempotency-Key` | The same | Body `{reasonCode, note?}`. `200`, `cancelled`, or `cancellation_pending` until the calendar booking is cancelled |
+| `POST /interventions/{id}/start` + `If-Match` + `Idempotency-Key` | The assigned contractor | From `booked`: `in_progress`. Writes `InterventionStarted` |
+| `POST /interventions/{id}/completion` + `If-Match` + `Idempotency-Key` | The assigned contractor; administrators with a reason | Body `{summary, performedAt, reason?}`. From `booked` or `in_progress`: `completion_reported`. Writes `CompletionReported`; not a closure |
+| `POST /interventions/{id}/rework` + `If-Match` + `Idempotency-Key` | Administrators of the building | Body `{reason}`. From `completion_reported`: `in_progress`. Writes `ReworkRequested` |
 | `GET /interventions?assigned=me` | Contractors | `{items}`: the requests sent to the caller, last changed first, in the contractor's shape |
 
 **Rules (US-06):**
@@ -104,6 +111,11 @@ Paths are service-relative. The edge serves them under `/api/dispatch` and strip
   - **By hand.** The administrator confirms with a window, a source and a reason (`confirmed`, source `manual`). An automatic request that was still `requested` or `uncertain` is looked up once more; a booking found there is a `discrepancy` (`found_after_manual`), never a second confirmation. After `rejected` or `failed` the administrator can also ask again (`…/booking`): a new booking with a new ID.
   - **What the contractor sees:** the booking's state, source and window.
 - **Cancellation.** Codes `no_longer_needed`, `contractor_unavailable`, `rescheduling`, `other`, with an optional note for administrators (never in an event or log). Before agreement it is `cancelled` at once. From `scheduling_pending` on, a booking that exists or may exist (requested, uncertain, confirmed by the calendar, or manual with an outstanding request) is cancelled at the calendar first: `cancellation_pending`, retried without limit until the calendar answers, then `cancelled`. A late confirmation never revives a cancelled intervention.
+- **Work and completion (US-09).** The checks run in the usual order: who (`404`), fields (`400`), state and version (`409`), then the issue: a `resolved` or `cancelled` issue takes no more work (`409` with the issue's state). A completion report has a summary (10–2,000 characters) and `performedAt` (not in the future). An administrator reporting for the contractor gives a reason, which the contractor does not see. Rework records its reason on the report it sends back, and the next report gets the next number, so the history keeps every report. No cost until US-11. The summary and the reasons stay in Dispatch: the events carry only the intervention's state.
+- **Issue's closure (technical design 3.2, 4.3 step 8).** `IssueResolved` or `IssueCancelled`, under the issue projection row's lock:
+  - `completion_reported` becomes `closed`, with no event, because Issue made the closure;
+  - an earlier state is cancelled with `issue_resolved` or `issue_cancelled`, through `cancellation_pending` while the booking is cancelled at the calendar;
+  - a terminal or pending intervention does not change, so a repeated or late event has no effect.
 - **Events.** Each change writes one outbox row in its transaction, as CloudEvents JSON with the proto3 JSON `data` of `contracts/proto/bmc/dispatch/v1` and routing key `dispatch.<type>`. They carry IDs, versions, codes and the new `interventionState`, never the scope, terms or note. A repeated command writes nothing again.
 - **One active intervention per issue.** Saving a draft locks the issue's projection row, and so does applying an Issue event (technical design 4.3 step 8). A unique key on the active intervention per issue backs this up.
 - **Idempotency.** Same as Issue: the key is scoped per user and operation and kept for 24 hours. A replay re-checks the caller's permissions. The same key with a different body gets `422 IDEMPOTENCY_KEY_REUSED`.
@@ -155,6 +167,7 @@ The integration tests use Testcontainers and locally signed tokens, as Issue's d
 - events that race for one projection row;
 - booking over HTTP against a calendar stub with the simulator's contract (`BookingIT`): confirmation, a timeout after creation, a conflict and a manual confirmation, exhausted retries and another request, a pending cancellation, a lost booking found on demand, a contractor without a calendar reference;
 - the calendar adapter against the real simulator (`SimulatorCalendarAdapterIT`), only when `CALENDAR_SIMULATOR_URL` is set (see the class for the command);
+- start, completion, rework and Issue's closure events over HTTP (`ExecutionIT`);
 - the database down (`StorageFailureIT`) and private text kept out of DEBUG logs (`LogPrivacyIT`);
 - a restart;
 - the synthetic seed.

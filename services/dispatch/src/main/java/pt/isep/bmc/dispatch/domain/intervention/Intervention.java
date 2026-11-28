@@ -233,6 +233,58 @@ public record Intervention(
                 approvedProposalVersion, agreedProposalVersion, contractorContacted, now));
     }
 
+    /** The contractor starts the work (technical design 3.2): from {@code booked} to {@code in_progress}. Optional. */
+    public Intervention start(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.BOOKED));
+        return next(contractorId, InterventionState.IN_PROGRESS, currentProposalVersion, approvedProposalVersion,
+                agreedProposalVersion, contractorContacted, now);
+    }
+
+    /**
+     * The work is reported complete (US-09): {@code completion_reported}.
+     * Not a closure: only Issue closes the issue.
+     */
+    public Intervention reportCompletion(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.BOOKED, InterventionState.IN_PROGRESS));
+        return next(contractorId, InterventionState.COMPLETION_REPORTED, currentProposalVersion,
+                approvedProposalVersion, agreedProposalVersion, contractorContacted, now);
+    }
+
+    /** The administrator sends a reported completion back (US-09): {@code in_progress} again. */
+    public Intervention requestRework(long expectedVersion, Instant now) {
+        requireCurrent(expectedVersion, Set.of(InterventionState.COMPLETION_REPORTED));
+        return next(contractorId, InterventionState.IN_PROGRESS, currentProposalVersion, approvedProposalVersion,
+                agreedProposalVersion, contractorContacted, now);
+    }
+
+    /**
+     * Issue resolved or cancelled the issue (technical design 3.2 and 4.3
+     * step 8). A reported completion is {@code closed}. Anything earlier is
+     * cancelled, through {@code cancellation_pending} while a booking that
+     * exists or may exist is cancelled at the calendar. A terminal or pending
+     * intervention does not change, so a repeated event has no effect.
+     *
+     * @param bookingNeedsCalendar whether the active booking must be cancelled at the calendar
+     */
+    public Optional<Intervention> endedByIssue(CancelReason reason, boolean bookingNeedsCalendar, Instant now) {
+        InterventionState target = switch (state) {
+            case COMPLETION_REPORTED -> InterventionState.CLOSED;
+            case AWAITING_APPROVAL, SENT -> InterventionState.CANCELLED;
+            case SCHEDULING_PENDING, BOOKED, IN_PROGRESS -> bookingNeedsCalendar
+                    ? InterventionState.CANCELLATION_PENDING
+                    : InterventionState.CANCELLED;
+            case CANCELLATION_PENDING, DECLINED, CANCELLED, CLOSED -> null;
+        };
+        if (target == null) {
+            return Optional.empty();
+        }
+        Optional<CancelReason> recorded = target == InterventionState.CLOSED ? cancelReason : Optional.of(reason);
+        return Optional.of(new Intervention(id, issueId, buildingId, contractorId, target, version + 1,
+                currentProposalVersion, approvedProposalVersion, agreedProposalVersion, contractorContacted, recorded,
+                target == InterventionState.CLOSED ? cancelNote : Optional.empty(), projectedIssueVersion,
+                projectionAppliedAt, createdBy, createdAt, now));
+    }
+
     private void requireCurrent(long expectedVersion, Set<InterventionState> allowed) {
         if (!allowed.contains(state)) {
             throw new InvalidTransitionException(state.value());

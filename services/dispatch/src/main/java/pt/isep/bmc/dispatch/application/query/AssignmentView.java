@@ -30,12 +30,14 @@ public record AssignmentView(
         Optional<Integer> agreedProposalVersion,
         List<InterventionView.Proposal> proposals,
         Optional<Booking> booking,
+        List<CompletionView> completions,
         Instant updatedAt) implements InterventionRead {
 
     public AssignmentView {
         Objects.requireNonNull(interventionId, "interventionId");
         Objects.requireNonNull(work, "work");
         proposals = List.copyOf(proposals);
+        completions = List.copyOf(completions);
     }
 
     /** The current booking as the contractor needs it: its state, source and window. */
@@ -57,6 +59,7 @@ public record AssignmentView(
         return new AssignmentView(view.interventionId(), view.state(), view.version(),
                 view.contractor(), work, awaiting,
                 view.agreedProposalVersion(), visible,
-                view.booking().map(b -> new Booking(b.state(), b.source(), b.bookedWindow())), view.updatedAt());
+                view.booking().map(b -> new Booking(b.state(), b.source(), b.bookedWindow())),
+                view.completions().stream().map(CompletionView::forContractor).toList(), view.updatedAt());
     }
 }

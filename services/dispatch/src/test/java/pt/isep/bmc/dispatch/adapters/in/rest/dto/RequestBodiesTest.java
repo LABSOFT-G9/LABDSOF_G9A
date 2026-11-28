@@ -21,5 +21,9 @@ class RequestBodiesTest {
         assertThat(new RespondRequest(1, "decline", "other", MARKER, WINDOW, MARKER,
                 new RespondRequest.Cost("1.00", "EUR")).toString()).doesNotContain(MARKER)
                 .contains("decision=decline");
+        assertThat(new ManualConfirmationRequest(WINDOW, "phone", MARKER).toString()).doesNotContain(MARKER);
+        assertThat(new CancellationRequest("other", MARKER).toString()).doesNotContain(MARKER);
+        assertThat(new CompletionRequest(MARKER, "2026-11-26T10:30:00Z", MARKER).toString()).doesNotContain(MARKER);
+        assertThat(new ReworkRequest(MARKER).toString()).doesNotContain(MARKER);
     }
 }

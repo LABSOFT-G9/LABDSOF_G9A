@@ -29,6 +29,7 @@ import pt.isep.bmc.dispatch.domain.shared.UserId;
  * @param contractorContacted     whether a request was ever sent; the contractor sees the intervention from then on
  * @param cancelNote              the administrator's text with a cancellation
  * @param bookings                every booking, oldest first; the last one is the current booking (US-08)
+ * @param completions             every completion report, oldest first (US-09)
  */
 public record InterventionView(
         InterventionId interventionId,
@@ -45,6 +46,7 @@ public record InterventionView(
         Optional<CancelReason> cancelReason,
         Optional<String> cancelNote,
         List<BookingView> bookings,
+        List<CompletionView> completions,
         Instant createdAt,
         Instant updatedAt) implements InterventionRead {
 
@@ -55,6 +57,7 @@ public record InterventionView(
         Objects.requireNonNull(proposal, "proposal");
         proposals = List.copyOf(proposals);
         bookings = List.copyOf(bookings);
+        completions = List.copyOf(completions);
     }
 
     /** The current booking: the latest one. */

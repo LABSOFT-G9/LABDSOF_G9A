@@ -5,9 +5,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.AssignmentResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.BookingResponse;
+import pt.isep.bmc.dispatch.adapters.in.rest.dto.CompletionResponse;
 import pt.isep.bmc.dispatch.adapters.in.rest.dto.InterventionResponse;
 import pt.isep.bmc.dispatch.application.query.AssignmentView;
 import pt.isep.bmc.dispatch.application.query.BookingView;
+import pt.isep.bmc.dispatch.application.query.CompletionView;
 import pt.isep.bmc.dispatch.application.query.InterventionView;
 import pt.isep.bmc.dispatch.domain.booking.BookingAction;
 import pt.isep.bmc.dispatch.domain.booking.BookingSource;
@@ -36,8 +38,15 @@ final class InterventionResponses {
                 view.cancelReason()
                         .map(r -> new InterventionResponse.Cancellation(r.value(), view.cancelNote().orElse(null)))
                         .orElse(null),
+                completions(view.completions()),
                 time(view.createdAt()),
                 time(view.updatedAt()));
+    }
+
+    private static List<CompletionResponse> completions(List<CompletionView> completions) {
+        return completions.stream().map(c -> new CompletionResponse(c.number(), c.summary(), time(c.performedAt()),
+                c.reporterRole(), c.reason().orElse(null), time(c.reportedAt()), c.reworkReason().orElse(null),
+                c.reworkRequestedAt().map(InterventionResponses::time).orElse(null))).toList();
     }
 
     private static BookingResponse booking(BookingView b) {
@@ -78,6 +87,7 @@ final class InterventionResponses {
                 proposals(view.proposals()),
                 view.booking().map(b -> new AssignmentResponse.Booking(b.state().value(),
                         b.source().map(BookingSource::value).orElse(null), window(b.window()))).orElse(null),
+                completions(view.completions()),
                 time(view.updatedAt()));
     }
 

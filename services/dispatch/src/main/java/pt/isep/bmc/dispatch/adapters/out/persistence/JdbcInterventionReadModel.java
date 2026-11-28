@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.isep.bmc.dispatch.application.port.out.InterventionReadModel;
 import pt.isep.bmc.dispatch.application.query.BookingView;
+import pt.isep.bmc.dispatch.application.query.CompletionView;
 import pt.isep.bmc.dispatch.application.query.InterventionView;
 import pt.isep.bmc.dispatch.domain.booking.BookingAction;
 import pt.isep.bmc.dispatch.domain.booking.BookingId;
@@ -68,6 +69,11 @@ class JdbcInterventionReadModel implements InterventionReadModel {
 
     private static final String CALLS = """
             SELECT action, outcome, occurred_at FROM booking_calls WHERE booking_id = :id ORDER BY sequence
+            """;
+
+    private static final String COMPLETIONS = """
+            SELECT number, summary, performed_at, reporter_role, reason, reported_at, rework_reason, rework_at
+              FROM completion_reports WHERE intervention_id = :id ORDER BY number
             """;
 
     private final JdbcClient jdbc;
@@ -141,8 +147,8 @@ class JdbcInterventionReadModel implements InterventionReadModel {
                 .toList();
         return new InterventionView(row.id(), row.issueId(), row.buildingId(), row.contractor(), row.state(),
                 row.version(), current, proposals, row.approvedProposalVersion(), row.agreedProposalVersion(),
-                row.contractorContacted(), row.cancelReason(), row.cancelNote(), bookings, row.createdAt(),
-                row.updatedAt());
+                row.contractorContacted(), row.cancelReason(), row.cancelNote(), bookings, completions(row.id()),
+                row.createdAt(), row.updatedAt());
     }
 
     private static Row row(ResultSet rs, int n) throws SQLException {
@@ -165,6 +171,20 @@ class JdbcInterventionReadModel implements InterventionReadModel {
                 Optional.ofNullable(rs.getString("cancel_note")),
                 time(rs, "created_at"),
                 time(rs, "updated_at"));
+    }
+
+    private List<CompletionView> completions(InterventionId id) {
+        return jdbc.sql(COMPLETIONS).param("id", id.toString())
+                .query((rs, n) -> new CompletionView(
+                        rs.getInt("number"),
+                        rs.getString("summary"),
+                        time(rs, "performed_at"),
+                        rs.getString("reporter_role"),
+                        Optional.ofNullable(rs.getString("reason")),
+                        time(rs, "reported_at"),
+                        Optional.ofNullable(rs.getString("rework_reason")),
+                        Optional.ofNullable(rs.getObject("rework_at", LocalDateTime.class)).map(Timestamps::fromColumn)))
+                .list();
     }
 
     private BookingView withCalls(BookingView booking) {

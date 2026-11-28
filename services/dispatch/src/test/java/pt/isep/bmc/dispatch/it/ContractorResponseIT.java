@@ -50,7 +50,7 @@ class ContractorResponseIT extends IntegrationTestSupport {
         assertThat(response.header("ETag")).isEqualTo("\"2\"");
         Map<String, Object> assignment = response.json();
         assertThat(assignment).containsOnlyKeys("interventionId", "state", "version", "contractor", "work",
-                "awaitingResponseTo", "agreedProposalVersion", "proposals", "booking", "updatedAt");
+                "awaitingResponseTo", "agreedProposalVersion", "proposals", "booking", "completions", "updatedAt");
         assertThat(assignment).containsEntry("state", "sent").containsEntry("awaitingResponseTo", 1);
         assertThat(Api.map(assignment.get("work"))).containsEntry("category", "plumbing")
                 .containsEntry("areaLabel", "Garage level -1");
@@ -77,8 +77,8 @@ class ContractorResponseIT extends IntegrationTestSupport {
         assertThat(response.header("ETag")).isEqualTo("\"3\"");
         assertThat(response.json()).isEqualTo(Map.of("interventionId", interventionId, "state", "scheduling_pending",
                 "version", 3, "proposalVersion", 1));
-        Map<String, Object> event = outboxEvents().getLast();
-        assertThat(event).containsEntry("type", "ContractorResponded").containsEntry("aggregateversion", 3);
+        Map<String, Object> event = event("ContractorResponded");
+        assertThat(event).containsEntry("aggregateversion", 3);
         assertThat(Api.map(event.get("data"))).containsEntry("decision", "accept").containsEntry("proposalVersion", 1)
                 .containsEntry("interventionState", "scheduling_pending");
 
@@ -98,8 +98,7 @@ class ContractorResponseIT extends IntegrationTestSupport {
         var response = respond(CONTRACTOR, interventionId, 2, body);
 
         assertThat(response.json()).containsEntry("state", "declined").containsEntry("version", 3);
-        Map<String, Object> event = outboxEvents().getLast();
-        assertThat(event).containsEntry("type", "InterventionDeclined");
+        Map<String, Object> event = event("InterventionDeclined");
         assertThat(event.get("data")).isEqualTo(Map.of("issueId", issueId, "reasonCode", "unavailable",
                 "interventionState", "declined"));
         assertThat(outboxEvents().toString()).doesNotContain("Away until March");
@@ -132,7 +131,7 @@ class ContractorResponseIT extends IntegrationTestSupport {
 
         assertThat(approved.json()).containsEntry("state", "scheduling_pending").containsEntry("version", 4);
         assertThat(view(ADMIN_A, interventionId)).containsEntry("agreedProposalVersion", 2);
-        assertThat(Api.map(outboxEvents().getLast().get("data"))).containsEntry("approvedProposalVersion", 2)
+        assertThat(Api.map(event("InterventionApproved").get("data"))).containsEntry("approvedProposalVersion", 2)
                 .containsEntry("interventionState", "scheduling_pending");
     }
 
