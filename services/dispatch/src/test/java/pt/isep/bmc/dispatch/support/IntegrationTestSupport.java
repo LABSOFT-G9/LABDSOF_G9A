@@ -2,6 +2,8 @@ package pt.isep.bmc.dispatch.support;
 
 import static pt.isep.bmc.dispatch.support.Fixtures.*;
 
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.mysql.MySQLContainer;
 import pt.isep.bmc.dispatch.application.port.in.ApplyIssueStateChangedUseCase;
 import pt.isep.bmc.dispatch.application.port.in.ApplyMembershipChangeUseCase;
+import pt.isep.bmc.dispatch.adapters.out.persistence.Timestamps;
 import pt.isep.bmc.dispatch.application.port.in.RunBookingWorkUseCase;
 
 /**
@@ -55,6 +58,9 @@ public abstract class IntegrationTestSupport {
 
     @Autowired
     protected RunBookingWorkUseCase bookingWorker;
+
+    @Autowired
+    private Clock clock;
 
     protected final CalendarStub calendar = CalendarStub.shared();
 
@@ -191,9 +197,17 @@ public abstract class IntegrationTestSupport {
         return interventionId;
     }
 
-    /** Makes every pending booking call due now, then runs the worker once, as the scheduler would. */
+    /**
+     * Makes every pending booking call due, then runs the worker once, as the
+     * scheduler would. The due time comes from the application's clock, one
+     * millisecond back: the worker compares it with that clock at millisecond
+     * precision, and the database's own {@code UTC_TIMESTAMP(6)} can be later
+     * than that within the same millisecond.
+     */
     protected int runBookingWorker() {
-        jdbc.sql("UPDATE bookings SET next_attempt_at = UTC_TIMESTAMP(6) WHERE next_attempt_at IS NOT NULL").update();
+        jdbc.sql("UPDATE bookings SET next_attempt_at = ? WHERE next_attempt_at IS NOT NULL")
+                .param(Timestamps.toColumn(clock.instant().truncatedTo(ChronoUnit.MILLIS).minusMillis(1)))
+                .update();
         return bookingWorker.runDue();
     }
 
