@@ -2,19 +2,17 @@ package pt.isep.bmc.dispatch;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * BMC Dispatch service: contractors and interventions (technical design 2.2).
+ * Layers (ADR-009): {@code domain} ← {@code application} ←
+ * {@code adapters.in} / {@code adapters.out}; {@code config} is the
+ * composition root.
+ */
 @SpringBootApplication
-@RestController
 public class DispatchApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(DispatchApplication.class, args);
-    }
-
-    @GetMapping("/")
-    public String hello() {
-        return "dispatch up";
     }
 }

@@ -38,7 +38,7 @@ Each message is a CloudEvents 1.0 structured JSON document, published to the top
 |---|---|---|
 | `bmc.issue.v1` | `issue` | `ReportSubmitted`, `TriageRequested`, `IssueTriaged`, `IssueSummaryPublished`, `IssueStateChanged`, `MembershipGranted`, `MembershipRevoked`, `IssueResolved`, `IssueCancelled`, `IssueReopened` |
 | `bmc.aitriage.v1` | `ai-triage` | `TriageSuggested` |
-| `bmc.dispatch.v1` | `dispatch` | `InterventionApproved`, `ContractorResponded`, `InterventionDeclined`, `InterventionCancellationPending`, `InterventionCancelled`, `BookingConfirmed`, `BookingStateChanged`, `InterventionStarted`, `CompletionReported`, `ReworkRequested` |
+| `bmc.dispatch.v1` | `dispatch` | `InterventionApproved`, `ContractorResponded`, `InterventionDeclined`, `InterventionTermsChanged`, `InterventionCancellationPending`, `InterventionCancelled`, `BookingConfirmed`, `BookingStateChanged`, `InterventionStarted`, `CompletionReported`, `ReworkRequested` |
 | `bmc.notification.v1` | `issue` or `dispatch` | `NotificationRequested` |
 
 The version in the package (`v1`) is the envelope's `schemaversion` (1).
@@ -48,7 +48,7 @@ The version in the package (`v1`) is the envelope's `schemaversion` (1).
 | Queue | Consumer | Bound routing keys |
 |---|---|---|
 | `ai-triage.requests` | AI triage | `issue.TriageRequested` |
-| `issue.inbox` | Issue | `ai-triage.TriageSuggested` and the ten `dispatch.*` events of `bmc.dispatch.v1` |
+| `issue.inbox` | Issue | `ai-triage.TriageSuggested` and the eleven `dispatch.*` events of `bmc.dispatch.v1` |
 | `dispatch.inbox` | Dispatch | `issue.IssueStateChanged`, `issue.MembershipGranted`, `issue.MembershipRevoked`, `issue.IssueResolved`, `issue.IssueCancelled` |
 | `notification.inbox` | Notification | `issue.NotificationRequested`, `dispatch.NotificationRequested` |
 
