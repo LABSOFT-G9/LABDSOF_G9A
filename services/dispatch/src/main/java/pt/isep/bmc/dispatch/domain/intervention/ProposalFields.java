@@ -29,7 +29,7 @@ public final class ProposalFields {
     static final String FIELD_TERMS = "terms";
     static final String FIELD_COST_AMOUNT = "proposedCost.amount";
     static final String FIELD_COST_CURRENCY = "proposedCost.currency";
-    /** The last instant a MySQL {@code DATETIME(3)} column holds, in UTC. */
+    /** The last instant, to the millisecond, that the {@code DATETIME(6)} columns hold, in UTC. */
     static final Instant LATEST_STORABLE = Instant.parse("9999-12-31T23:59:59.999Z");
 
     /** A decimal with at most two decimals, as text so that no JSON number is rounded. */
