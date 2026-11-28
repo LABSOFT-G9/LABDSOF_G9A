@@ -5,11 +5,18 @@ const path = require('node:path');
 const vm = require('node:vm');
 const directory = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(directory, 'burndown.html'), 'utf8');
-// The inline scripts of a page (no `src`). Tags are matched in any case and with any attributes, as a browser reads them.
+// The inline classic scripts of a page, the ones a browser runs as code: no `src`, and no `type` other than a
+// JavaScript one (a JSON block, a template or a module is skipped). Tags and attributes are matched in any case.
+const JAVASCRIPT_TYPES = /^(|text\/javascript|application\/javascript|text\/ecmascript|application\/ecmascript)$/i;
+const attribute = (attributes, name) => {
+  const found = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attributes);
+  return found ? (found[1] ?? found[2] ?? found[3]) : undefined;
+};
 const inlineScripts = page => [...page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)]
-  .filter(match => !/\bsrc\s*=/i.test(match[1]))
-  .map(match => ({ attributes: match[1], body: match[2] }));
-const model = inlineScripts(html).find(script => /\bid="burndown-model"/.test(script.attributes)).body;
+  .map(match => ({ attributes: match[1], body: match[2] }))
+  .filter(script => attribute(script.attributes, 'src') === undefined)
+  .filter(script => JAVASCRIPT_TYPES.test((attribute(script.attributes, 'type') ?? '').trim()));
+const model = inlineScripts(html).find(script => attribute(script.attributes, 'id') === 'burndown-model').body;
 const context = vm.createContext({});
 vm.runInContext(model, context);
 const build = (history, sprint = 'A', done = 'Done', issueSprint = sprint, type = 'all') => context.buildBurndown(history, sprint, done, issueSprint, type);
