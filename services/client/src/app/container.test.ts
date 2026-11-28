@@ -25,7 +25,7 @@ describe("createContainer", () => {
   it("lets one port differ from the rest", async () => {
     const services = createContainer({ ...testConfig, adapters: "http" }, {}, { issues: "mock" });
     // Issues mocked while sign-in is real: no persona to filter by, so every synthetic issue is listed.
-    await expect(services.issues.list({})).resolves.toMatchObject({ items: { length: 5 } });
+    await expect(services.issues.list({})).resolves.toMatchObject({ items: { length: 6 } });
     expect(services.devPersonas).toBeUndefined();
   });
 

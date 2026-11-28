@@ -133,6 +133,7 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
   const pending = "0199f2a1-0000-7000-8000-000000002002"; // Building A, received, Resident A2's, shared (version 2)
   const scheduled = "0199f2a1-0000-7000-8000-000000002003"; // Building A, scheduled, human decision
   const roof = "0199f2a1-0000-7000-8000-000000002004"; // Building B
+  const lift = "0199f2a1-0000-7000-8000-000000002006"; // Building A, in coordination, Resident A2's (US-08)
   const critical = "0199f2a1-0000-7000-8000-000000002005"; // Building B, fallback suggestion, critical alert
   const decision = { category: "electrical", urgency: "high", reason: "Exposed wiring by the door." } as const;
 
@@ -149,11 +150,11 @@ describe("mockIssueApi triage and history (same rules as the Issue service)", ()
   it("lists the administered buildings' issues, and residents their own and their building's shared ones", async () => {
     const { as } = world();
     const ids = async (persona: string) => (await as(persona).list({})).items.map((i) => i.issueId).sort();
-    expect(await ids("administrator-a")).toEqual([suggested, pending, scheduled].sort());
+    expect(await ids("administrator-a")).toEqual([suggested, pending, scheduled, lift].sort());
     expect(await ids("administrator-b")).toEqual([roof, critical].sort());
     // The garage issue is shared with Building A, so Resident A1 sees it too; Building B's residents do not.
     expect(await ids("resident-a1")).toEqual([suggested, pending, scheduled].sort());
-    expect(await ids("resident-a2")).toEqual([pending]);
+    expect(await ids("resident-a2")).toEqual([pending, lift].sort());
   });
 
   it("pages the list, and never puts the triage reason in it", async () => {
